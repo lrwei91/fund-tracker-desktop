@@ -43,6 +43,7 @@
     var CUSTOM_INDEX_UPDATE_TIME_KEY = 'fund_tracker_custom_index_update_time';
     var CUSTOM_INDEX_MAX = 4;
     var WATCHLIST_COST_KEY = 'fund_tracker_watchlist_cost';
+    var WATCHLIST_REMARKS_KEY = 'fund_tracker_watchlist_remarks';
 
     // 大盘/自选指数:每 30 分钟刷新一次的 prev 快照,用来画 trend-arrow
     // 结构: { market: { _updatedAt, data: { id: priceValue } }, custom: 同上 }
@@ -121,6 +122,7 @@
     var customIndexCache = {};
     var customIndexUpdateTime = '';
     var watchlistCost = {};
+    var watchlistRemarks = {};
     var hasInitialDataLoaded = false;
 
     // 涨跌幅告警
@@ -174,6 +176,13 @@
             if (parsedCost && typeof parsedCost === 'object') watchlistCost = parsedCost;
         }
     } catch (e) { /* ignore */ }
+    try {
+        var rawRemarks = localStorage.getItem(WATCHLIST_REMARKS_KEY);
+        if (rawRemarks) {
+            var parsedRemarks = JSON.parse(rawRemarks);
+            if (parsedRemarks && typeof parsedRemarks === 'object') watchlistRemarks = parsedRemarks;
+        }
+    } catch (e) { /* ignore */ }
 
     // 告警设置 + 自选股 alert 状态(带 schema 校验)
     try {
@@ -212,6 +221,7 @@
             CUSTOM_INDEX_UPDATE_TIME_KEY: CUSTOM_INDEX_UPDATE_TIME_KEY,
             CUSTOM_INDEX_MAX: CUSTOM_INDEX_MAX,
             WATCHLIST_COST_KEY: WATCHLIST_COST_KEY,
+            WATCHLIST_REMARKS_KEY: WATCHLIST_REMARKS_KEY,
             INDEX_PREV_KEY: INDEX_PREV_KEY,
             INDEX_REFRESH_SECONDS: INDEX_REFRESH_SECONDS,
             STORAGE_KEY: STORAGE_KEY,
@@ -259,6 +269,7 @@
         customIndexCache: customIndexCache,
         customIndexUpdateTime: customIndexUpdateTime,
         watchlistCost: watchlistCost,
+        watchlistRemarks: watchlistRemarks,
         hasInitialDataLoaded: hasInitialDataLoaded,
         alertEnabled: alertEnabled,
         alertThreshold: alertThreshold,

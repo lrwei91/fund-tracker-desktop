@@ -3,6 +3,7 @@
   var WATCH_TABS_KEY = 'fund_tracker_watchlist_tabs'
   var LEGACY_WATCHLIST_KEY = 'fund_tracker_watchlist'
   var QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache'
+  var REMARKS_KEY = 'fund_tracker_watchlist_remarks'
   var SETTINGS_KEY = 'fund_tracker_settings'
   var CLOWN_MODE_KEY = 'fund_tracker_holding_clown_mode'
 
@@ -96,9 +97,15 @@
     return (Math.round((value + Number.EPSILON) * 100) / 100).toFixed(2)
   }
 
-  function getDisplayQuote(code, quote) {
+  function getDisplayName(code, quote, remarks) {
+    var remark = remarks && remarks[code] ? String(remarks[code]).trim() : ''
+    if (remark) return remark
+    return quote && quote.name ? quote.name : code + '（待刷新）'
+  }
+
+  function getDisplayQuote(code, quote, remarks) {
     var rate = getLimitRate(code)
-    var name = quote && quote.name ? quote.name : code + '（待刷新）'
+    var name = getDisplayName(code, quote, remarks)
     if (!clownMode) {
       return {
         name: name,
@@ -140,11 +147,14 @@
   }
 
   function render(options) {
-    var stayOnCurrent = Boolean(options && options.stayOnCurrent)
+    options = options || {}
+    var stayOnCurrent = Boolean(options.stayOnCurrent)
+    var reset = Boolean(options.reset)
     applySettings()
     updateClownButton()
     var codes = getHoldingCodes()
     var cache = readJson(QUOTE_CACHE_KEY, {})
+    var remarks = readJson(REMARKS_KEY, {})
 
     if (!codes.length) {
       slot.innerHTML = '<div class="quote-empty">暂无持仓股</div>'
@@ -153,13 +163,17 @@
       return
     }
 
+    if (reset) {
+      index = 0
+      currentCode = null
+    }
     if (index >= codes.length) index = 0
     var code = stayOnCurrent && currentCode && codes.indexOf(currentCode) !== -1
       ? currentCode
       : codes[index]
     currentCode = code
     var quote = cache && cache[code] ? cache[code] : null
-    var displayQuote = getDisplayQuote(code, quote)
+    var displayQuote = getDisplayQuote(code, quote, remarks)
     var pct = displayQuote.pct
     var cls = quoteClass(pct)
 
@@ -172,7 +186,9 @@
       '<div class="quote-change ', cls, '">', escapeHtml(formatPct(pct)), '</div>',
     ].join('')
 
-    if (!stayOnCurrent) index = (index + 1) % codes.length
+    var shownIndex = codes.indexOf(code)
+    if (shownIndex === -1) shownIndex = 0
+    index = (shownIndex + 1) % codes.length
   }
 
   function schedule() {
@@ -180,13 +196,17 @@
     timer = setInterval(render, ROTATE_MS)
   }
 
+  function renderAndRestart(options) {
+    render(options)
+    schedule()
+  }
+
   function bindControls() {
     if (clownModeBtn) {
       clownModeBtn.addEventListener('click', function () {
         clownMode = !clownMode
         try { localStorage.setItem(CLOWN_MODE_KEY, clownMode ? 'true' : 'false') } catch (e) {}
-        render({ stayOnCurrent: true })
-        schedule()
+        renderAndRestart({ stayOnCurrent: true })
       })
     }
     document.getElementById('minimize-btn').addEventListener('click', function () {
@@ -200,15 +220,30 @@
     })
   }
 
-  window.addEventListener('storage', render)
+  function renderAfterStorageChange(event) {
+    if (!event || event.key === WATCH_TABS_KEY || event.key === LEGACY_WATCHLIST_KEY) {
+      var codes = getHoldingCodes()
+      render({
+        reset: !currentCode || codes.indexOf(currentCode) === -1,
+        stayOnCurrent: !!currentCode && codes.indexOf(currentCode) !== -1,
+      })
+      schedule()
+      return
+    }
+
+    if ([QUOTE_CACHE_KEY, REMARKS_KEY, SETTINGS_KEY, CLOWN_MODE_KEY].indexOf(event.key) !== -1) {
+      if (event.key === CLOWN_MODE_KEY) clownMode = localStorage.getItem(CLOWN_MODE_KEY) === 'true'
+      renderAndRestart({ stayOnCurrent: true })
+    }
+  }
+
+  window.addEventListener('storage', renderAfterStorageChange)
   bindControls()
-  render()
-  schedule()
+  renderAndRestart({ reset: true })
 
   if (window.shell && window.shell.onHoldingWidgetRefresh) {
     window.shell.onHoldingWidgetRefresh(function () {
-      render()
-      schedule()
+      renderAndRestart({ reset: true })
     })
   }
 })()

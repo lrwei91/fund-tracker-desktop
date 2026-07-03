@@ -903,6 +903,7 @@ body {
     z-index: 201;
     width: 92%;
     max-width: 420px;
+    max-height: min(88vh, 720px);
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -946,15 +947,19 @@ body {
 .modal-close:active { color: var(--text-primary); }
 .modal-body {
     padding: 12px;
+    overflow-y: auto;
 }
 .stock-cost-editor {
     margin-bottom: 12px;
     padding-bottom: 10px;
     border-bottom: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.06));
 }
+.stock-remark-field {
+    margin-bottom: 8px;
+}
 .stock-cost-editor-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 52px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
     align-items: end;
 }
@@ -985,6 +990,11 @@ body {
     font-variant-numeric: tabular-nums;
     appearance: textfield;
 }
+.stock-remark-field input {
+    font-family: var(--font);
+    text-align: left;
+    font-variant-numeric: normal;
+}
 .stock-cost-field input::-webkit-outer-spin-button,
 .stock-cost-field input::-webkit-inner-spin-button {
     -webkit-appearance: none;
@@ -993,8 +1003,15 @@ body {
 .stock-cost-field input:focus {
     border-color: var(--amber);
 }
+.stock-cost-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+}
 .stock-cost-save-btn {
     height: 30px;
+    min-width: 76px;
+    padding: 0 12px;
     border: 1px solid var(--amber);
     border-radius: var(--radius-xs);
     background: var(--amber);
@@ -1018,6 +1035,139 @@ body {
     font-family: var(--mono);
     font-size: 11px;
     color: var(--text-secondary);
+}
+.stock-minute-card {
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+.stock-minute-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.stock-minute-source {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    white-space: nowrap;
+}
+.stock-minute-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 8px;
+}
+.stock-minute-price,
+.stock-minute-pct,
+.stock-minute-meta {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.stock-minute-price {
+    font-size: 18px;
+    font-weight: 800;
+}
+.stock-minute-pct {
+    font-size: 12px;
+    font-weight: 700;
+}
+.stock-minute-meta {
+    color: var(--text-tertiary);
+    font-size: 10px;
+}
+.stock-minute-price.positive,
+.stock-minute-pct.positive { color: var(--red); }
+.stock-minute-price.negative,
+.stock-minute-pct.negative { color: var(--green); }
+.stock-minute-price.neutral,
+.stock-minute-pct.neutral { color: var(--text-secondary); }
+.stock-minute-chart {
+    height: 128px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-elevated);
+}
+.stock-minute-svg {
+    display: block;
+    width: 100%;
+    height: 128px;
+}
+.stock-minute-grid-line {
+    stroke: rgba(255, 255, 255, 0.06);
+    stroke-width: 1;
+}
+.stock-minute-baseline {
+    stroke: rgba(255, 255, 255, 0.2);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+}
+.stock-minute-price-line,
+.stock-minute-avg-line {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.stock-minute-price-line {
+    stroke: var(--text-primary);
+    stroke-width: 2;
+}
+.stock-minute-card.positive .stock-minute-price-line { stroke: var(--red); }
+.stock-minute-card.negative .stock-minute-price-line { stroke: var(--green); }
+.stock-minute-avg-line {
+    stroke: #38bdf8;
+    stroke-width: 1.35;
+    opacity: 0.78;
+}
+.stock-minute-axis {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+.stock-minute-extremes {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 4px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+.stock-minute-scale-label,
+.stock-minute-current-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.stock-minute-scale-label {
+    text-anchor: end;
+}
+.stock-minute-scale-label.positive { fill: var(--red); }
+.stock-minute-scale-label.negative { fill: var(--green); }
+.stock-minute-scale-label.zero { fill: var(--text-tertiary); }
+.stock-minute-current-label {
+    fill: var(--text-secondary);
+    paint-order: stroke;
+    stroke: var(--bg-elevated);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+}
+.stock-minute-current-dot {
+    fill: var(--text-primary);
+    stroke: var(--bg-elevated);
+    stroke-width: 1.4;
+}
+.stock-minute-hit-point {
+    fill: transparent;
+    pointer-events: all;
 }
 .stock-fund-summary {
     margin-top: 12px;

@@ -180,6 +180,29 @@
         return clean;
     }
 
+    function normalizeImportedWatchlistRemarks(rawRemarks, tabs) {
+        var clean = {};
+        var codeMap = getCodesFromTabs(tabs);
+        if (!rawRemarks || typeof rawRemarks !== 'object') return clean;
+        var entries = Array.isArray(rawRemarks)
+            ? rawRemarks.map(function (entry) {
+                return {
+                    code: entry && typeof entry === 'object' ? String(entry.code || entry.id || '').trim() : '',
+                    value: entry && typeof entry === 'object' ? (entry.remark || entry.alias || entry.name || entry.displayName) : '',
+                };
+            })
+            : Object.keys(rawRemarks).map(function (code) {
+                return { code: String(code).trim(), value: rawRemarks[code] };
+            });
+        entries.forEach(function (item) {
+            var code = item.code;
+            var value = String(item.value || '').trim().slice(0, 16);
+            if (!/^\d{6}$/.test(code) || !codeMap[code] || !value) return;
+            clean[code] = value;
+        });
+        return clean;
+    }
+
     function collectWatchlistCostFromTabs(rawTabs) {
         var costMap = {};
         if (!Array.isArray(rawTabs)) return costMap;
@@ -230,6 +253,7 @@
             watchTabs: tabs,
             activeWatchTabId: activeWatchTabId,
             watchlistCost: normalizeImportedWatchlistCost(state.watchlistCost, tabs),
+            watchlistRemarks: normalizeImportedWatchlistRemarks(state.watchlistRemarks, tabs),
             customIndexCodes: normalizeImportedCustomIndexCodes(state.customIndexCodes),
         };
     }
@@ -264,12 +288,16 @@
                 var tabs = normalizeImportedWatchTabs(rawTabs);
                 var rawCost = json.watchlistCost || json.holdingCosts || json.costs || json.costMap || json.positions || json.holdings || collectWatchlistCostFromTabs(rawTabs);
                 var watchlistCost = normalizeImportedWatchlistCost(rawCost, tabs);
+                var rawRemarks = json.watchlistRemarks || json.holdingRemarks || json.remarks || json.aliases || json.aliasMap;
+                var watchlistRemarks = normalizeImportedWatchlistRemarks(rawRemarks, tabs);
                 var activeWatchTabId = getImportedActiveWatchTabId(json.activeWatchTabId, tabs);
                 var rawCustomIndexCodes = getRawCustomIndexCodesFromJson(json);
                 var customIndexCodes = rawCustomIndexCodes ? normalizeImportedCustomIndexCodes(rawCustomIndexCodes) : null;
                 saveWatchTabs(tabs);
                 state.watchlistCost = watchlistCost;
                 saveWatchlistCost();
+                state.watchlistRemarks = watchlistRemarks;
+                saveWatchlistRemarks();
                 state.activeWatchTabId = activeWatchTabId;
                 localStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
                 if (customIndexCodes) {
@@ -544,6 +572,10 @@
             delete state.watchAlertState[code];
             if (window.AppAlerts) window.AppAlerts.saveWatchAlertState();
         }
+        if (state.watchlistRemarks && state.watchlistRemarks[code] && !getAllWatchCodes().includes(code)) {
+            delete state.watchlistRemarks[code];
+            saveWatchlistRemarks();
+        }
         renderWatchlist();
         showWatchStatus('已移除');
     }
@@ -588,10 +620,11 @@
         var prevMap = getPrevChangePct();
         grid.innerHTML = codes.map(function (code) {
             var data = state.watchQuoteCache[code];
+            var rawName = data ? data.name : code + '（待刷新）';
             var prev = Object.prototype.hasOwnProperty.call(prevMap, code) ? prevMap[code] : undefined;
             return renderWatchItem(
                 code,
-                data ? data.name : code + '（待刷新）',
+                getDisplayStockName(code, rawName),
                 data ? data.price : '--',
                 data ? data.changePercent : 0,
                 data ? data.volume : '--',
@@ -742,6 +775,16 @@
         try { localStorage.setItem(KEYS.WATCHLIST_COST_KEY, JSON.stringify(state.watchlistCost)); } catch (e) {}
     }
 
+    function getDisplayStockName(code, fallbackName) {
+        var remark = state.watchlistRemarks && state.watchlistRemarks[code];
+        var cleanRemark = String(remark || '').trim();
+        return cleanRemark || fallbackName || code;
+    }
+
+    function saveWatchlistRemarks() {
+        try { localStorage.setItem(KEYS.WATCHLIST_REMARKS_KEY, JSON.stringify(state.watchlistRemarks || {})); } catch (e) {}
+    }
+
     // ============================================================
     // 删除 / 点击绑定
     // ============================================================
@@ -755,7 +798,7 @@
         });
     }
 
-    // 点击持仓股某行 → 弹窗显示今日 4 档资金流 (主力/大单/中单/小单)
+    // 点击持仓股某行 → 弹窗显示分时 + 今日 4 档资金流 (主力/大单/中单/小单)
     // 每次展开都重新 fetch 最新数据,不走本地 cache
     function bindWatchItemClick() {
         var grid = document.getElementById('watchlist-grid');
@@ -771,8 +814,36 @@
     }
 
     // ============================================================
-    // 单股资金流弹窗
+    // 单股分时 / 资金流弹窗
     // ============================================================
+
+    async function loadStockMinuteData(code) {
+        var res = await fetch(utils.apiUrl('/stock-minute', { code: code, count: 240 }));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        if (!json.success || !json.data || !Array.isArray(json.data.points)) throw new Error('分时数据异常');
+        return json.data;
+    }
+
+    async function loadStockFundFlowData(code) {
+        var res = await fetch(utils.apiUrl('/fund-flow-120d', { codes: code, days: 60 }));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        if (!json.success || !json.data || !Array.isArray(json.data.items) || !json.data.items.length) {
+            throw new Error('资金流数据异常');
+        }
+        var item = json.data.items[0];
+        var recent = item.recent || [];
+        var last = recent.length ? recent[recent.length - 1] : null;
+        var prev = recent.length > 1 ? recent[recent.length - 2] : null;
+        return {
+            item: item,
+            today: item.summary && item.summary.today,
+            last: last,
+            prevMain: prev ? prev.mainNet : null,
+            lastDate: last ? last.date : (item.latestDate || ''),
+        };
+    }
 
     async function showStockFundFlow(code) {
         var panel = document.getElementById('stock-fund-panel');
@@ -784,34 +855,52 @@
         if (overlay.hidden) overlay.hidden = false;
         if (panel.hidden) panel.hidden = false;
         var cachedQuote = state.watchQuoteCache[code];
-        title.textContent = ((cachedQuote && cachedQuote.name) || code) + ' (' + code + ')';
+        title.textContent = getDisplayStockName(code, cachedQuote && cachedQuote.name) + ' (' + code + ')';
         body.innerHTML = '<div class="list-empty">加载中...</div>';
         if (timeEl) timeEl.textContent = '';
 
-        try {
-            var res = await fetch(utils.apiUrl('/fund-flow-120d', { codes: code, days: 60 }));
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var json = await res.json();
-            if (!json.success || !json.data || !Array.isArray(json.data.items) || !json.data.items.length) {
-                throw new Error('数据异常');
-            }
-            var item = json.data.items[0];
-            var today = item.summary && item.summary.today;
-            var recent = item.recent || [];
-            var last = recent.length ? recent[recent.length - 1] : null;
-            var prev = recent.length > 1 ? recent[recent.length - 2] : null;
-            var lastDate = last ? last.date : (item.latestDate || '');
-            var prevMain = prev ? prev.mainNet : null;
-            title.textContent = (item.name || code) + ' (' + code + ')';
-            if (timeEl) timeEl.textContent = lastDate ? '交易日 ' + lastDate : '';
-            body.innerHTML = renderStockFundFlowBody(item, today, last, prevMain);
-            body.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
-                fill.style.width = fill.getAttribute('data-w') + '%';
-            });
-        } catch (e) {
-            body.innerHTML = renderStockCostEditor(code) +
-                '<div class="list-empty">资金流加载失败: ' + utils.escapeHtml(e.message) + '</div>';
+        var results = await Promise.allSettled([
+            loadStockMinuteData(code),
+            loadStockFundFlowData(code),
+        ]);
+        var minuteData = results[0].status === 'fulfilled' ? results[0].value : null;
+        var minuteError = results[0].status === 'rejected' ? results[0].reason : null;
+        var fundData = results[1].status === 'fulfilled' ? results[1].value : null;
+        var fundError = results[1].status === 'rejected' ? results[1].reason : null;
+
+        if (fundData && fundData.item) {
+            title.textContent = getDisplayStockName(code, fundData.item.name || code) + ' (' + code + ')';
+        } else if (minuteData && minuteData.name) {
+            title.textContent = getDisplayStockName(code, minuteData.name || code) + ' (' + code + ')';
         }
+        if (timeEl) timeEl.textContent = getStockModalTimeText(minuteData, fundData);
+        body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError);
+        body.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
+            fill.style.width = fill.getAttribute('data-w') + '%';
+        });
+    }
+
+    function getStockModalTimeText(minuteData, fundData) {
+        var parts = [];
+        if (minuteData && (minuteData.tradeDate || minuteData.latestTime)) {
+            parts.push('分时 ' + [minuteData.tradeDate, minuteData.latestTime].filter(Boolean).join(' '));
+        }
+        if (fundData && fundData.lastDate) parts.push('资金流 ' + fundData.lastDate);
+        return parts.join(' · ');
+    }
+
+    function renderStockModalBody(code, minuteData, minuteError, fundData, fundError) {
+        var html = renderStockCostEditor(code);
+        html += renderStockMinuteSection(minuteData, minuteError);
+        if (fundData && fundData.item) {
+            html += renderStockFundFlowBody(fundData.item, fundData.today, fundData.last, fundData.prevMain, { includeEditor: false });
+        } else {
+            html += '<div class="stock-fund-summary">' +
+                '<div class="stock-fund-section-title">资金流</div>' +
+                '<div class="list-empty">资金流加载失败: ' + utils.escapeHtml(fundError && fundError.message ? fundError.message : '数据异常') + '</div>' +
+            '</div>';
+        }
+        return html;
     }
 
     function renderStockCostEditor(code) {
@@ -819,8 +908,13 @@
         var entry = state.watchlistCost[code] || {};
         var costVal = typeof entry.cost === 'number' && Number.isFinite(entry.cost) ? entry.cost : '';
         var sharesVal = typeof entry.shares === 'number' && Number.isFinite(entry.shares) ? entry.shares : '';
+        var remarkVal = state.watchlistRemarks && state.watchlistRemarks[code] ? state.watchlistRemarks[code] : '';
         return '<form class="stock-cost-editor" data-stock-cost-form data-code="' + utils.escapeHtml(code) + '">' +
-            '<div class="stock-fund-section-title">持仓成本</div>' +
+            '<div class="stock-fund-section-title">持仓设置</div>' +
+            '<label class="stock-cost-field stock-remark-field">' +
+                '<span>备注名</span>' +
+                '<input type="text" maxlength="16" data-remark-input placeholder="为空显示原始股票名" value="' + utils.escapeHtml(String(remarkVal)) + '">' +
+            '</label>' +
             '<div class="stock-cost-editor-row">' +
                 '<label class="stock-cost-field">' +
                     '<span>成本价</span>' +
@@ -830,7 +924,9 @@
                     '<span>股数</span>' +
                     '<input type="number" step="1" min="0" data-shares-input placeholder="0" value="' + utils.escapeHtml(String(sharesVal)) + '">' +
                 '</label>' +
-                '<button type="submit" class="stock-cost-save-btn">保存</button>' +
+            '</div>' +
+            '<div class="stock-cost-actions">' +
+                '<button type="submit" class="stock-cost-save-btn">保存设置</button>' +
             '</div>' +
         '</form>';
     }
@@ -840,8 +936,10 @@
         var code = form.getAttribute('data-code');
         var costInput = form.querySelector('[data-cost-input]');
         var sharesInput = form.querySelector('[data-shares-input]');
+        var remarkInput = form.querySelector('[data-remark-input]');
         var cost = parseFloat(costInput ? costInput.value : '');
         var shares = parseFloat(sharesInput ? sharesInput.value : '');
+        var remark = String(remarkInput ? remarkInput.value : '').trim().slice(0, 16);
         if (Number.isFinite(cost) && cost > 0) {
             state.watchlistCost[code] = {
                 cost: cost,
@@ -850,13 +948,219 @@
         } else {
             delete state.watchlistCost[code];
         }
+        if (!state.watchlistRemarks || typeof state.watchlistRemarks !== 'object') state.watchlistRemarks = {};
+        if (remark) state.watchlistRemarks[code] = remark;
+        else delete state.watchlistRemarks[code];
         saveWatchlistCost();
+        saveWatchlistRemarks();
         renderWatchlist();
-        showWatchStatus('成本已保存');
+        showWatchStatus('持仓设置已保存');
     }
 
-    function renderStockFundFlowBody(item, today, last, prevMain) {
-        if (!today || !last) return '<div class="list-empty">暂无当日资金流数据</div>';
+    function readFiniteNumber(value) {
+        if (value === null || value === undefined || value === '') return null;
+        var number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    }
+
+    function formatPriceValue(value) {
+        var number = readFiniteNumber(value);
+        return number === null ? '--' : number.toFixed(2);
+    }
+
+    function formatPercentValue(value) {
+        var number = readFiniteNumber(value);
+        if (number === null) return '--';
+        return (number > 0 ? '+' : '') + number.toFixed(2) + '%';
+    }
+
+    function pointChangePercent(point, preClose) {
+        if (point && point.changePercent !== null && point.changePercent !== undefined && point.changePercent !== ''
+            && Number.isFinite(Number(point.changePercent))) return Number(point.changePercent);
+        var price = point ? readFiniteNumber(point.price) : null;
+        var base = readFiniteNumber(preClose);
+        if (price === null || base === null || base <= 0) return null;
+        return (price - base) / base * 100;
+    }
+
+    function renderStockMinuteSection(data, error) {
+        if (error) {
+            return '<div class="stock-minute-card">' +
+                '<div class="stock-minute-top">' +
+                    '<div class="stock-fund-section-title">分时</div>' +
+                '</div>' +
+                '<div class="list-empty">分时加载失败: ' + utils.escapeHtml(error.message || '数据异常') + '</div>' +
+            '</div>';
+        }
+        var points = data && Array.isArray(data.points) ? data.points.filter(function (point) {
+            return point && readFiniteNumber(point.price) !== null && point.time;
+        }) : [];
+        if (!points.length) {
+            return '<div class="stock-minute-card">' +
+                '<div class="stock-minute-top">' +
+                    '<div class="stock-fund-section-title">分时</div>' +
+                '</div>' +
+                '<div class="list-empty">暂无分时数据</div>' +
+            '</div>';
+        }
+        var latest = points[points.length - 1];
+        var first = points[0];
+        var middle = points[Math.floor((points.length - 1) / 2)] || first;
+        var stats = getMinuteChartStats(points, data.preClose);
+        var pct = pointChangePercent(latest, data.preClose);
+        var cls = pct > 0 ? 'positive' : pct < 0 ? 'negative' : 'neutral';
+        var sourceLabel = data.source === 'tdxrs'
+            ? '来源 tdxrs'
+            : (data.fallbackReason ? '来源 东方财富备用' : '来源 ' + (data.sourceLabel || '东方财富'));
+        var extremesHtml = stats.high && stats.low
+            ? '<div class="stock-minute-extremes">' +
+                '<span>高 ' + utils.escapeHtml(stats.high.time) + ' ' + utils.escapeHtml(formatPercentValue(stats.high.pct)) + '</span>' +
+                '<span>低 ' + utils.escapeHtml(stats.low.time) + ' ' + utils.escapeHtml(formatPercentValue(stats.low.pct)) + '</span>' +
+            '</div>'
+            : '';
+        return '<div class="stock-minute-card ' + cls + '">' +
+            '<div class="stock-minute-top">' +
+                '<div class="stock-fund-section-title">分时</div>' +
+                '<div class="stock-minute-source">' + utils.escapeHtml(sourceLabel) + '</div>' +
+            '</div>' +
+            '<div class="stock-minute-summary">' +
+                '<div class="stock-minute-price ' + cls + '">' + utils.escapeHtml(formatPriceValue(latest.price)) + '</div>' +
+                '<div class="stock-minute-pct ' + cls + '">' + utils.escapeHtml(formatPercentValue(pct)) + '</div>' +
+                '<div class="stock-minute-meta">均价 ' + utils.escapeHtml(formatPriceValue(latest.avgPrice)) + ' · ' + utils.escapeHtml(latest.time) + '</div>' +
+            '</div>' +
+            '<div class="stock-minute-chart">' + renderStockMinuteChart(points, data.preClose, stats) + '</div>' +
+            '<div class="stock-minute-axis">' +
+                '<span>' + utils.escapeHtml(first.time) + '</span>' +
+                '<span>' + utils.escapeHtml(middle.time) + '</span>' +
+                '<span>' + utils.escapeHtml(latest.time) + '</span>' +
+            '</div>' +
+            extremesHtml +
+        '</div>';
+    }
+
+    function getMinuteChartStats(points, preClose) {
+        var base = readFiniteNumber(preClose);
+        var chartPoints = points.map(function (point) {
+            var price = readFiniteNumber(point.price);
+            var avgPrice = readFiniteNumber(point.avgPrice);
+            return {
+                time: point.time,
+                price: price,
+                avgPrice: avgPrice,
+                pct: pointChangePercent(point, base),
+                avgPct: base !== null && base > 0 && avgPrice !== null ? (avgPrice - base) / base * 100 : null,
+            };
+        }).filter(function (point) { return point.price !== null && point.time; });
+        var pctValues = [];
+        var high = null;
+        var low = null;
+        chartPoints.forEach(function (point) {
+            if (point.pct !== null && Number.isFinite(point.pct)) {
+                pctValues.push(point.pct);
+                if (!high || point.pct > high.pct) high = point;
+                if (!low || point.pct < low.pct) low = point;
+            }
+            if (point.avgPct !== null && Number.isFinite(point.avgPct)) pctValues.push(point.avgPct);
+        });
+        var maxAbsPct = pctValues.length
+            ? Math.max.apply(Math, pctValues.map(function (value) { return Math.abs(value); }))
+            : null;
+        if (maxAbsPct !== null && Number.isFinite(maxAbsPct)) {
+            maxAbsPct = Math.max(0.5, Math.ceil(maxAbsPct * 10) / 10);
+        }
+        return {
+            base: base,
+            points: chartPoints,
+            high: high,
+            low: low,
+            maxAbsPct: maxAbsPct,
+        };
+    }
+
+    function renderStockMinuteChart(points, preClose, stats) {
+        var width = 360;
+        var height = 128;
+        var padX = 8;
+        var padY = 10;
+        var padRight = 50;
+        var valid = stats && Array.isArray(stats.points) ? stats.points : getMinuteChartStats(points, preClose).points;
+        var values = [];
+        valid.forEach(function (point) {
+            values.push(point.price);
+            if (point.avgPrice !== null) values.push(point.avgPrice);
+        });
+        var base = stats && stats.base !== null && stats.base !== undefined ? stats.base : readFiniteNumber(preClose);
+        if (base !== null && base > 0) values.push(base);
+        var min = Math.min.apply(Math, values);
+        var max = Math.max.apply(Math, values);
+        if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+        if (min === max) {
+            min -= Math.max(0.01, min * 0.002);
+            max += Math.max(0.01, max * 0.002);
+        }
+        var yScale = function (value) {
+            return padY + (max - value) / (max - min) * (height - padY * 2);
+        };
+        var maxAbsPct = stats && typeof stats.maxAbsPct === 'number' ? stats.maxAbsPct : null;
+        if (base !== null && base > 0 && maxAbsPct !== null) {
+            yScale = function (value) {
+                var pct = (value - base) / base * 100;
+                return padY + (maxAbsPct - pct) / (maxAbsPct * 2) * (height - padY * 2);
+            };
+        }
+        function clamp(value, minValue, maxValue) {
+            return Math.max(minValue, Math.min(maxValue, value));
+        }
+        var xScale = function (index) {
+            return padX + (valid.length <= 1 ? 0 : index / (valid.length - 1) * (width - padX - padRight));
+        };
+        var pricePath = valid.map(function (point, index) {
+            return (index === 0 ? 'M' : 'L') + xScale(index).toFixed(2) + ' ' + yScale(point.price).toFixed(2);
+        }).join(' ');
+        var avgPath = valid.map(function (point, index) {
+            var value = point.avgPrice === null ? point.price : point.avgPrice;
+            return (index === 0 ? 'M' : 'L') + xScale(index).toFixed(2) + ' ' + yScale(value).toFixed(2);
+        }).join(' ');
+        var baselineY = base !== null && base > 0 ? yScale(base) : (height / 2);
+        var scaleLabels = base !== null && base > 0 && maxAbsPct !== null
+            ? '<text class="stock-minute-scale-label positive" x="' + (width - 4) + '" y="' + (padY + 3) + '">' + utils.escapeHtml(formatPercentValue(maxAbsPct)) + '</text>' +
+                '<text class="stock-minute-scale-label zero" x="' + (width - 4) + '" y="' + (baselineY + 3).toFixed(2) + '">0.00%</text>' +
+                '<text class="stock-minute-scale-label negative" x="' + (width - 4) + '" y="' + (height - padY + 3) + '">' + utils.escapeHtml(formatPercentValue(-maxAbsPct)) + '</text>'
+            : '';
+        var baseline = base !== null && base > 0
+            ? '<line class="stock-minute-baseline" x1="' + padX + '" y1="' + baselineY.toFixed(2) + '" x2="' + (width - padRight) + '" y2="' + baselineY.toFixed(2) + '"></line>'
+            : '';
+        var hitPoints = valid.map(function (point, index) {
+            var pctText = formatPercentValue(point.pct);
+            return '<circle class="stock-minute-hit-point" cx="' + xScale(index).toFixed(2) + '" cy="' + yScale(point.price).toFixed(2) + '" r="5">' +
+                '<title>' + utils.escapeHtml(point.time + ' 价格 ' + formatPriceValue(point.price) + ' 涨幅 ' + pctText) + '</title>' +
+            '</circle>';
+        }).join('');
+        var latest = valid[valid.length - 1];
+        var latestX = xScale(valid.length - 1);
+        var latestY = yScale(latest.price);
+        var latestLabelX = latestX > width * 0.68 ? latestX - 6 : latestX + 6;
+        var latestAnchor = latestX > width * 0.68 ? 'end' : 'start';
+        var latestLabelY = clamp(latestY - 8, padY + 8, height - padY - 4);
+        var latestLabel = '<circle class="stock-minute-current-dot" cx="' + latestX.toFixed(2) + '" cy="' + latestY.toFixed(2) + '" r="2.8"></circle>' +
+            '<text class="stock-minute-current-label" x="' + latestLabelX.toFixed(2) + '" y="' + latestLabelY.toFixed(2) + '" text-anchor="' + latestAnchor + '">' +
+                utils.escapeHtml(latest.time + ' ' + formatPercentValue(latest.pct)) +
+            '</text>';
+        return '<svg class="stock-minute-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="分时价格走势">' +
+            '<line class="stock-minute-grid-line" x1="' + padX + '" y1="' + padY + '" x2="' + (width - padRight) + '" y2="' + padY + '"></line>' +
+            '<line class="stock-minute-grid-line" x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padRight) + '" y2="' + (height - padY) + '"></line>' +
+            baseline +
+            scaleLabels +
+            '<path class="stock-minute-avg-line" d="' + avgPath + '"></path>' +
+            '<path class="stock-minute-price-line" d="' + pricePath + '"></path>' +
+            latestLabel +
+            hitPoints +
+        '</svg>';
+    }
+
+    function renderStockFundFlowBody(item, today, last, prevMain, options) {
+        var includeEditor = !(options && options.includeEditor === false);
+        if (!today || !last) return (includeEditor ? renderStockCostEditor(item.code) : '') + '<div class="list-empty">暂无当日资金流数据</div>';
 
         // 注: 不显示涨跌幅 — 弹窗用的是 daykline 接口最近交易日的 pct,与列表实时报价对不上
 
@@ -926,7 +1230,7 @@
         }).join('');
         var recentTrend = trendHtml(item.recent || []);
 
-        return renderStockCostEditor(item.code) +
+        return (includeEditor ? renderStockCostEditor(item.code) : '') +
             '<div class="stock-fund-header">' +
             '<div class="stock-fund-main">主力合计 ' + utils.escapeHtml(utils.formatYuan(mainNet)) + utils.escapeHtml(prevMainText) + '</div>' +
             '</div>' +
@@ -1256,6 +1560,8 @@
         renderWatchItem: renderWatchItem,
         renderCostCell: renderCostCell,
         saveWatchlistCost: saveWatchlistCost,
+        getDisplayStockName: getDisplayStockName,
+        saveWatchlistRemarks: saveWatchlistRemarks,
         persistWatchQuoteCache: persistWatchQuoteCache,
         persistWatchQuoteUpdateTime: persistWatchQuoteUpdateTime,
         persistCurrentChangePct: persistCurrentChangePct,

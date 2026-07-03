@@ -50,7 +50,7 @@ body {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(64px, 1fr) 54px 70px;
+  grid-template-columns: minmax(72px, 1fr) 54px 70px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -62,10 +62,11 @@ body {
 
 .quote-main {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
 }
 
 .quote-name {
@@ -79,9 +80,13 @@ body {
 }
 
 .quote-code {
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  color: rgba(203, 213, 225, 0.92);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
   line-height: 1;
 }
 

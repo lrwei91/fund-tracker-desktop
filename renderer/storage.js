@@ -10,6 +10,7 @@
     'fund_tracker_watch_alert_state',
     'fund_tracker_custom_indices',
     'fund_tracker_watchlist_cost',
+    'fund_tracker_watchlist_remarks',
     'fund_tracker_watchlist',
     'fund_tracker_watchlist_tabs',
     'fund_tracker_active_watch_tab',

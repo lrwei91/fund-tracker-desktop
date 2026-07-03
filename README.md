@@ -73,9 +73,9 @@ chmod +x "/Applications/恭喜发财.app/Contents/MacOS/恭喜发财"
 - `fund-tracker://app/api/...` 转发到 `app/api/*.js`
 - `fund-tracker://app/renderer/holding-widget.html` 加载 `renderer/holding-widget.html`
 
-主窗口和浮窗共享同源配置。自选股分组、当前分组、自选指数、持仓成本/股数、设置、小丑模式等关键用户数据写入 `config.json`；行情/新闻等临时缓存仍保留在 Chromium `localStorage`。
+主窗口和浮窗共享同源配置。自选股分组、当前分组、自选指数、持仓成本/股数、持仓备注名、设置、小丑模式等关键用户数据写入 `config.json`；行情/新闻等临时缓存仍保留在 Chromium `localStorage`。
 
-顶部“导入/导出”会备份/恢复自选股分组、当前分组、自选指数、持仓成本和股数；导入兼容旧版 `costPrice`、`buyPrice`、`quantity`、`positions`、`customIndices` 等字段。
+顶部“导入/导出”会备份/恢复自选股分组、当前分组、自选指数、持仓成本、股数和备注名；导入兼容旧版 `costPrice`、`buyPrice`、`quantity`、`positions`、`customIndices` 等字段。
 
 Windows 打包版的关键用户配置默认在 `%APPDATA%\恭喜发财\config.json`；开发模式通常在 `%APPDATA%\fund-tracker-electron\config.json`。浏览器 `localStorage` 临时缓存位于 `Local Storage\leveldb`。应用启动和 Windows 清理退出时会在日志里输出实际 `userData`、`config`、`localStorage`、`sessionStorage` 和 `Cache` 路径。
 
