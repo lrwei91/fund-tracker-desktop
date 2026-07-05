@@ -605,11 +605,11 @@ body {
 /* Column headers — table-style */
 /* 关键：让"价格/涨跌幅/操作"列在持仓股和非持仓股 tab 下位置和宽度完全一致
    只在"成本价"列和 1fr 区域有差异，避免切换时整张表"抖"一下
-   列宽定义：4 列 [1fr, 64, 84, 26] / 5 列 [1fr, 64(cost), 64(price), 84(change), 26]
+   列宽定义：5 列 [1fr, 96(chart), 64, 84, 26] / 6 列 [1fr, 96(chart), 64(cost), 64(price), 84(change), 26]
    gap 一律 12px（之前 4 列 16/5 列 12 也是抖动源头） */
 .watchlist-header-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 64px 84px 26px;
+    grid-template-columns: minmax(0, 1fr) 96px 64px 84px 26px;
     align-items: center;
     padding: 7px 14px;
     color: var(--text-tertiary);
@@ -626,10 +626,13 @@ body {
 }
 
 .watchlist-header-row.with-cost {
-    grid-template-columns: minmax(0, 1fr) 64px 64px 84px 26px;
+    grid-template-columns: minmax(0, 1fr) 96px 64px 64px 84px 26px;
 }
 
 .watchlist-header-name { }
+.watchlist-header-spark {
+    text-align: center;
+}
 .watchlist-header-cost {
     display: none;
     text-align: left;
@@ -668,14 +671,14 @@ body {
     border-bottom: 1px solid var(--border);
     padding: 10px 14px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 64px 84px 26px;
+    grid-template-columns: minmax(0, 1fr) 96px 64px 84px 26px;
     align-items: center;
     gap: 12px;
     border-radius: 0;
 }
 
 .watchlist-grid.with-cost .watchlist-item {
-    grid-template-columns: minmax(0, 1fr) 64px 64px 84px 26px;
+    grid-template-columns: minmax(0, 1fr) 96px 64px 64px 84px 26px;
 }
 
 .watchlist-item:nth-child(even) {
@@ -710,6 +713,37 @@ body {
     color: var(--text-tertiary);
     font-family: var(--mono);
     line-height: 1;
+}
+
+.watchlist-stock-sparkline {
+    width: 96px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.95;
+}
+
+.watchlist-stock-sparkline svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.watchlist-stock-sparkline-path {
+    fill: none;
+    stroke: var(--text-tertiary);
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.watchlist-stock-sparkline-path.positive {
+    stroke: var(--red);
+}
+
+.watchlist-stock-sparkline-path.negative {
+    stroke: var(--green);
 }
 
 .watchlist-stock-price {
@@ -2887,6 +2921,11 @@ body {
     .watchlist-header-row.with-cost,
     .watchlist-grid.with-cost .watchlist-item {
         grid-template-columns: minmax(0, 1fr) 48px 48px 64px 18px;
+    }
+
+    .watchlist-header-spark,
+    .watchlist-stock-sparkline {
+        display: none;
     }
 
     .watchlist-stock-price { font-size: 12px; }

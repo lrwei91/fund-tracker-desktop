@@ -11,6 +11,9 @@
     var utils = window.AppUtils;
     var cache = window.AppCache;
     var KEYS = state.KEYS;
+    var watchSparkCache = {};
+    var watchSparkPending = {};
+    var WATCH_SPARK_TTL_MS = 2 * 60 * 1000;
 
     // ============================================================
     // helpers
@@ -568,6 +571,8 @@
             delete state.watchQuoteCache[code];
             persistWatchQuoteCache();
         }
+        if (watchSparkCache[code]) delete watchSparkCache[code];
+        if (watchSparkPending[code]) delete watchSparkPending[code];
         if (state.watchAlertState[code]) {
             delete state.watchAlertState[code];
             if (window.AppAlerts) window.AppAlerts.saveWatchAlertState();
@@ -633,10 +638,11 @@
             );
         }).join('');
         bindWatchRemove();
-        // 切换列数:持仓股 5 列(带成本),其他 4 列
+        // 切换列数:持仓股带成本列,走势图列保持固定,避免右侧价格列抖动
         grid.classList.toggle('with-cost', showCost);
         document.querySelector('.watchlist-header-row')?.classList.toggle('with-cost', showCost);
         bindWatchItemClick();
+        hydrateWatchSparklines(codes);
         // 持仓股 sub-row 的资金流 bar 宽度注入
         grid.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
@@ -737,14 +743,88 @@
         var data = state.watchQuoteCache[code];
         var priceValue = data && typeof data.priceValue === 'number' ? data.priceValue : null;
         var costCell = showCost ? renderCostCell(code, priceValue) : '';
+        var spark = renderWatchSparklineCell(code, cls);
         return '<div class="watchlist-item clickable" data-code="' + utils.escapeHtml(code) + '" data-pct="' + utils.escapeHtml(changePercent) + '">' +
             '<div class="watchlist-item-main">' +
             '<div class="watchlist-stock-name">' + utils.escapeHtml(name) + '</div>' +
             '<div class="watchlist-stock-code">' + utils.escapeHtml(code) + '</div></div>' +
+            spark +
             costCell +
             '<div class="watchlist-stock-price ' + cls + '">' + utils.escapeHtml(price) + '</div>' +
             '<div class="watchlist-stock-change ' + cls + '">' + utils.escapeHtml(pt) + ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span></div>' +
             '<button class="watchlist-remove-btn" data-code="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button></div>';
+    }
+
+    function renderWatchSparklineCell(code, cls) {
+        var cached = watchSparkCache[code];
+        var svg = cached && Array.isArray(cached.points)
+            ? renderWatchSparkline(cached.points, cls)
+            : '';
+        return '<div class="watchlist-stock-sparkline ' + cls + '" data-watch-spark="' + utils.escapeHtml(code) + '">' + svg + '</div>';
+    }
+
+    function hydrateWatchSparklines(codes) {
+        sanitizeCodes(codes).forEach(function (code) {
+            var cached = watchSparkCache[code];
+            if (cached && Date.now() - cached.ts < WATCH_SPARK_TTL_MS) {
+                updateWatchSparklineDom(code);
+                return;
+            }
+            if (watchSparkPending[code]) return;
+            watchSparkPending[code] = true;
+            loadStockMinuteData(code)
+                .then(function (data) {
+                    var points = data && Array.isArray(data.points) ? data.points.filter(function (point) {
+                        return point && readFiniteNumber(point.price) !== null;
+                    }) : [];
+                    watchSparkCache[code] = { ts: Date.now(), points: points };
+                    updateWatchSparklineDom(code);
+                })
+                .catch(function () {
+                    watchSparkCache[code] = { ts: Date.now(), points: [] };
+                })
+                .finally(function () {
+                    delete watchSparkPending[code];
+                });
+        });
+    }
+
+    function updateWatchSparklineDom(code) {
+        var cell = document.querySelector('.watchlist-stock-sparkline[data-watch-spark="' + code + '"]');
+        if (!cell) return;
+        var item = cell.closest('.watchlist-item');
+        var pct = item ? Number(item.getAttribute('data-pct')) : 0;
+        var cls = pct > 0 ? 'positive' : pct < 0 ? 'negative' : 'neutral';
+        cell.className = 'watchlist-stock-sparkline ' + cls;
+        cell.innerHTML = renderWatchSparkline((watchSparkCache[code] && watchSparkCache[code].points) || [], cls);
+    }
+
+    function renderWatchSparkline(points, cls) {
+        var values = (Array.isArray(points) ? points : []).map(function (point) {
+            return readFiniteNumber(point.price);
+        }).filter(function (value) {
+            return value !== null;
+        });
+        if (values.length < 2) return '';
+        if (values.length > 42) values = values.slice(values.length - 42);
+        var width = 96;
+        var height = 34;
+        var pad = 3;
+        var min = Math.min.apply(Math, values);
+        var max = Math.max.apply(Math, values);
+        if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+        if (min === max) {
+            min -= Math.max(0.01, Math.abs(min) * 0.001);
+            max += Math.max(0.01, Math.abs(max) * 0.001);
+        }
+        var d = values.map(function (value, index) {
+            var x = pad + index / Math.max(1, values.length - 1) * (width - pad * 2);
+            var y = pad + (max - value) / (max - min) * (height - pad * 2);
+            return (index === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2);
+        }).join(' ');
+        return '<svg viewBox="0 0 ' + width + ' ' + height + '" aria-label="当日走势" role="img" focusable="false">' +
+            '<path class="watchlist-stock-sparkline-path ' + utils.escapeHtml(cls) + '" d="' + d + '"></path>' +
+        '</svg>';
     }
 
     function renderCostCell(code, priceValue) {
