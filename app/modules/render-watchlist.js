@@ -809,7 +809,7 @@
         if (values.length > 42) values = values.slice(values.length - 42);
         var width = 96;
         var height = 34;
-        var pad = 3;
+        var pad = 1.5;
         var min = Math.min.apply(Math, values);
         var max = Math.max.apply(Math, values);
         if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
