@@ -3193,6 +3193,79 @@ body {
     .news-source-tab:hover:not(.active) { color: var(--text-secondary); }
 }
 
+@media (max-width: 720px) {
+    .index-section .index-grid,
+    .custom-index-section .index-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 7px;
+    }
+
+    .index-section .index-item,
+    .custom-index-section .index-item,
+    .custom-index-add {
+        min-height: 58px;
+        padding: 9px 11px;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .index-section .index-sparkline {
+        width: 58px;
+        height: 22px;
+    }
+
+    .watchlist-header-row,
+    .watchlist-item {
+        grid-template-columns: minmax(0, 1fr) 74px 58px 76px 24px;
+        gap: 8px;
+    }
+
+    .watchlist-header-row.with-cost,
+    .watchlist-grid.with-cost .watchlist-item {
+        grid-template-columns: minmax(0, 1fr) 74px 58px 58px 76px 24px;
+    }
+
+    .watchlist-stock-sparkline {
+        width: 74px;
+        height: 30px;
+    }
+}
+
+@media (max-width: 480px) {
+    .index-section .index-grid,
+    .custom-index-section .index-grid {
+        gap: 6px;
+    }
+
+    .index-section .index-item,
+    .custom-index-section .index-item,
+    .custom-index-add {
+        gap: 5px 7px;
+        min-height: 54px;
+        padding: 8px 10px;
+    }
+
+    .index-section .index-sparkline {
+        width: 46px;
+    }
+
+    .watchlist-header-spark,
+    .watchlist-stock-sparkline {
+        display: none;
+    }
+
+    .watchlist-header-row,
+    .watchlist-item {
+        grid-template-columns: minmax(0, 1fr) 52px 68px 20px;
+        gap: 7px;
+    }
+
+    .watchlist-header-row.with-cost,
+    .watchlist-grid.with-cost .watchlist-item {
+        grid-template-columns: minmax(0, 1fr) 52px 52px 68px 20px;
+    }
+}
+
 /* ================================================================
    Small Screen (≤380px)
    ================================================================ */
