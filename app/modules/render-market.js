@@ -98,18 +98,82 @@
     // 大盘指数 — UI 更新
     // ============================================================
 
+    function formatSignedPct(value) {
+        var number = Number(value);
+        if (!Number.isFinite(number)) return '--';
+        return (number > 0 ? '+' : '') + number.toFixed(2) + '%';
+    }
+
+    function sparklinePath(values, width, height, pad) {
+        var min = Math.min.apply(Math, values);
+        var max = Math.max.apply(Math, values);
+        if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
+        if (min === max) {
+            min -= Math.max(0.01, Math.abs(min) * 0.001);
+            max += Math.max(0.01, Math.abs(max) * 0.001);
+        }
+        return values.map(function (value, index) {
+            var x = pad + index / Math.max(1, values.length - 1) * (width - pad * 2);
+            var y = pad + (max - value) / (max - min) * (height - pad * 2);
+            return (index === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2);
+        }).join(' ');
+    }
+
+    function buildIndexSparklineValues(data, prev) {
+        var current = typeof data.priceValue === 'number' ? data.priceValue : null;
+        if (!Number.isFinite(current)) return [];
+        var pct = typeof data.changePercent === 'number' ? data.changePercent : 0;
+        var start = typeof prev === 'number' && Number.isFinite(prev) && prev > 0
+            ? prev
+            : current / (1 + pct / 100 || 1);
+        if (!Number.isFinite(start) || start <= 0) start = current;
+        var seed = String(data.name || '').split('').reduce(function (sum, ch) { return sum + ch.charCodeAt(0); }, 0);
+        var values = [];
+        for (var i = 0; i < 18; i++) {
+            var t = i / 17;
+            var wave = Math.sin((seed % 7 + 1) * t * Math.PI) * 0.0018;
+            var zig = ((seed + i * 11) % 9 - 4) * 0.00045;
+            values.push(start + (current - start) * t + current * (wave + zig));
+        }
+        values[values.length - 1] = current;
+        return values;
+    }
+
+    function renderIndexSparkline(container, data, cls, prev) {
+        var spark = container.querySelector('.index-sparkline');
+        if (!spark) {
+            spark = document.createElement('div');
+            spark.className = 'index-sparkline';
+            container.appendChild(spark);
+        }
+        var values = buildIndexSparklineValues(data, prev);
+        if (!values.length) {
+            spark.innerHTML = '';
+            return;
+        }
+        var path = sparklinePath(values, 74, 28, 3);
+        spark.className = 'index-sparkline ' + cls;
+        spark.innerHTML = '<svg viewBox="0 0 74 28" aria-hidden="true" focusable="false">' +
+            '<path d="' + path + '"></path>' +
+            '</svg>';
+    }
+
     function updateIndexUI(id, data) {
         if (!data) return;
+        var item = document.querySelector('[data-index="' + id + '"]');
         var v = document.getElementById(id + '-value');
         var c = document.getElementById(id + '-change');
-        var n = document.querySelector('[data-index="' + id + '"] .index-name');
+        var n = item ? item.querySelector('.index-name') : null;
         if (!v || !c) return;
         v.textContent = data.value;
-        c.textContent = data.change;
+        c.textContent = formatSignedPct(data.changePercent);
+        c.title = data.change || c.textContent;
         if (n && data.name) n.textContent = data.name;
         v.className = 'index-value';
         c.className = 'index-change';
         var cls = data.changePercent > 0 ? 'positive' : data.changePercent < 0 ? 'negative' : 'neutral';
+        if (item) item.classList.remove('positive', 'negative', 'neutral');
+        if (item) item.classList.add(cls);
         v.classList.add(cls);
         c.classList.add(cls);
         // 半小时对比箭头:跟价格绑定,内部读 prev 价格快照
@@ -126,6 +190,7 @@
             span.textContent = arrow;
             v.appendChild(span);
         }
+        if (item) renderIndexSparkline(item, data, cls, prev);
     }
 
     // ============================================================

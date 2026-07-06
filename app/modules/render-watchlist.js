@@ -878,7 +878,7 @@
         });
     }
 
-    // 点击持仓股某行 → 弹窗显示分时 + 今日 4 档资金流 (主力/大单/中单/小单)
+    // 点击持仓股某行 → 弹窗显示分时、技术面和今日 4 档资金流 (主力/大单/中单/小单)
     // 每次展开都重新 fetch 最新数据,不走本地 cache
     function bindWatchItemClick() {
         var grid = document.getElementById('watchlist-grid');
@@ -894,7 +894,7 @@
     }
 
     // ============================================================
-    // 单股分时 / 资金流弹窗
+    // 单股分时 / 技术面 / 资金流弹窗
     // ============================================================
 
     async function loadStockMinuteData(code) {
@@ -925,6 +925,14 @@
         };
     }
 
+    async function loadStockKlineData(code) {
+        var res = await fetch(utils.apiUrl('/stock-kline', { code: code, days: 260 }));
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        if (!json.success || !json.data || !json.data.analysis) throw new Error('技术面数据异常');
+        return json.data;
+    }
+
     async function showStockFundFlow(code) {
         var panel = document.getElementById('stock-fund-panel');
         var overlay = document.getElementById('stock-fund-overlay');
@@ -942,36 +950,33 @@
         var results = await Promise.allSettled([
             loadStockMinuteData(code),
             loadStockFundFlowData(code),
+            loadStockKlineData(code),
         ]);
         var minuteData = results[0].status === 'fulfilled' ? results[0].value : null;
         var minuteError = results[0].status === 'rejected' ? results[0].reason : null;
         var fundData = results[1].status === 'fulfilled' ? results[1].value : null;
         var fundError = results[1].status === 'rejected' ? results[1].reason : null;
+        var klineData = results[2].status === 'fulfilled' ? results[2].value : null;
+        var klineError = results[2].status === 'rejected' ? results[2].reason : null;
 
         if (fundData && fundData.item) {
             title.textContent = getDisplayStockName(code, fundData.item.name || code) + ' (' + code + ')';
         } else if (minuteData && minuteData.name) {
             title.textContent = getDisplayStockName(code, minuteData.name || code) + ' (' + code + ')';
+        } else if (klineData && klineData.name) {
+            title.textContent = getDisplayStockName(code, klineData.name || code) + ' (' + code + ')';
         }
-        if (timeEl) timeEl.textContent = getStockModalTimeText(minuteData, fundData);
-        body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError);
+        if (timeEl) timeEl.textContent = '';
+        body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError);
         body.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
         });
     }
 
-    function getStockModalTimeText(minuteData, fundData) {
-        var parts = [];
-        if (minuteData && (minuteData.tradeDate || minuteData.latestTime)) {
-            parts.push('分时 ' + [minuteData.tradeDate, minuteData.latestTime].filter(Boolean).join(' '));
-        }
-        if (fundData && fundData.lastDate) parts.push('资金流 ' + fundData.lastDate);
-        return parts.join(' · ');
-    }
-
-    function renderStockModalBody(code, minuteData, minuteError, fundData, fundError) {
+    function renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError) {
         var html = renderStockCostEditor(code);
         html += renderStockMinuteSection(minuteData, minuteError);
+        html += renderStockAnalysisSection(klineData, klineError);
         if (fundData && fundData.item) {
             html += renderStockFundFlowBody(fundData.item, fundData.today, fundData.last, fundData.prevMain, { includeEditor: false });
         } else {
@@ -1089,9 +1094,6 @@
         var stats = getMinuteChartStats(points, data.preClose);
         var pct = pointChangePercent(latest, data.preClose);
         var cls = pct > 0 ? 'positive' : pct < 0 ? 'negative' : 'neutral';
-        var sourceLabel = data.source === 'tdxrs'
-            ? '来源 tdxrs'
-            : (data.fallbackReason ? '来源 东方财富备用' : '来源 ' + (data.sourceLabel || '东方财富'));
         var extremesHtml = stats.high && stats.low
             ? '<div class="stock-minute-extremes">' +
                 '<span>高 ' + utils.escapeHtml(stats.high.time) + ' ' + utils.escapeHtml(formatPercentValue(stats.high.pct)) + '</span>' +
@@ -1101,7 +1103,6 @@
         return '<div class="stock-minute-card ' + cls + '">' +
             '<div class="stock-minute-top">' +
                 '<div class="stock-fund-section-title">分时</div>' +
-                '<div class="stock-minute-source">' + utils.escapeHtml(sourceLabel) + '</div>' +
             '</div>' +
             '<div class="stock-minute-summary">' +
                 '<div class="stock-minute-price ' + cls + '">' + utils.escapeHtml(formatPriceValue(latest.price)) + '</div>' +
@@ -1115,6 +1116,146 @@
                 '<span>' + utils.escapeHtml(latest.time) + '</span>' +
             '</div>' +
             extremesHtml +
+        '</div>';
+    }
+
+    function formatPlainPercentValue(value, digits) {
+        var number = readFiniteNumber(value);
+        if (number === null) return '--';
+        return number.toFixed(digits === undefined ? 1 : digits) + '%';
+    }
+
+    function formatPlainNumberValue(value, digits, suffix) {
+        var number = readFiniteNumber(value);
+        if (number === null) return '--';
+        return number.toFixed(digits === undefined ? 2 : digits) + (suffix || '');
+    }
+
+    function trendClass(value) {
+        var number = readFiniteNumber(value);
+        return number > 0 ? 'positive' : (number < 0 ? 'negative' : 'neutral');
+    }
+
+    function compareClass(value, base) {
+        var number = readFiniteNumber(value);
+        var baseNumber = readFiniteNumber(base);
+        if (number === null || baseNumber === null) return 'neutral';
+        return number >= baseNumber ? 'positive' : 'negative';
+    }
+
+    function rangeClass(value, high, low) {
+        var number = readFiniteNumber(value);
+        if (number === null) return 'neutral';
+        if (number >= high) return 'positive';
+        if (number < low) return 'negative';
+        return 'neutral';
+    }
+
+    function renderStockMetricCell(label, value, cls) {
+        return '<div class="stock-analysis-cell">' +
+            '<span>' + utils.escapeHtml(label) + '</span>' +
+            '<strong class="' + (cls || 'neutral') + '">' + utils.escapeHtml(value) + '</strong>' +
+        '</div>';
+    }
+
+    function renderStockAnalysisSection(data, error) {
+        if (error) {
+            return '<div class="stock-analysis-section">' +
+                '<div class="stock-analysis-head">' +
+                    '<div class="stock-fund-section-title">技术面</div>' +
+                '</div>' +
+                '<div class="list-empty">技术面加载失败: ' + utils.escapeHtml(error.message || '数据异常') + '</div>' +
+            '</div>';
+        }
+        var analysis = data && data.analysis ? data.analysis : null;
+        if (!analysis) {
+            return '<div class="stock-analysis-section">' +
+                '<div class="stock-analysis-head">' +
+                    '<div class="stock-fund-section-title">技术面</div>' +
+                '</div>' +
+                '<div class="list-empty">暂无技术面数据</div>' +
+            '</div>';
+        }
+        var indicators = analysis.indicators || {};
+        var chips = data.chips || null;
+        var score = readFiniteNumber(analysis.score);
+        var scoreCls = trendClass(score);
+        var scoreText = score === null ? '--' : (score > 0 ? '+' : '') + String(score);
+        var sourceText = [data.sourceLabel || '', data.latestDate || analysis.latestDate || ''].filter(Boolean).join(' · ');
+        var metrics = [
+            renderStockMetricCell('收盘', formatPriceValue(indicators.close), trendClass(indicators.momentum21)),
+            renderStockMetricCell('MA20', formatPriceValue(indicators.ma20), compareClass(indicators.close, indicators.ma20)),
+            renderStockMetricCell('MA50', formatPriceValue(indicators.ma50), compareClass(indicators.ma20, indicators.ma50)),
+            renderStockMetricCell('RSI14', formatPlainNumberValue(indicators.rsi14, 1), rangeClass(indicators.rsi14, 55, 45)),
+            renderStockMetricCell('52周位置', formatPlainPercentValue(indicators.position52w, 1), indicators.position52w === null || indicators.position52w === undefined ? 'neutral' : trendClass(indicators.position52w - 50)),
+            renderStockMetricCell('21日', formatPercentValue(indicators.momentum21), trendClass(indicators.momentum21)),
+        ].join('');
+        var chipMetrics = chips ? [
+            renderStockMetricCell('获利盘', formatPlainPercentValue(chips.profitRatio, 1), chips.profitRatio === null || chips.profitRatio === undefined ? 'neutral' : trendClass(chips.profitRatio - 50)),
+            renderStockMetricCell('平均成本', formatPriceValue(chips.avgCost), compareClass(indicators.close, chips.avgCost)),
+            renderStockMetricCell('支撑', formatPriceValue(chips.support), 'neutral'),
+            renderStockMetricCell('压力', formatPriceValue(chips.resistance), 'neutral'),
+        ].join('') : '';
+
+        return '<div class="stock-analysis-section ' + scoreCls + '">' +
+            '<div class="stock-analysis-head">' +
+                '<div>' +
+                    '<div class="stock-fund-section-title">技术面</div>' +
+                    '<div class="stock-analysis-source">' + utils.escapeHtml(sourceText || '日 K') + '</div>' +
+                '</div>' +
+                '<div class="stock-analysis-score ' + scoreCls + '">' +
+                    '<span>' + utils.escapeHtml(scoreText) + '</span>' +
+                    '<strong>' + utils.escapeHtml(analysis.verdict || '中性') + '</strong>' +
+                '</div>' +
+            '</div>' +
+            '<div class="stock-analysis-grid">' + metrics + '</div>' +
+            renderStockSignalList(analysis.signals) +
+            (chipMetrics ? '<div class="stock-analysis-grid stock-chip-metrics">' + chipMetrics + '</div>' : '') +
+            renderStockChipBlock(chips) +
+        '</div>';
+    }
+
+    function renderStockSignalList(signals) {
+        if (!Array.isArray(signals) || !signals.length) return '';
+        return '<div class="stock-signal-list">' + signals.map(function (signal) {
+            var type = signal.type === 'positive' || signal.type === 'negative' ? signal.type : 'neutral';
+            var weight = readFiniteNumber(signal.weight);
+            var weightText = weight === null ? '' : (weight > 0 ? '+' : '') + String(weight);
+            return '<div class="stock-signal-row ' + type + '">' +
+                '<span>' + utils.escapeHtml(signal.title || '--') + '</span>' +
+                '<em>' + utils.escapeHtml(signal.detail || '') + '</em>' +
+                '<b>' + utils.escapeHtml(weightText) + '</b>' +
+            '</div>';
+        }).join('') + '</div>';
+    }
+
+    function renderStockChipBlock(chips) {
+        var levels = chips && Array.isArray(chips.levels) ? chips.levels : [];
+        if (!levels.length) return '';
+        var first = levels[0];
+        var last = levels[levels.length - 1];
+        var bars = levels.map(function (level) {
+            var height = readFiniteNumber(level.height);
+            height = height === null ? 0 : Math.max(4, Math.min(100, height));
+            var cls = level.inProfit ? 'positive' : 'negative';
+            return '<span class="stock-chip-bar ' + cls + '" style="height:' + height.toFixed(1) + '%">' +
+                '<title>' + utils.escapeHtml(formatPriceValue(level.price) + ' · ' + formatPlainPercentValue(level.weightPct, 2)) + '</title>' +
+            '</span>';
+        }).join('');
+        var concentration = chips.concentration90
+            ? '90%筹码 ' + formatPriceValue(chips.concentration90.low) + '-' + formatPriceValue(chips.concentration90.high)
+            : '';
+        return '<div class="stock-chip-block">' +
+            '<div class="stock-chip-title">' +
+                '<span>筹码估算</span>' +
+                '<em>' + utils.escapeHtml(concentration) + '</em>' +
+            '</div>' +
+            '<div class="stock-chip-chart" aria-label="筹码分布估算">' + bars + '</div>' +
+            '<div class="stock-chip-axis">' +
+                '<span>' + utils.escapeHtml(formatPriceValue(first.price)) + '</span>' +
+                '<span>' + utils.escapeHtml(chips.windowDays ? '近' + chips.windowDays + '日' : '') + '</span>' +
+                '<span>' + utils.escapeHtml(formatPriceValue(last.price)) + '</span>' +
+            '</div>' +
         '</div>';
     }
 
@@ -1188,9 +1329,6 @@
                 return padY + (maxAbsPct - pct) / (maxAbsPct * 2) * (height - padY * 2);
             };
         }
-        function clamp(value, minValue, maxValue) {
-            return Math.max(minValue, Math.min(maxValue, value));
-        }
         var xScale = function (index) {
             return padX + (valid.length <= 1 ? 0 : index / (valid.length - 1) * (width - padX - padRight));
         };
@@ -1219,13 +1357,7 @@
         var latest = valid[valid.length - 1];
         var latestX = xScale(valid.length - 1);
         var latestY = yScale(latest.price);
-        var latestLabelX = latestX > width * 0.68 ? latestX - 6 : latestX + 6;
-        var latestAnchor = latestX > width * 0.68 ? 'end' : 'start';
-        var latestLabelY = clamp(latestY - 8, padY + 8, height - padY - 4);
-        var latestLabel = '<circle class="stock-minute-current-dot" cx="' + latestX.toFixed(2) + '" cy="' + latestY.toFixed(2) + '" r="2.8"></circle>' +
-            '<text class="stock-minute-current-label" x="' + latestLabelX.toFixed(2) + '" y="' + latestLabelY.toFixed(2) + '" text-anchor="' + latestAnchor + '">' +
-                utils.escapeHtml(latest.time + ' ' + formatPercentValue(latest.pct)) +
-            '</text>';
+        var latestLabel = '<circle class="stock-minute-current-dot" cx="' + latestX.toFixed(2) + '" cy="' + latestY.toFixed(2) + '" r="2.8"></circle>';
         return '<svg class="stock-minute-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="分时价格走势">' +
             '<line class="stock-minute-grid-line" x1="' + padX + '" y1="' + padY + '" x2="' + (width - padRight) + '" y2="' + padY + '"></line>' +
             '<line class="stock-minute-grid-line" x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padRight) + '" y2="' + (height - padY) + '"></line>' +
@@ -1419,10 +1551,11 @@
             ? marketMod.trendArrow(priceValue, typeof prev === 'number' ? prev : null)
             : '─';
         var arrowHtml = arrow ? ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span>' : '';
+        var changeTitle = changeStr + ' / ' + pctStr;
         return '<div class="index-item custom-index-data" data-code="' + utils.escapeHtml(code) + '">' +
             '<div class="index-name">' + utils.escapeHtml(name) + '</div>' +
             '<div class="index-value ' + cls + '">' + utils.escapeHtml(price) + arrowHtml + '</div>' +
-            '<div class="index-change ' + cls + '">' + utils.escapeHtml(changeStr) + ' / ' + utils.escapeHtml(pctStr) + '</div>' +
+            '<div class="index-change ' + cls + '" title="' + utils.escapeHtml(changeTitle) + '">' + utils.escapeHtml(pctStr) + '</div>' +
             '<button type="button" class="custom-index-remove" data-remove-custom-index="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button>' +
             '</div>';
     }
