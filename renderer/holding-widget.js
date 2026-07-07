@@ -1,5 +1,5 @@
 (function () {
-  var SWITCH_MS = 3000
+  var SWITCH_MS = 5000
   var WATCH_TABS_KEY = 'fund_tracker_watchlist_tabs'
   var LEGACY_WATCHLIST_KEY = 'fund_tracker_watchlist'
   var QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache'
