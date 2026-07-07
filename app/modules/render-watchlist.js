@@ -567,17 +567,18 @@
     function removeStockFromWatchlist(code) {
         var list = getWatchlist().filter(function (c) { return c !== code; });
         saveActiveWatchlist(list);
-        if (state.watchQuoteCache[code]) {
+        var stillReferenced = getAllWatchCodes().includes(code);
+        if (!stillReferenced && state.watchQuoteCache[code]) {
             delete state.watchQuoteCache[code];
             persistWatchQuoteCache();
         }
-        if (watchSparkCache[code]) delete watchSparkCache[code];
-        if (watchSparkPending[code]) delete watchSparkPending[code];
-        if (state.watchAlertState[code]) {
+        if (!stillReferenced && watchSparkCache[code]) delete watchSparkCache[code];
+        if (!stillReferenced && watchSparkPending[code]) delete watchSparkPending[code];
+        if (!stillReferenced && state.watchAlertState[code]) {
             delete state.watchAlertState[code];
             if (window.AppAlerts) window.AppAlerts.saveWatchAlertState();
         }
-        if (state.watchlistRemarks && state.watchlistRemarks[code] && !getAllWatchCodes().includes(code)) {
+        if (!stillReferenced && state.watchlistRemarks && state.watchlistRemarks[code]) {
             delete state.watchlistRemarks[code];
             saveWatchlistRemarks();
         }
@@ -916,9 +917,15 @@
         var recent = item.recent || [];
         var last = recent.length ? recent[recent.length - 1] : null;
         var prev = recent.length > 1 ? recent[recent.length - 2] : null;
+        var latestFlow = item.summary && item.summary.today ? item.summary.today : (last ? {
+            main: last.mainNet,
+            large: last.largeNet,
+            medium: last.midNet,
+            small: last.smallNet,
+        } : null);
         return {
             item: item,
-            today: item.summary && item.summary.today,
+            latestFlow: latestFlow,
             last: last,
             prevMain: prev ? prev.mainNet : null,
             lastDate: last ? last.date : (item.latestDate || ''),
@@ -938,14 +945,12 @@
         var overlay = document.getElementById('stock-fund-overlay');
         var body = document.getElementById('stock-fund-body');
         var title = document.getElementById('stock-fund-title');
-        var timeEl = document.getElementById('stock-fund-time');
         if (!panel || !overlay || !body || !title) return;
         if (overlay.hidden) overlay.hidden = false;
         if (panel.hidden) panel.hidden = false;
         var cachedQuote = state.watchQuoteCache[code];
         title.textContent = getDisplayStockName(code, cachedQuote && cachedQuote.name) + ' (' + code + ')';
         body.innerHTML = '<div class="list-empty">加载中...</div>';
-        if (timeEl) timeEl.textContent = '';
 
         var results = await Promise.allSettled([
             loadStockMinuteData(code),
@@ -966,7 +971,6 @@
         } else if (klineData && klineData.name) {
             title.textContent = getDisplayStockName(code, klineData.name || code) + ' (' + code + ')';
         }
-        if (timeEl) timeEl.textContent = '';
         body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError);
         body.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
@@ -978,7 +982,10 @@
         html += renderStockMinuteSection(minuteData, minuteError);
         html += renderStockAnalysisSection(klineData, klineError);
         if (fundData && fundData.item) {
-            html += renderStockFundFlowBody(fundData.item, fundData.today, fundData.last, fundData.prevMain, { includeEditor: false });
+            html += renderStockFundFlowBody(fundData.item, fundData.latestFlow, fundData.last, fundData.prevMain, {
+                includeEditor: false,
+                date: fundData.lastDate,
+            });
         } else {
             html += '<div class="stock-fund-summary">' +
                 '<div class="stock-fund-section-title">资金流</div>' +
@@ -1370,9 +1377,9 @@
         '</svg>';
     }
 
-    function renderStockFundFlowBody(item, today, last, prevMain, options) {
+    function renderStockFundFlowBody(item, latestFlow, last, prevMain, options) {
         var includeEditor = !(options && options.includeEditor === false);
-        if (!today || !last) return (includeEditor ? renderStockCostEditor(item.code) : '') + '<div class="list-empty">暂无当日资金流数据</div>';
+        if (!latestFlow || !last) return (includeEditor ? renderStockCostEditor(item.code) : '') + '<div class="list-empty">暂无资金流数据</div>';
 
         // 注: 不显示涨跌幅 — 弹窗用的是 daykline 接口最近交易日的 pct,与列表实时报价对不上
 
@@ -1409,16 +1416,17 @@
         ];
         var max = 1;
         items.forEach(function (it) {
-            var a = Math.abs(today[it.key] || 0);
+            var a = Math.abs(latestFlow[it.key] || 0);
             if (a > max) max = a;
         });
-        var mainNet = today.main || 0;
+        var mainNet = latestFlow.main || 0;
         var prevMainText = prevMain === null || prevMain === undefined
             ? ''
             : ' (昨 ' + utils.formatYuan(prevMain) + ')';
+        var flowDateText = options && options.date ? ' · ' + options.date : '';
         var summary = item.summary || {};
         var rows = items.map(function (it) {
-            var v = today[it.key] || 0;
+            var v = latestFlow[it.key] || 0;
             var w = (Math.abs(v) / max * 100).toFixed(1);
             var valueClass = cls(v);
             return '<div class="watchlist-fund-row">' +
@@ -1444,7 +1452,7 @@
 
         return (includeEditor ? renderStockCostEditor(item.code) : '') +
             '<div class="stock-fund-header">' +
-            '<div class="stock-fund-main">主力合计 ' + utils.escapeHtml(utils.formatYuan(mainNet)) + utils.escapeHtml(prevMainText) + '</div>' +
+            '<div class="stock-fund-main">主力合计' + utils.escapeHtml(flowDateText) + ' ' + utils.escapeHtml(utils.formatYuan(mainNet)) + utils.escapeHtml(prevMainText) + '</div>' +
             '</div>' +
             '<div class="watchlist-fund-flow">' + rows + '</div>' +
             '<div class="stock-fund-summary">' +

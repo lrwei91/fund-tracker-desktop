@@ -1041,15 +1041,8 @@ body {
     font-size: 13px;
     font-weight: 700;
     color: var(--text-primary);
-    flex: 0 0 auto;
-}
-.modal-header-time {
-    flex: 1;
-    font-size: 10px;
-    color: var(--text-tertiary);
-    font-family: var(--mono);
-    text-align: right;
-    margin-right: 4px;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 .modal-close {
     background: transparent;
@@ -1654,13 +1647,6 @@ body {
 .sector-list .list-empty { border-bottom: none; }
 
 /* ---------- 板块排行 — Diverging Bar Chart ---------- */
-.sector-header-time {
-    font-size: 10px;
-    color: var(--text-tertiary);
-    margin-left: auto;
-    margin-right: 6px;
-    font-family: var(--mono);
-}
 .sector-chart {
     display: flex;
     flex-direction: column;
@@ -1839,13 +1825,6 @@ body {
 .dragon-tiger-net.negative { color: var(--green); }
 
 /* ---------- 异动提醒 (打板层 4 池) ---------- */
-.limit-up-header-time {
-    font-size: 10px;
-    color: var(--text-tertiary);
-    margin-left: auto;
-    margin-right: 6px;
-    font-family: var(--mono);
-}
 .limit-up-summary {
     margin-bottom: 8px;
 }

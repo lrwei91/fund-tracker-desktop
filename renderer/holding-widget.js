@@ -1,5 +1,5 @@
 (function () {
-  var ROTATE_MS = 5000
+  var SWITCH_MS = 3000
   var WATCH_TABS_KEY = 'fund_tracker_watchlist_tabs'
   var LEGACY_WATCHLIST_KEY = 'fund_tracker_watchlist'
   var QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache'
@@ -13,6 +13,7 @@
   var index = 0
   var currentCode = null
   var timer = null
+  var animationTimer = null
   var clownMode = localStorage.getItem(CLOWN_MODE_KEY) === 'true'
 
   function readJson(key, fallback) {
@@ -146,8 +147,47 @@
     shell.style.setProperty('--holding-opacity', String(settings.opacity / 100))
   }
 
+  function stopQuoteAnimation() {
+    if (animationTimer) {
+      clearTimeout(animationTimer)
+      animationTimer = null
+    }
+    slot.classList.remove('quote-switching')
+  }
+
+  function restartQuoteAnimation() {
+    stopQuoteAnimation()
+    void slot.offsetWidth
+    slot.classList.add('quote-switching')
+    animationTimer = setTimeout(stopQuoteAnimation, 240)
+  }
+
+  function clearSwitchTimer() {
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
+
+  function scheduleNextSwitch() {
+    clearSwitchTimer()
+    timer = setTimeout(function () {
+      timer = null
+      syncSwitchTimer(render({ advance: true }), true)
+    }, SWITCH_MS)
+  }
+
+  function syncSwitchTimer(result, restart) {
+    if (!result || result.codesLength <= 1) {
+      clearSwitchTimer()
+      return
+    }
+    if (restart || !timer) scheduleNextSwitch()
+  }
+
   function render(options) {
     options = options || {}
+    var advance = Boolean(options.advance)
     var stayOnCurrent = Boolean(options.stayOnCurrent)
     var reset = Boolean(options.reset)
     applySettings()
@@ -157,10 +197,12 @@
     var remarks = readJson(REMARKS_KEY, {})
 
     if (!codes.length) {
+      var hadCode = currentCode !== null
+      stopQuoteAnimation()
       slot.innerHTML = '<div class="quote-empty">暂无持仓股</div>'
       index = 0
       currentCode = null
-      return
+      return { codesLength: 0, switched: hadCode }
     }
 
     if (reset) {
@@ -168,15 +210,18 @@
       currentCode = null
     }
     if (index >= codes.length) index = 0
-    var code = stayOnCurrent && currentCode && codes.indexOf(currentCode) !== -1
+    var previousCode = currentCode
+    var code = (stayOnCurrent || !advance) && currentCode && codes.indexOf(currentCode) !== -1
       ? currentCode
       : codes[index]
+    var shouldAnimate = previousCode !== null && previousCode !== code
     currentCode = code
     var quote = cache && cache[code] ? cache[code] : null
     var displayQuote = getDisplayQuote(code, quote, remarks)
     var pct = displayQuote.pct
     var cls = quoteClass(pct)
 
+    if (!shouldAnimate) stopQuoteAnimation()
     slot.innerHTML = [
       '<div class="quote-main">',
       '<div class="quote-name">', escapeHtml(displayQuote.name), '</div>',
@@ -185,20 +230,15 @@
       '<div class="quote-price ', cls, '">', escapeHtml(displayQuote.price), '</div>',
       '<div class="quote-change ', cls, '">', escapeHtml(formatPct(pct)), '</div>',
     ].join('')
+    if (shouldAnimate) restartQuoteAnimation()
 
     var shownIndex = codes.indexOf(code)
     if (shownIndex === -1) shownIndex = 0
     index = (shownIndex + 1) % codes.length
-  }
-
-  function schedule() {
-    if (timer) clearInterval(timer)
-    timer = setInterval(render, ROTATE_MS)
-  }
-
-  function renderAndRestart(options) {
-    render(options)
-    schedule()
+    return {
+      codesLength: codes.length,
+      switched: previousCode !== code,
+    }
   }
 
   function bindControls() {
@@ -206,7 +246,7 @@
       clownModeBtn.addEventListener('click', function () {
         clownMode = !clownMode
         try { localStorage.setItem(CLOWN_MODE_KEY, clownMode ? 'true' : 'false') } catch (e) {}
-        renderAndRestart({ stayOnCurrent: true })
+        syncSwitchTimer(render({ stayOnCurrent: true }), false)
       })
     }
     document.getElementById('minimize-btn').addEventListener('click', function () {
@@ -223,27 +263,29 @@
   function renderAfterStorageChange(event) {
     if (!event || event.key === WATCH_TABS_KEY || event.key === LEGACY_WATCHLIST_KEY) {
       var codes = getHoldingCodes()
-      render({
+      var result = render({
         reset: !currentCode || codes.indexOf(currentCode) === -1,
         stayOnCurrent: !!currentCode && codes.indexOf(currentCode) !== -1,
       })
-      schedule()
+      syncSwitchTimer(result, result && result.switched)
       return
     }
 
     if ([QUOTE_CACHE_KEY, REMARKS_KEY, SETTINGS_KEY, CLOWN_MODE_KEY].indexOf(event.key) !== -1) {
       if (event.key === CLOWN_MODE_KEY) clownMode = localStorage.getItem(CLOWN_MODE_KEY) === 'true'
-      renderAndRestart({ stayOnCurrent: true })
+      var refreshResult = render({ stayOnCurrent: true })
+      syncSwitchTimer(refreshResult, refreshResult && refreshResult.switched)
     }
   }
 
   window.addEventListener('storage', renderAfterStorageChange)
   bindControls()
-  renderAndRestart({ reset: true })
+  syncSwitchTimer(render({ reset: true }), true)
 
   if (window.shell && window.shell.onHoldingWidgetRefresh) {
     window.shell.onHoldingWidgetRefresh(function () {
-      renderAndRestart({ reset: true })
+      var result = render({ stayOnCurrent: true })
+      syncSwitchTimer(result, result && result.switched)
     })
   }
 })()

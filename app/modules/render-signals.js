@@ -11,6 +11,27 @@
     var cache = window.AppCache;
     var KEYS = state.KEYS;
 
+    function toFiniteNumber(value) {
+        if (value === null || value === undefined || value === '') return null;
+        var number = Number(value);
+        return Number.isFinite(number) ? number : null;
+    }
+
+    function formatSignedPercent(value) {
+        var number = toFiniteNumber(value);
+        if (number === null) return '--';
+        return (number > 0 ? '+' : '') + number.toFixed(2) + '%';
+    }
+
+    function trendClass(value) {
+        var number = toFiniteNumber(value);
+        return number > 0 ? 'positive' : number < 0 ? 'negative' : 'neutral';
+    }
+
+    function shouldBypassDailySignalCache(force) {
+        return !!force || (utils.isAfterCloseForDailyUpdate && utils.isAfterCloseForDailyUpdate());
+    }
+
     // ============================================================
     // 市场热度 (同花顺热榜 + 东财人气榜)
     // ============================================================
@@ -62,27 +83,30 @@
             timeEl.textContent = '更新 ' + utils.formatShanghaiTime(new Date().toISOString());
         }
         listEl.innerHTML = items.slice(0, 20).map(function (it) {
-            var pctStr = (it.pct > 0 ? '+' : '') + it.pct.toFixed(2) + '%';
-            var pctCls = it.pct > 0 ? 'positive' : it.pct < 0 ? 'negative' : 'neutral';
-            var chgArrow = it.rankChg > 0 ? '↑' + it.rankChg : it.rankChg < 0 ? '↓' + (-it.rankChg) : '-';
-            var chgCls = it.rankChg > 0 ? 'positive' : it.rankChg < 0 ? 'negative' : 'neutral';
+            it = it || {};
+            var pctStr = formatSignedPercent(it.pct);
+            var pctCls = trendClass(it.pct);
+            var rankChg = toFiniteNumber(it.rankChg);
+            var chgArrow = rankChg > 0 ? '↑' + rankChg : rankChg < 0 ? '↓' + Math.abs(rankChg) : '-';
+            var chgCls = trendClass(rankChg);
             if (source === 'ths') {
-                var concepts = (it.concepts || []).slice(0, 2)
+                var concepts = (Array.isArray(it.concepts) ? it.concepts : []).slice(0, 2)
                     .map(function (c) { return '<span class="hot-rank-concept">' + utils.escapeHtml(c) + '</span>'; }).join('');
                 var tag = it.tag ? '<span class="hot-rank-tag">' + utils.escapeHtml(it.tag) + '</span>' : '';
                 return '<li class="hot-rank-item">' +
-                    '<span class="hot-rank-rank">' + it.rank + '</span>' +
-                    '<span class="hot-rank-stock"><span class="hot-rank-name">' + utils.escapeHtml(it.name) + '</span><span class="hot-rank-code">' + utils.escapeHtml(it.code) + '</span></span>' +
+                    '<span class="hot-rank-rank">' + utils.escapeHtml(it.rank || '--') + '</span>' +
+                    '<span class="hot-rank-stock"><span class="hot-rank-name">' + utils.escapeHtml(it.name || it.code || '--') + '</span><span class="hot-rank-code">' + utils.escapeHtml(it.code || '') + '</span></span>' +
                     '<span class="hot-rank-pct ' + pctCls + '">' + pctStr + '</span>' +
-                    '<span class="hot-rank-heat">人气 ' + it.heat + '</span>' +
+                    '<span class="hot-rank-heat">人气 ' + utils.escapeHtml(it.heat || '--') + '</span>' +
                     '<span class="hot-rank-chg ' + chgCls + '">' + chgArrow + '</span>' +
                     '<span class="hot-rank-concepts">' + concepts + tag + '</span>' +
                 '</li>';
             } else {
-                var priceStr = (it.price !== null && it.price !== undefined) ? Number(it.price).toFixed(2) : '--';
+                var price = toFiniteNumber(it.price);
+                var priceStr = price === null ? '--' : price.toFixed(2);
                 return '<li class="hot-rank-item">' +
-                    '<span class="hot-rank-rank">' + it.rank + '</span>' +
-                    '<span class="hot-rank-stock"><span class="hot-rank-name">' + utils.escapeHtml(it.name) + '</span><span class="hot-rank-code">' + utils.escapeHtml(it.code) + '</span></span>' +
+                    '<span class="hot-rank-rank">' + utils.escapeHtml(it.rank || '--') + '</span>' +
+                    '<span class="hot-rank-stock"><span class="hot-rank-name">' + utils.escapeHtml(it.name || it.code || '--') + '</span><span class="hot-rank-code">' + utils.escapeHtml(it.code || '') + '</span></span>' +
                     '<span class="hot-rank-price">' + priceStr + '</span>' +
                     '<span class="hot-rank-pct ' + pctCls + '">' + pctStr + '</span>' +
                     '<span class="hot-rank-chg ' + chgCls + '">' + chgArrow + '</span>' +
@@ -139,6 +163,7 @@
         if (!container) return;
         var todayKey = utils.getShanghaiDateKey();
         var cached = cache.readDailyDataCache(DRAGON_TIGER_CACHE_KEY);
+        var bypassCache = shouldBypassDailySignalCache(force);
 
         function renderDragonTiger(data) {
             if (!data || !data.stocks || data.stocks.length === 0) {
@@ -163,12 +188,12 @@
             if (html) container.innerHTML = html;
         }
 
-        if (!force && cached && cached.date === todayKey && cached.data) {
+        if (!bypassCache && cached && cached.date === todayKey && cached.data) {
             renderDragonTiger(cached.data);
             return;
         }
 
-        if (!force && !utils.isAfterCloseForDailyUpdate()) {
+        if (!bypassCache && !utils.isAfterCloseForDailyUpdate()) {
             if (cached && cached.data) {
                 renderDragonTiger(cached.data);
                 return;
@@ -293,9 +318,10 @@
 
         // 1) summary 永远先拉 (顶部卡片) — 日级持久 (跟龙虎榜/资金流卡片一致)
         var todayKey = utils.getShanghaiDateKey();
+        var bypassCache = shouldBypassDailySignalCache(force);
         var sumKey = KEYS.SHORT_CACHE_KEYS.limitUpSummary;
         var sumCached = cache.readDailyDataCache(sumKey);
-        if (!force && sumCached && sumCached.date === todayKey && sumCached.data) {
+        if (!bypassCache && sumCached && sumCached.date === todayKey && sumCached.data) {
             renderSummary(sumCached.data);
         } else {
             try {
@@ -321,7 +347,7 @@
             yzt: KEYS.SHORT_CACHE_KEYS.limitUpYzt,
         })[activeType];
         var typeCached = cache.readDailyDataCache(typeCacheKey);
-        if (!force && typeCached && typeCached.date === todayKey && typeCached.data) {
+        if (!bypassCache && typeCached && typeCached.date === todayKey && typeCached.data) {
             renderItems(activeType, typeCached.data);
         } else {
             list.innerHTML = '<div class="limit-up-empty">加载中...</div>';

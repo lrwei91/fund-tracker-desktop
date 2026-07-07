@@ -466,8 +466,8 @@
             // 收盘后窗口(16:00 起)触发日级数据刷新
             if (!utils.isAfterCloseDailyWindow()) return;
             if (window.AppSignals) {
-                window.AppSignals.loadDragonTigerData();
-                window.AppSignals.loadLimitUpData();
+                window.AppSignals.loadDragonTigerData(true);
+                window.AppSignals.loadLimitUpData(true);
             }
         }, 30 * 60 * 1000);
     }
@@ -499,8 +499,9 @@
 
     function loadAfterCloseDailyData() {
         if (window.AppSignals) {
-            window.AppSignals.loadDragonTigerData();
-            window.AppSignals.loadLimitUpData();
+            var force = utils.isAfterCloseDailyWindow();
+            window.AppSignals.loadDragonTigerData(force);
+            window.AppSignals.loadLimitUpData(force);
         }
     }
 
