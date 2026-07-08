@@ -135,6 +135,7 @@
         // Load tab-specific data when switching panels.
         if (tab === 'signals') {
             if (window.AppSignals) {
+                window.AppSignals.loadOpportunityRadarData();
                 window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource());
                 if (!isBootstrapping) {
                     window.AppSignals.loadDragonTigerData();
@@ -432,6 +433,9 @@
         stopSignalAutoRefresh();
         state.refreshIntervalSignal = setInterval(function () {
             if (!utils.isIntradayRefreshWindow()) return;
+            if (state.currentTab === 'signals' && window.AppSignals) {
+                window.AppSignals.loadOpportunityRadarData();
+            }
             if (window.AppMarket) {
                 window.AppMarket.loadCapitalData();
                 window.AppMarket.loadSectorData();
@@ -579,6 +583,7 @@
         if (window.AppSignals) {
             if (!options.skipDragonTiger) window.AppSignals.loadDragonTigerData(true);
             if (!options.skipLimitUp) window.AppSignals.loadLimitUpData(true);
+            if (!options.skipOpportunityRadar && state.currentTab === 'signals') window.AppSignals.loadOpportunityRadarData(true);
             window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), true);
         }
         if (state.currentTab === 'news' && window.AppNews) window.AppNews.loadNewsData();
@@ -614,6 +619,7 @@
         manualRefreshAll('启动刷新', {
             skipDragonTiger: true,
             skipLimitUp: true,
+            skipOpportunityRadar: true,
         });
         state.hasInitialDataLoaded = true;
         isBootstrapping = false;

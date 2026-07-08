@@ -132,7 +132,7 @@ function mapYzt(p) {
 
 const POOL_MAPPER = { zt: mapZt, zb: mapZb, dt: mapDt, yzt: mapYzt };
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     try {
         const type = String(req.query.type || 'zt').toLowerCase();
         const date = req.query.date || null;
@@ -179,4 +179,15 @@ module.exports = async function handler(req, res) {
     } catch (error) {
         return fail(res, 502, '真实打板接口不可用', { error: error.message });
     }
-};
+}
+
+// 纯函数导出（供单测使用，不影响 handler 行为）
+module.exports = handler;
+module.exports.fmtZtTime = fmtZtTime;
+module.exports.todayStr = todayStr;
+module.exports.fetchPool = fetchPool;
+module.exports.mapZt = mapZt;
+module.exports.mapZb = mapZb;
+module.exports.mapDt = mapDt;
+module.exports.mapYzt = mapYzt;
+module.exports.POOL_MAPPER = POOL_MAPPER;

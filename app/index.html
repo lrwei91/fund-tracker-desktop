@@ -254,7 +254,21 @@
     <!-- ==================== 市场信号 Tab ==================== -->
     <div class="tab-panel" id="tab-signals">
 
-        <!-- 1. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
+        <!-- 1. 机会雷达 -->
+        <section class="card opportunity-radar-section" data-collapsible="true">
+            <div class="card-header" role="button" tabindex="0">
+                <h2>机会雷达</h2>
+                <span class="opportunity-radar-header-time" id="opportunity-radar-update-time"></span>
+                <span class="collapse-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="opportunity-radar-list" id="opportunity-radar-list">
+                    <div class="opportunity-radar-empty">加载中...</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
         <section class="card hot-rank-section" data-collapsible="true" data-collapsed="true">
             <div class="card-header" role="button" tabindex="0">
                 <h2>市场热度</h2>
@@ -279,7 +293,7 @@
             </div>
         </section>
 
-        <!-- 2. 龙虎榜 -->
+        <!-- 3. 龙虎榜 -->
         <section class="card dragon-tiger-section" data-collapsible="true" data-collapsed="true">
             <div class="card-header" role="button" tabindex="0">
                 <h2>龙虎榜</h2>
@@ -293,7 +307,7 @@
             </div>
         </section>
 
-        <!-- 3. 异动提醒 (打板层 4 池 + 情绪摘要) -->
+        <!-- 4. 异动提醒 (打板层 4 池 + 情绪摘要) -->
         <section class="card limit-up-section" data-collapsible="true" data-collapsed="true">
             <div class="card-header" role="button" tabindex="0">
                 <h2>异动提醒</h2>
@@ -455,7 +469,7 @@
     </div>
 </div>
 
-<!-- Modules 加载顺序:utils → state → cache → render-* (共享 window 全局,顺序互不依赖) → app.js 入口 -->
+<!-- Modules 加载顺序:utils → state → cache → render-* / watchlist 子模块 → app.js 入口 -->
 <script src="modules/storage.js"></script>
 <script src="modules/utils.js"></script>
 <script src="modules/state.js"></script>
@@ -463,7 +477,15 @@
 <script src="modules/render-alerts.js"></script>
 <script src="modules/render-market.js"></script>
 <script src="modules/render-signals.js"></script>
-<script src="modules/render-watchlist.js"></script>
+<script src="modules/watchlist/_shared.js"></script>
+<script src="modules/watchlist/watch-state.js"></script>
+<script src="modules/watchlist/watch-tabs-ui.js"></script>
+<script src="modules/watchlist/watch-io.js"></script>
+<script src="modules/watchlist/watch-render.js"></script>
+<script src="modules/watchlist/stock-detail.js"></script>
+<script src="modules/watchlist/stock-fundflow.js"></script>
+<script src="modules/watchlist/custom-index.js"></script>
+<script src="modules/watchlist/watchlist.js"></script>
 <script src="modules/render-news.js"></script>
 <script src="app.js"></script>
 </body>

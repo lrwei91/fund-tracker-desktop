@@ -28,8 +28,135 @@
         return number > 0 ? 'positive' : number < 0 ? 'negative' : 'neutral';
     }
 
+    function scoreClass(value) {
+        var number = toFiniteNumber(value);
+        if (number === null) return 'neutral';
+        return number >= 70 ? 'positive' : (number < 45 ? 'negative' : 'neutral');
+    }
+
     function shouldBypassDailySignalCache(force) {
         return !!force || (utils.isAfterCloseForDailyUpdate && utils.isAfterCloseForDailyUpdate());
+    }
+
+    // ============================================================
+    // 机会雷达
+    // ============================================================
+
+    var OPPORTUNITY_RADAR_CACHE_KEY = 'fund_tracker_opportunity_radar_cache';
+    var OPPORTUNITY_RADAR_TTL_MS = 5 * 60 * 1000;
+
+    async function loadOpportunityRadarData(force) {
+        var container = document.getElementById('opportunity-radar-list');
+        var timeEl = document.getElementById('opportunity-radar-update-time');
+        if (!container) return;
+
+        var cached = cache.readJson(OPPORTUNITY_RADAR_CACHE_KEY, null);
+        var todayKey = utils.getShanghaiDateKey();
+        if (!force && cached && cached.date === todayKey && cached.data
+            && Date.now() - (cached.updatedAt || 0) < OPPORTUNITY_RADAR_TTL_MS) {
+            renderOpportunityRadar(cached.data, false);
+            return;
+        }
+        if (!cached || !cached.data || !Array.isArray(cached.data.items)) {
+            container.innerHTML = '<div class="opportunity-radar-empty">扫描中...</div>';
+        }
+
+        try {
+            var res = await fetch(utils.apiUrl('/opportunity-radar', { limit: 8 }));
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var json = await res.json();
+            if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('数据异常');
+            cache.writeJson(OPPORTUNITY_RADAR_CACHE_KEY, {
+                date: todayKey,
+                data: json.data,
+                updatedAt: Date.now(),
+            });
+            renderOpportunityRadar(json.data, true);
+            if (timeEl) timeEl.textContent = '更新 ' + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
+        } catch (e) {
+            console.error('机会雷达获取失败:', e);
+            if (cached && cached.data && Array.isArray(cached.data.items)) {
+                renderOpportunityRadar(cached.data, false);
+                if (timeEl) timeEl.textContent = '缓存';
+                return;
+            }
+            renderOpportunityRadarError();
+            if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
+                window.AppAlerts.showStatusToast('机会雷达接口暂不可用', 'error');
+            }
+        }
+    }
+
+    function renderOpportunityRadar(data, fresh) {
+        var container = document.getElementById('opportunity-radar-list');
+        var timeEl = document.getElementById('opportunity-radar-update-time');
+        if (!container) return;
+        var items = data && Array.isArray(data.items) ? data.items : [];
+        if (timeEl && fresh) timeEl.textContent = '更新 ' + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
+        if (!items.length) {
+            container.innerHTML = '<div class="opportunity-radar-empty">暂无候选信号</div>';
+            return;
+        }
+        container.innerHTML = items.map(renderOpportunityRadarItem).join('');
+        container.querySelectorAll('[data-radar-code]').forEach(function (row) {
+            row.addEventListener('click', function () {
+                var code = row.getAttribute('data-radar-code');
+                if (code && window.AppWatchlist && typeof window.AppWatchlist.showStockFundFlow === 'function') {
+                    window.AppWatchlist.showStockFundFlow(code);
+                }
+            });
+        });
+    }
+
+    function renderOpportunityRadarItem(item) {
+        var pct = formatSignedPercent(item.pct);
+        var pctCls = trendClass(item.pct);
+        var scoreCls = scoreClass(item.score);
+        var risk = item.risk || {};
+        var riskStatus = risk.status || 'watch';
+        var components = item.components || {};
+        var tags = [item.topic].concat(item.newsHits || []).filter(Boolean).slice(0, 3)
+            .map(function (tag) { return '<span>' + utils.escapeHtml(tag) + '</span>'; }).join('');
+        var signals = (Array.isArray(item.signals) ? item.signals : []).slice(0, 3)
+            .map(function (signal) { return utils.escapeHtml(signal.label || '信号'); }).join(' · ');
+        return '<div class="opportunity-radar-item" data-radar-code="' + utils.escapeHtml(item.code || '') + '">' +
+            '<div class="opportunity-radar-head">' +
+                '<div class="opportunity-radar-stock">' +
+                    '<span class="opportunity-radar-name">' + utils.escapeHtml(item.name || item.code || '--') + '</span>' +
+                    '<span class="opportunity-radar-code">' + utils.escapeHtml(item.code || '') + '</span>' +
+                '</div>' +
+                '<div class="opportunity-radar-score ' + scoreCls + '">' +
+                    '<strong>' + utils.escapeHtml(item.score == null ? '--' : String(item.score)) + '</strong>' +
+                    '<span>综合分</span>' +
+                '</div>' +
+                '<div class="opportunity-radar-pct ' + pctCls + '">' + utils.escapeHtml(pct) + '</div>' +
+                '<div class="opportunity-radar-risk ' + utils.escapeHtml(riskStatus) + '">' + utils.escapeHtml(risk.label || '--') + '</div>' +
+            '</div>' +
+            '<div class="opportunity-radar-tags">' + (tags || '<span>题材待确认</span>') + '</div>' +
+            '<div class="opportunity-radar-components">' +
+                renderRadarMetric('题材', components.topic) +
+                renderRadarMetric('动量', components.momentum) +
+                renderRadarMetric('资金', components.fund) +
+                renderRadarMetric('新闻', components.news) +
+            '</div>' +
+            '<div class="opportunity-radar-foot">' +
+                '<span>' + utils.escapeHtml(signals || '等待更多信号确认') + '</span>' +
+                '<span>近60日胜率 ' + utils.escapeHtml(item.historyWinRate == null ? '--' : item.historyWinRate + '%') + '</span>' +
+            '</div>' +
+        '</div>';
+    }
+
+    function renderRadarMetric(label, value) {
+        var cls = scoreClass(value);
+        return '<div class="opportunity-radar-metric">' +
+            '<span>' + utils.escapeHtml(label) + '</span>' +
+            '<strong class="' + cls + '">' + utils.escapeHtml(value == null ? '--' : String(value)) + '</strong>' +
+        '</div>';
+    }
+
+    function renderOpportunityRadarError() {
+        var container = document.getElementById('opportunity-radar-list');
+        if (container) container.innerHTML = '<div class="opportunity-radar-empty">机会雷达加载失败</div>';
     }
 
     // ============================================================
@@ -414,6 +541,10 @@
     }
 
     window.AppSignals = {
+        // opportunity radar
+        loadOpportunityRadarData: loadOpportunityRadarData,
+        renderOpportunityRadar: renderOpportunityRadar,
+        renderOpportunityRadarError: renderOpportunityRadarError,
         // market heat
         getActiveHotRankSource: getActiveHotRankSource,
         hotRankCacheKey: hotRankCacheKey,

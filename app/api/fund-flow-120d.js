@@ -65,16 +65,28 @@ async function fetchOneCode(code, days) {
         fields1: 'f1,f2,f3,f7',
         fields2: 'f51,f52,f53,f54,f55,f56,f57',  // date,main,small,mid,large,super,pct
     });
-    // 注: push2.eastmoney.com 这个端点 2026-06 起对所有股票返回 data:null,改用历史域 push2his
-    // (实测 push2his 同一端点正常,字段格式完全一致;emGet helper 已加 5xx/网络错误重试)
-    const json = await emGet(`https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?${params.toString()}`, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            Referer: 'https://quote.eastmoney.com/',
-        },
-        timeout: API_TIMEOUTS.push2,
-    });
-    return json && json.data && Array.isArray(json.data.klines) ? json.data.klines : [];
+    // 注: push2his 是主力资金流稳定版,但2026-07起部分环境不可用
+    // 尝试多个域名: push2his(主) → push2ex(备) → push2(备2)
+    const endpoints = [
+        `https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?${params.toString()}`,
+        `https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get?${params.toString()}`,
+    ];
+    const headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        Referer: 'https://quote.eastmoney.com/',
+    };
+    let lastError = null;
+    for (const url of endpoints) {
+        try {
+            const json = await emGet(url, { headers, timeout: API_TIMEOUTS.push2 });
+            const klines = json && json.data && Array.isArray(json.data.klines) ? json.data.klines : [];
+            if (klines.length) return klines;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    // 所有端点均不可用 — 返回空数组,上层会跳过此股票
+    return [];
 }
 
 function summarize(klines, code, name) {

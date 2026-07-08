@@ -4,7 +4,9 @@ const {
     API_TIMEOUTS,
     emGet,
     fail,
+    fetchJson,
     ok,
+    tencentSymbol,
     toNumber,
 } = require('./_utils');
 
@@ -139,6 +141,51 @@ async function loadTdxrsMinute(code, count) {
     throw error;
 }
 
+// 腾讯分时 API: web.ifzq.gtimg.cn/appstock/app/minute/query
+// 返回格式: { data: { [symbol]: { data: { data: ["0930 1188.77 173 20565721.00", ...] } } } }
+// 每行: "HHMM price volume amount"
+async function loadTencentMinute(code, count) {
+    const symbol = tencentSymbol(code);
+    const json = await fetchJson(`https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${symbol}`, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
+            Referer: 'https://gu.qq.com/',
+        },
+        timeout: API_TIMEOUTS.normal,
+    });
+    const rawData = json && json.data && json.data[symbol] && json.data[symbol].data;
+    const lines = Array.isArray(rawData && rawData.data) ? rawData.data : [];
+    const qt = json && json.data && json.data[symbol] && json.data[symbol].qt;
+    const preClose = parseNumeric(Array.isArray(qt) ? qt[4] : null);
+    // 腾讯分钟数据: "HHMM price volume amount"
+    const points = sortMinutePoints(lines.map((lineRaw) => {
+        const parts = String(lineRaw || '').trim().split(/\s+/);
+        if (parts.length < 3) return null;
+        const timeRaw = parts[0] || '';
+        const price = parseNumeric(parts[1]);
+        const volume = parseNumeric(parts[2]);
+        const amount = parseNumeric(parts[3]);
+        const changePercent = preClose && preClose > 0 && price !== null
+            ? (price - preClose) / preClose * 100
+            : null;
+        return {
+            time: normalizeTime(timeRaw),
+            price,
+            avgPrice: price,
+            volume,
+            amount,
+            changePercent,
+        };
+    })).slice(-count);
+    if (!points.length) throw new Error('腾讯分时数据为空');
+    return {
+        source: 'tencent',
+        sourceLabel: '腾讯分时',
+        preClose,
+        points,
+    };
+}
+
 function parseEastmoneyTrend(raw, preClose) {
     const fields = String(raw || '').split(',');
     if (fields.length < 3) return null;
@@ -202,7 +249,7 @@ module.exports = async function handler(req, res) {
 
     const count = clampCount(req.query.count);
     const source = String(req.query.source || 'auto').trim().toLowerCase();
-    if (!['auto', 'tdxrs', 'eastmoney'].includes(source)) {
+    if (!['auto', 'tdxrs', 'tencent', 'eastmoney'].includes(source)) {
         return fail(res, 400, '未知分时数据源');
     }
 
@@ -211,14 +258,28 @@ module.exports = async function handler(req, res) {
         let fallbackReason = '';
         if (source === 'eastmoney') {
             data = await loadEastmoneyMinute(code, count);
+        } else if (source === 'tencent') {
+            data = await loadTencentMinute(code, count);
         } else {
-            try {
-                data = await loadTdxrsMinute(code, count);
-            } catch (error) {
-                if (source === 'tdxrs') throw error;
-                fallbackReason = 'tdxrs 不可用';
-                data = await loadEastmoneyMinute(code, count);
+            // auto / tdxrs: 优先 tdxrs -> 腾讯 -> 东财
+            const trySources = [
+                { label: 'tdxrs', fn: () => loadTdxrsMinute(code, count) },
+                { label: '腾讯', fn: () => loadTencentMinute(code, count) },
+                { label: '东财', fn: () => loadEastmoneyMinute(code, count) },
+            ];
+            const tdxrOnly = source === 'tdxrs' ? trySources.slice(0, 1) : trySources;
+            for (const s of tdxrOnly) {
+                try {
+                    data = await s.fn();
+                    break;
+                } catch (error) {
+                    fallbackReason = fallbackReason
+                        ? `${fallbackReason}; ${s.label}: ${error.message}`
+                        : `${s.label}: ${error.message}`;
+                    if (source === 'tdxrs') throw error;
+                }
             }
+            if (!data) throw new Error(fallbackReason || '所有分时数据源均不可用');
         }
 
         return ok(res, {

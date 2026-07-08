@@ -1,7 +1,12 @@
 // 自选股日 K 技术面分析（A 股）
 // 用日 K 数据在本地计算趋势评分、支撑压力和成交量筹码估算。
 
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+
 const { API_TIMEOUTS, emGet, fail, fetchJson, ok, tencentSymbol, toNumber } = require('./_utils');
+
+const execFileAsync = promisify(execFile);
 
 const DEFAULT_DAYS = 260;
 const MIN_DAYS = 60;
@@ -18,7 +23,7 @@ function clamp(value, min, max) {
 function round(value, digits) {
     const number = toNumber(value);
     if (number === null) return null;
-    const base = Math.pow(10, digits || 2);
+    const base = Math.pow(10, digits ?? 2);
     return Math.round(number * base) / base;
 }
 
@@ -107,6 +112,108 @@ async function fetchTencentDailyKlines(code, days) {
         source: 'tencent',
         sourceLabel: '腾讯复权日K',
     };
+}
+
+// tdxrs 日 K 数据（通达信直连，安装 tdxrs 后可用）
+function tdxrsBarsArgs(days) {
+    const count = Math.max(60, Math.min(800, days));
+    const timeout = '8';
+    const commands = [];
+    if (process.env.TDXRS_BIN) {
+        commands.push({
+            label: process.env.TDXRS_BIN,
+            command: process.env.TDXRS_BIN,
+            args: ['bars', '--count', String(count), '--fq', '1', '--category', 'day', '--format', 'json', '--timeout', timeout],
+        });
+    }
+    commands.push({
+        label: 'tdxrs',
+        command: 'tdxrs',
+        args: ['bars', '--count', String(count), '--fq', '1', '--category', 'day', '--format', 'json', '--timeout', timeout],
+    });
+    ['python3', 'python'].filter(Boolean).forEach((python) => {
+        commands.push({
+            label: `${python} -m tdxrs`,
+            command: python,
+            args: ['-m', 'tdxrs', 'bars', '--count', String(count), '--fq', '1', '--category', 'day', '--format', 'json', '--timeout', timeout],
+        });
+    });
+    const seen = new Set();
+    return commands.filter((item) => {
+        const key = `${item.command}\0${item.args.join('\0')}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+async function fetchTdxrsDailyKlines(code, days) {
+    const count = Math.max(60, Math.min(800, days));
+    const errors = [];
+    const timeoutMs = API_TIMEOUTS.normal + 3000;
+
+    for (const candidate of tdxrsBarsArgs(count)) {
+        try {
+            const { stdout } = await execFileAsync(candidate.command, candidate.args.concat(code), {
+                encoding: 'utf8',
+                timeout: timeoutMs,
+                maxBuffer: 1024 * 1024,
+                windowsHide: true,
+                env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+            });
+            const text = String(stdout || '').trim();
+            const start = text.indexOf('[');
+            const end = text.lastIndexOf(']');
+            if (start === -1 || end === -1 || end < start) throw new Error('JSON 输出为空');
+            const rows = JSON.parse(text.slice(start, end + 1));
+            if (!Array.isArray(rows) || !rows.length) throw new Error('K 线数据为空');
+
+            const numeric = (v) => {
+                const n = toNumber(String(v || '').replace(/,/g, ''));
+                return n === null ? null : n;
+            };
+            const bars = rows.map((row) => {
+                const open = numeric(row['开盘']);
+                const close = numeric(row['收盘']);
+                const high = numeric(row['最高']);
+                const low = numeric(row['最低']);
+                const volume = numeric(row['成交量']);
+                const amount = numeric(row['成交额']);
+                return {
+                    date: String(row['日期'] || '').trim(),
+                    open, close, high, low,
+                    volume: volume === null ? 0 : volume,
+                    amount: amount === null ? 0 : amount,
+                    amplitude: null,
+                    pct: null,
+                    change: null,
+                    turnover: null,
+                };
+            }).filter((bar) => bar.date && bar.open !== null && bar.close !== null && bar.high !== null && bar.low !== null)
+                .sort((a, b) => a.date.localeCompare(b.date));
+
+            // 计算涨跌幅和涨跌额
+            for (let i = 0; i < bars.length; i++) {
+                const prev = i > 0 ? bars[i - 1].close : null;
+                if (prev && prev > 0) {
+                    bars[i].change = bars[i].close - prev;
+                    bars[i].pct = (bars[i].close - prev) / prev * 100;
+                }
+            }
+
+            return {
+                name: '',
+                bars,
+                source: 'tdxrs',
+                sourceLabel: '通达信日K(tdxrs)',
+            };
+        } catch (error) {
+            errors.push(`${candidate.label}: ${error.message}`);
+        }
+    }
+    const error = new Error(errors.join(' | ') || 'tdxrs K 线不可用');
+    error.details = errors;
+    throw error;
 }
 
 function average(values) {
@@ -347,21 +454,36 @@ function computeChipDistribution(bars) {
     };
 }
 
-module.exports = async function handler(req, res) {
+async function handler(req, res) {
     try {
         const code = String(req.query.code || '').trim();
         if (!/^\d{6}$/.test(code)) return fail(res, 400, '缺少股票代码');
         const days = Math.max(MIN_DAYS, Math.min(MAX_DAYS, parseInt(req.query.days, 10) || DEFAULT_DAYS));
         let result;
         let fallbackReason = '';
-        try {
-            result = await fetchEastmoneyDailyKlines(code, days);
-            if (!result.bars.length) fallbackReason = '东方财富日 K 无数据';
-        } catch (error) {
-            fallbackReason = error.message || '东方财富日 K 不可用';
+
+        // 尝试多个数据源: tdxrs(最快) → 腾讯(稳定) → 东方财富(推2his可能不可用)
+        const sources = [
+            { label: '通达信', fn: () => fetchTdxrsDailyKlines(code, days) },
+            { label: '腾讯', fn: () => fetchTencentDailyKlines(code, days) },
+            { label: '东方财富', fn: () => fetchEastmoneyDailyKlines(code, days) },
+        ];
+        for (const s of sources) {
+            try {
+                result = await s.fn();
+                if (result && result.bars && result.bars.length >= MIN_DAYS) break;
+                if (result && result.bars && result.bars.length) {
+                    fallbackReason = `${s.label}: 数据不足(${result.bars.length}条)`;
+                } else {
+                    fallbackReason = `${s.label}: 无数据`;
+                }
+                result = null;
+            } catch (error) {
+                fallbackReason = `${s.label}: ${error.message}`;
+                result = null;
+            }
         }
-        if (!result || !result.bars.length) result = await fetchTencentDailyKlines(code, days);
-        if (!result.bars.length) return fail(res, 404, '暂无日 K 数据');
+        if (!result || !result.bars.length) return fail(res, 404, '暂无日 K 数据');
         const analysis = computeTechnicalAnalysis(result.bars);
         const chips = computeChipDistribution(result.bars);
         return ok(res, {
@@ -385,4 +507,21 @@ module.exports = async function handler(req, res) {
     } catch (error) {
         return fail(res, 502, 'A 股日 K 技术面接口不可用', { error: error.message });
     }
-};
+}
+
+// 纯函数导出（供单测使用，不影响 handler 行为）
+module.exports = handler;
+module.exports.computeTechnicalAnalysis = computeTechnicalAnalysis;
+module.exports.computeChipDistribution = computeChipDistribution;
+module.exports.marketCode = marketCode;
+module.exports.clamp = clamp;
+module.exports.round = round;
+module.exports.parseKline = parseKline;
+module.exports.average = average;
+module.exports.sum = sum;
+module.exports.sma = sma;
+module.exports.emaSeries = emaSeries;
+module.exports.rsi = rsi;
+module.exports.macd = macd;
+module.exports.bollinger = bollinger;
+module.exports.percentileFromDistribution = percentileFromDistribution;

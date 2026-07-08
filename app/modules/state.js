@@ -202,6 +202,44 @@
         }
     } catch (e) { watchAlertState = {}; }
 
+    // ============ 渐进治理:受控访问层 (向后兼容,现有 state.x = y 直接读写仍可用) ============
+    // 设计:保留 window.AppState 作为共享可变单例;新增受控 API 用于结构化更新 + 订阅。
+    // - getState():返回同一引用,便于测试与统一入口
+    // - setState(patch):浅合并并广播 change / change:<key> 事件(当前无订阅者时零副作用)
+    // - subscribe(event, fn):返回取消函数;事件名 'change' 或 'change:<key>'
+    // - emit(event, payload):统一事件总线,供模块发领域事件
+    var _stateListeners = {};
+    function _emitState(event, payload) {
+        var ls = _stateListeners[event];
+        if (!ls || !ls.length) return;
+        // 复制一份,避免回调内增删订阅导致遍历错乱;单个回调异常不影响其余
+        ls.slice().forEach(function (fn) {
+            try { fn(payload); } catch (e) { /* 订阅回调异常不应中断状态写入 */ }
+        });
+    }
+    function subscribeState(event, fn) {
+        if (typeof fn !== 'function') return function () {};
+        (_stateListeners[event] = _stateListeners[event] || []).push(fn);
+        return function unsubscribe() {
+            var arr = _stateListeners[event];
+            if (!arr) return;
+            var i = arr.indexOf(fn);
+            if (i >= 0) arr.splice(i, 1);
+        };
+    }
+    function getState() {
+        return window.AppState;
+    }
+    function setState(patch) {
+        if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return window.AppState;
+        Object.assign(window.AppState, patch);
+        _emitState('change', { patch: patch, state: window.AppState });
+        Object.keys(patch).forEach(function (k) {
+            _emitState('change:' + k, { key: k, value: patch[k], state: window.AppState });
+        });
+        return window.AppState;
+    }
+
     window.AppState = {
         // 缓存键
         KEYS: {
@@ -276,5 +314,10 @@
         watchAlertState: watchAlertState,
         currentNewsSource: currentNewsSource,
         newsState: newsState,
+        // ===== 渐进治理:受控访问层 API =====
+        getState: getState,
+        setState: setState,
+        subscribe: subscribeState,
+        emit: _emitState,
     };
 })();

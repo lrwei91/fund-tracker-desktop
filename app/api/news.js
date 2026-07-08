@@ -1,4 +1,6 @@
-const { fail, fetchJson, ok } = require('./_utils');
+const crypto = require('crypto');
+
+const { emGet, fail, fetchJson, ok } = require('./_utils');
 
 function stripHtml(text) {
     return String(text || '')
@@ -43,6 +45,32 @@ async function fetchJin10Page(cursor) {
     });
 }
 
+// 东财快讯 fallback（金十不可用时）
+async function fetchEastmoneyFastNewsFallback(limit) {
+    const params = new URLSearchParams({
+        client: 'web',
+        biz: 'web_724',
+        fastColumn: '102',
+        sortEnd: '',
+        pageSize: String(limit || 20),
+        req_trace: crypto.randomUUID(),
+    });
+    const json = await emGet(`https://np-weblist.eastmoney.com/comm/web/getFastNewsList?${params.toString()}`, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
+            Referer: 'https://kuaixun.eastmoney.com/',
+        },
+    });
+    const rows = json && json.data && Array.isArray(json.data.fastNewsList) ? json.data.fastNewsList : [];
+    if (!rows.length) throw new Error('东财快讯为空');
+    return rows.map((item) => ({
+        id: String(item.seq || item.id || item.url || Math.random()),
+        time: item.showTime || item.createTime || '',
+        data: { content: (item.title || item.summary || stripHtml(item.content || '')).trim() },
+        url: item.url || 'https://kuaixun.eastmoney.com/',
+    }));
+}
+
 module.exports = async function handler(req, res) {
     try {
         const limit = Math.max(1, Math.min(40, parseInt(req.query.limit, 10) || 20));
@@ -54,35 +82,52 @@ module.exports = async function handler(req, res) {
         let exhausted = false;
 
         let json;
+        let usedFallback = false;
         try {
             json = await fetchJin10Page(cursor);
         } catch (error) {
             // 首屏无可用缓存,直接报错
-            if (!rows.length) throw error;
+            if (!rows.length && cursor) throw error;
+            // 首屏:尝试东财快讯 fallback
+            if (!cursor) {
+                try {
+                    const emItems = await fetchEastmoneyFastNewsFallback(limit);
+                    emItems.forEach((item) => {
+                        if (!seen.has(item.id)) {
+                            seen.add(item.id);
+                            rows.push(item);
+                        }
+                    });
+                    usedFallback = true;
+                } catch (emError) {
+                    throw error; // 抛出原始 jin10 错误
+                }
+            }
         }
-        if (!json || json.status !== 200 || !Array.isArray(json.data)) {
+        if (!usedFallback && (!json || json.status !== 200 || !Array.isArray(json.data))) {
             throw new Error(`金十返回异常 ${json && json.status}`);
         }
 
-        json.data.forEach((item) => {
-            const id = String(item.id || '');
-            if (!id || seen.has(id)) return;
-            seen.add(id);
+        if (!usedFallback) {
+            json.data.forEach((item) => {
+                const id = String(item.id || '');
+                if (!id || seen.has(id)) return;
+                seen.add(id);
 
-            const data = item.data || {};
-            const content = stripHtml(data.content || data.title || '');
-            if (!content || data.lock || /VIP专享|解锁直达|升级/.test(content)) return;
+                const data = item.data || {};
+                const content = stripHtml(data.content || data.title || '');
+                if (!content || data.lock || /VIP专享|解锁直达|升级/.test(content)) return;
 
-            rows.push({
-                id,
-                time: item.time || '',
-                data: { content },
-                url: data.link || 'https://www.jin10.com/flash',
+                rows.push({
+                    id,
+                    time: item.time || '',
+                    data: { content },
+                    url: data.link || 'https://www.jin10.com/flash',
+                });
             });
-        });
+        }
 
-        // 用"过滤后最后一条"作为下一页 cursor,而不是原始 json.data 的最后一条
-        // (原始数据可能含 VIP/锁文等被过滤项,翻页基准要稳定)
+        // 用"过滤后最后一条"作为下一页 cursor
         const sliced = rows.slice(0, limit);
         const last = sliced[sliced.length - 1];
         if (last && (last.time || last.id)) {
@@ -90,7 +135,7 @@ module.exports = async function handler(req, res) {
         } else {
             exhausted = true;
         }
-        if (json.data.length === 0) exhausted = true;
+        if (!usedFallback && json && json.data && json.data.length === 0) exhausted = true;
 
         if (!rows.length && !cursor) throw new Error('金十公开快讯为空');
 

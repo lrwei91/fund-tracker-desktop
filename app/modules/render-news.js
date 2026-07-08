@@ -10,10 +10,16 @@
     var utils = window.AppUtils;
     var KEYS = state.KEYS;
 
+    // 用 DOMParser 解析外部新闻 HTML,只取纯文本,避免 innerHTML 执行 <img onerror> 等事件处理器(XSS)
     function stripHtmlTags(html) {
-        var tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        return tmp.textContent || tmp.innerText || '';
+        if (!html) return '';
+        try {
+            var doc = new DOMParser().parseFromString(String(html), 'text/html');
+            return doc.body ? (doc.body.textContent || '') : '';
+        } catch (e) {
+            // 解析失败兜底:去掉所有标签(不执行任何脚本)
+            return String(html).replace(/<[^>]*>/g, '');
+        }
     }
 
     function formatJin10Time(timeStr) {

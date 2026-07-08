@@ -122,7 +122,8 @@ function eastmoneyMarketFs() {
 }
 
 async function loadMarketMainFund() {
-    // 同花顺源只有"行业净流入"无法做全市场总额,这里只走 push2 全市场 4 档拆分
+    // 同花顺源只有"行业净流入"无法做全市场总额,这里走 push2 全市场 4 档拆分
+    // 注意: push2 域名可能受代理/网络环境影响不可用,此时降级返回空主力数据
     const params = new URLSearchParams({
         pn: '1',
         pz: '6000',
@@ -135,15 +136,43 @@ async function loadMarketMainFund() {
         // f78=中单(≥4万<20万), f84=小单(<4万)
         fields: 'f12,f14,f62,f66,f72,f78,f84',
     });
-    const json = await emGet(`https://push2.eastmoney.com/api/qt/clist/get?${params.toString()}`, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
-            Referer: 'https://quote.eastmoney.com/',
-        },
-        timeout: API_TIMEOUTS.heavy,
-    });
-    const rows = json && json.data && Array.isArray(json.data.diff) ? json.data.diff : [];
-    if (!rows.length) throw new Error('主力资金为空');
+    let rows = [];
+    try {
+        const json = await emGet(`https://push2.eastmoney.com/api/qt/clist/get?${params.toString()}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
+                Referer: 'https://quote.eastmoney.com/',
+            },
+            timeout: API_TIMEOUTS.heavy,
+        });
+        rows = json && json.data && Array.isArray(json.data.diff) ? json.data.diff : [];
+    } catch (error) {
+        // push2 不可用时返回空数据
+        return {
+            value: '--',
+            isPositive: true,
+            note: 'push2 不可用',
+            breakdown: {
+                superLarge: { value: '--', isPositive: true },
+                large:      { value: '--', isPositive: true },
+                medium:     { value: '--', isPositive: true },
+                small:      { value: '--', isPositive: true },
+            },
+        };
+    }
+    if (!rows.length) {
+        return {
+            value: '--',
+            isPositive: true,
+            note: '暂无数据',
+            breakdown: {
+                superLarge: { value: '--', isPositive: true },
+                large:      { value: '--', isPositive: true },
+                medium:     { value: '--', isPositive: true },
+                small:      { value: '--', isPositive: true },
+            },
+        };
+    }
 
     // 全市场合计:对每档做 sum
     const sum = (key) => rows.reduce((s, r) => {
@@ -172,13 +201,25 @@ async function loadMarketMainFund() {
 }
 
 async function loadNorthFund() {
-    const json = await fetchJson('https://data.hexin.cn/market/hsgtApi/method/dayChart/', {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/117.0.0.0 Safari/537.36',
-            Host: 'data.hexin.cn',
-            Referer: 'https://data.hexin.cn/',
-        },
-    });
+    let json;
+    try {
+        json = await fetchJson('https://data.hexin.cn/market/hsgtApi/method/dayChart/', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/117.0.0.0 Safari/537.36',
+                Host: 'data.hexin.cn',
+                Referer: 'https://data.hexin.cn/',
+            },
+        });
+    } catch (error) {
+        // hexin 不可用时返回空数据
+        return {
+            value: '--',
+            isPositive: true,
+            time: '',
+            northHgt: { value: '--', isPositive: true },
+            northSgt: { value: '--', isPositive: true },
+        };
+    }
     const times = Array.isArray(json.time) ? json.time : [];
     let latest = null;
     times.forEach((time, index) => {
@@ -187,7 +228,15 @@ async function loadNorthFund() {
         if (hgt === null || sgt === null) return;
         latest = { time, hgt, sgt, value: hgt + sgt };
     });
-    if (!latest) throw new Error('北向资金为空');
+    if (!latest) {
+        return {
+            value: '--',
+            isPositive: true,
+            time: '',
+            northHgt: { value: '--', isPositive: true },
+            northSgt: { value: '--', isPositive: true },
+        };
+    }
     return {
         value: `${latest.value > 0 ? '+' : ''}${latest.value.toFixed(2)}亿`,
         isPositive: latest.value >= 0,
