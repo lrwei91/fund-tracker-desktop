@@ -265,9 +265,9 @@
             return value !== null;
         });
         if (values.length < 2) return '';
-        var width = 96;
-        var height = 34;
-        var pad = 1.5;
+        var width = 180;
+        var height = 44;
+        var pad = 2;
         var base = W.readFiniteNumber(preClose);
         var scaleValues = values.slice();
         if (base !== null && base > 0) scaleValues.push(base);
@@ -289,8 +289,7 @@
         var zeroAxis = '';
         if (base !== null && base > 0) {
             var zeroY = yScale(base);
-            zeroAxis = '<line class="watchlist-stock-sparkline-zero" x1="' + pad + '" y1="' + zeroY.toFixed(2) + '" x2="' + (width - pad) + '" y2="' + zeroY.toFixed(2) + '"></line>' +
-                '<text class="watchlist-stock-sparkline-zero-label" x="' + (width - 1) + '" y="' + Math.max(7, zeroY - 2).toFixed(2) + '">0%</text>';
+            zeroAxis = '<line class="watchlist-stock-sparkline-zero" x1="' + pad + '" y1="' + zeroY.toFixed(2) + '" x2="' + (width - pad) + '" y2="' + zeroY.toFixed(2) + '"></line>';
         }
         return '<svg viewBox="0 0 ' + width + ' ' + height + '" aria-label="当日走势" role="img" focusable="false">' +
             zeroAxis +

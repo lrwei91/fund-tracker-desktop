@@ -123,20 +123,36 @@
         var current = typeof data.priceValue === 'number' ? data.priceValue : null;
         if (!Number.isFinite(current)) return [];
         var pct = typeof data.changePercent === 'number' ? data.changePercent : 0;
-        var start = typeof prev === 'number' && Number.isFinite(prev) && prev > 0
+        var open = typeof data.openPrice === 'number' && Number.isFinite(data.openPrice) && data.openPrice > 0
+            ? data.openPrice
+            : null;
+        var start = open || (typeof prev === 'number' && Number.isFinite(prev) && prev > 0
             ? prev
-            : current / (1 + pct / 100 || 1);
+            : current / (1 + pct / 100 || 1));
         if (!Number.isFinite(start) || start <= 0) start = current;
         var seed = String(data.name || '').split('').reduce(function (sum, ch) { return sum + ch.charCodeAt(0); }, 0);
         var values = [];
-        for (var i = 0; i < 18; i++) {
-            var t = i / 17;
+        for (var i = 0; i < 48; i++) {
+            var t = i / 47;
             var wave = Math.sin((seed % 7 + 1) * t * Math.PI) * 0.0018;
             var zig = ((seed + i * 11) % 9 - 4) * 0.00045;
             values.push(start + (current - start) * t + current * (wave + zig));
         }
         values[values.length - 1] = current;
         return values;
+    }
+
+    function buildIndexSparklineSvg(data, cls, prev) {
+        var values = buildIndexSparklineValues(data, prev);
+        if (!values.length) return '';
+        var width = 180;
+        var height = 44;
+        var pad = 2;
+        var path = sparklinePath(values, width, height, pad);
+        if (!path) return '';
+        return '<svg viewBox="0 0 ' + width + ' ' + height + '" aria-hidden="true" focusable="false">' +
+            '<path d="' + path + '"></path>' +
+            '</svg>';
     }
 
     function renderIndexSparkline(container, data, cls, prev) {
@@ -146,16 +162,13 @@
             spark.className = 'index-sparkline';
             container.appendChild(spark);
         }
-        var values = buildIndexSparklineValues(data, prev);
-        if (!values.length) {
+        var svg = buildIndexSparklineSvg(data, cls, prev);
+        if (!svg) {
             spark.innerHTML = '';
             return;
         }
-        var path = sparklinePath(values, 74, 28, 3);
         spark.className = 'index-sparkline ' + cls;
-        spark.innerHTML = '<svg viewBox="0 0 74 28" aria-hidden="true" focusable="false">' +
-            '<path d="' + path + '"></path>' +
-            '</svg>';
+        spark.innerHTML = svg;
     }
 
     function updateIndexUI(id, data) {
@@ -368,6 +381,7 @@
         clearIndexPrevForCode: clearIndexPrevForCode,
         trendArrow: trendArrow,
         snapshotIndexPrice: snapshotIndexPrice,
+        buildIndexSparklineSvg: buildIndexSparklineSvg,
         // 指数 UI / load
         updateIndexUI: updateIndexUI,
         loadIndexData: loadIndexData,

@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-electron",
-  "version": "0.1.19",
+  "version": "0.1.21",
   "description": "恭喜发财本地 Electron 桌面应用",
   "main": "main.js",
   "private": true,

@@ -13,7 +13,8 @@ const stockNewsHandler = require('./stock-news');
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
-const ENRICH_MAX = 10;
+const ENRICH_MAX = MAX_LIMIT;
+const LIMIT_BOARD_PCT = 9.2;
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -89,6 +90,7 @@ function emptyCandidate(code, name) {
         dragonNetWan: null,
         dragonReason: '',
         isLimitDown: false,
+        sourceTypes: [],
     };
 }
 
@@ -103,6 +105,49 @@ function upsertCandidate(map, code, name) {
 function addUnique(list, value) {
     const text = String(value || '').trim();
     if (text && !list.includes(text)) list.push(text);
+}
+
+function addSourceType(candidate, type) {
+    if (!candidate || !type) return;
+    if (!candidate.sourceTypes.includes(type)) candidate.sourceTypes.push(type);
+}
+
+function hasNonLimitSource(candidate) {
+    return !!(candidate && Array.isArray(candidate.sourceTypes)
+        && candidate.sourceTypes.some((type) => type !== 'limit'));
+}
+
+function isCurrentLimitBoard(candidate) {
+    if (!candidate) return false;
+    const pct = toNumber(candidate.pct);
+    return candidate.limitType === 'zt' || (pct !== null && pct >= LIMIT_BOARD_PCT);
+}
+
+function radarSeedScore(candidate) {
+    let score = candidate.sourceScore || 0;
+    if (hasNonLimitSource(candidate)) score += 8;
+    if (isCurrentLimitBoard(candidate)) score -= 28;
+    if (candidate.isLimitDown) score -= 40;
+    return score;
+}
+
+function orderRadarSeeds(list) {
+    return list.slice().sort((a, b) => radarSeedScore(b) - radarSeedScore(a));
+}
+
+function selectRadarPool(candidates, count) {
+    const eligible = candidates
+        .filter((item) => item && item.code && item.sourceScore > -25 && !item.isLimitDown);
+    const primary = eligible.filter((item) => hasNonLimitSource(item) && !isCurrentLimitBoard(item));
+    const secondary = eligible.filter((item) => !hasNonLimitSource(item) && !isCurrentLimitBoard(item));
+    const hotLimitFallback = eligible.filter((item) => hasNonLimitSource(item) && isCurrentLimitBoard(item));
+    const boardFallback = eligible.filter((item) => !hasNonLimitSource(item) && isCurrentLimitBoard(item));
+    return []
+        .concat(orderRadarSeeds(primary))
+        .concat(orderRadarSeeds(secondary))
+        .concat(orderRadarSeeds(hotLimitFallback))
+        .concat(orderRadarSeeds(boardFallback))
+        .slice(0, count);
 }
 
 function addSignal(candidate, label, points, detail) {
@@ -126,6 +171,7 @@ function absorbHotRank(map, payload, source) {
         candidate.price = candidate.price === null ? toNumber(item.price) : candidate.price;
         if (Array.isArray(item.concepts)) item.concepts.slice(0, 3).forEach((tag) => addUnique(candidate.topicTags, tag));
         addUnique(candidate.topicTags, item.tag);
+        addSourceType(candidate, 'hot');
         addSignal(candidate, source === 'ths' ? '同花顺热榜' : '东财人气榜', points, `热度排名 ${rank}`);
     });
 }
@@ -133,7 +179,7 @@ function absorbHotRank(map, payload, source) {
 function absorbLimitPool(map, payload, type) {
     const items = payload && payload.data && Array.isArray(payload.data.items) ? payload.data.items : [];
     const labelMap = { zt: '涨停池', yzt: '昨涨停', zb: '炸板池', dt: '跌停池' };
-    const scoreMap = { zt: 24, yzt: 14, zb: 5, dt: -24 };
+    const scoreMap = { zt: 4, yzt: 8, zb: 5, dt: -24 };
     items.slice(0, 40).forEach((item) => {
         const candidate = upsertCandidate(map, item.code, item.name);
         if (!candidate) return;
@@ -143,6 +189,7 @@ function absorbLimitPool(map, payload, type) {
         candidate.price = candidate.price === null ? toNumber(item.price) : candidate.price;
         candidate.industry = candidate.industry || item.industry || '';
         addUnique(candidate.topicTags, item.industry);
+        addSourceType(candidate, 'limit');
         const detail = type === 'zt'
             ? (item.ztStat || `${item.limitDays || 1}板`)
             : (type === 'zb' ? `${item.breakTimes || 0}次开板` : `${round(item.pct, 2)}%`);
@@ -158,6 +205,7 @@ function absorbDragonTiger(map, payload) {
         const netWan = toNumber(stock.netBuyWan) || 0;
         candidate.dragonNetWan = netWan;
         candidate.dragonReason = stock.reason || '';
+        addSourceType(candidate, 'dragon');
         addSignal(candidate, '龙虎榜', clamp(netWan / 2500, -10, 13), netWan >= 0 ? '净买入' : '净卖出');
     });
 }
@@ -239,7 +287,8 @@ function riskState(candidate, enrich) {
 
     if (/ST|退/.test(name.toUpperCase())) points.push({ value: 30, reason: '特殊风险' });
     if (candidate.isLimitDown) points.push({ value: 22, reason: '跌停池' });
-    if (pct !== null && pct >= 9.2) points.push({ value: 7, reason: '涨幅过热' });
+    if (candidate.limitType === 'zt') points.push({ value: 18, reason: '已涨停' });
+    else if (pct !== null && pct >= LIMIT_BOARD_PCT) points.push({ value: 12, reason: '涨幅过热' });
     if (pct !== null && pct <= -7) points.push({ value: 7, reason: '跌幅过大' });
     if (techScore !== null && techScore <= -35) points.push({ value: 8, reason: '技术弱势' });
     if ((flow.todayMain || 0) <= -100000000) points.push({ value: 6, reason: '主力流出' });
@@ -357,14 +406,12 @@ async function handler(req, res) {
             const match = sectorScoreFor(candidate, sectorData);
             if (!match) return;
             addUnique(candidate.topicTags, match.label);
+            addSourceType(candidate, 'sector');
             addSignal(candidate, '板块资金', match.points, `${match.label} ${match.value || ''}`.trim());
         });
 
         const enrichCount = Math.min(ENRICH_MAX, limit);
-        const pool = Array.from(candidates.values())
-            .filter((item) => item.code && item.sourceScore > -25)
-            .sort((a, b) => b.sourceScore - a.sourceScore)
-            .slice(0, enrichCount);
+        const pool = selectRadarPool(Array.from(candidates.values()), enrichCount);
         const items = await enrichCandidates(pool);
         items.sort((a, b) => b.score - a.score);
 
@@ -389,3 +436,6 @@ module.exports.riskState = riskState;
 module.exports.scoreRadarCandidate = scoreRadarCandidate;
 module.exports.historyWinRate = historyWinRate;
 module.exports.sectorScoreFor = sectorScoreFor;
+module.exports.isCurrentLimitBoard = isCurrentLimitBoard;
+module.exports.hasNonLimitSource = hasNonLimitSource;
+module.exports.selectRadarPool = selectRadarPool;

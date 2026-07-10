@@ -29,8 +29,11 @@ function parseNumeric(value) {
 }
 
 function normalizeTime(value) {
-    const match = String(value || '').match(/(\d{2}:\d{2})/);
-    return match ? match[1] : '';
+    const text = String(value || '').trim();
+    const colonMatch = text.match(/(\d{2}:\d{2})/);
+    if (colonMatch) return colonMatch[1];
+    const compactMatch = text.match(/\b(\d{2})(\d{2})\b/);
+    return compactMatch ? `${compactMatch[1]}:${compactMatch[2]}` : '';
 }
 
 function sortMinutePoints(points) {
@@ -156,7 +159,8 @@ async function loadTencentMinute(code, count) {
     const rawData = json && json.data && json.data[symbol] && json.data[symbol].data;
     const lines = Array.isArray(rawData && rawData.data) ? rawData.data : [];
     const qt = json && json.data && json.data[symbol] && json.data[symbol].qt;
-    const preClose = parseNumeric(Array.isArray(qt) ? qt[4] : null);
+    const quote = qt && Array.isArray(qt[symbol]) ? qt[symbol] : [];
+    const preClose = parseNumeric(quote[4]);
     // 腾讯分钟数据: "HHMM price volume amount"
     const points = sortMinutePoints(lines.map((lineRaw) => {
         const parts = String(lineRaw || '').trim().split(/\s+/);
@@ -181,7 +185,9 @@ async function loadTencentMinute(code, count) {
     return {
         source: 'tencent',
         sourceLabel: '腾讯分时',
+        name: quote[1] || '',
         preClose,
+        tradeDate: String(rawData && rawData.date || '').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'),
         points,
     };
 }

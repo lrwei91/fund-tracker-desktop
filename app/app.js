@@ -138,7 +138,6 @@
                 window.AppSignals.loadOpportunityRadarData();
                 window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource());
                 if (!isBootstrapping) {
-                    window.AppSignals.loadDragonTigerData();
                     window.AppSignals.loadLimitUpData();
                 }
             }
@@ -470,7 +469,6 @@
             // 收盘后窗口(16:00 起)触发日级数据刷新
             if (!utils.isAfterCloseDailyWindow()) return;
             if (window.AppSignals) {
-                window.AppSignals.loadDragonTigerData(true);
                 window.AppSignals.loadLimitUpData(true);
             }
         }, 30 * 60 * 1000);
@@ -504,7 +502,6 @@
     function loadAfterCloseDailyData() {
         if (window.AppSignals) {
             var force = utils.isAfterCloseDailyWindow();
-            window.AppSignals.loadDragonTigerData(force);
             window.AppSignals.loadLimitUpData(force);
         }
     }
@@ -581,7 +578,6 @@
             window.AppMarket.loadSectorData(true);
         }
         if (window.AppSignals) {
-            if (!options.skipDragonTiger) window.AppSignals.loadDragonTigerData(true);
             if (!options.skipLimitUp) window.AppSignals.loadLimitUpData(true);
             if (!options.skipOpportunityRadar && state.currentTab === 'signals') window.AppSignals.loadOpportunityRadarData(true);
             window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), true);
@@ -617,7 +613,6 @@
         // 页面初始化:先渲染本地缓存,再复用手动刷新入口请求一次最新数据。
         renderRealtimeFromCache();
         manualRefreshAll('启动刷新', {
-            skipDragonTiger: true,
             skipLimitUp: true,
             skipOpportunityRadar: true,
         });

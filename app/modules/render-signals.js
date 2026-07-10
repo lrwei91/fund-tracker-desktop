@@ -1,5 +1,5 @@
 // ================================================================
-// 市场信号 — 市场热度 / 龙虎榜 / 异动提醒 (打板层 4 池)
+// 市场信号 — 机会雷达 / 市场热度 / 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停)
 // 暴露到 window.AppSignals;
 // 直接 script 引入,无需 import/require
 // 依赖:window.AppState, window.AppUtils, window.AppCache
@@ -62,7 +62,7 @@
         }
 
         try {
-            var res = await fetch(utils.apiUrl('/opportunity-radar', { limit: 8 }));
+            var res = await fetch(utils.apiUrl('/opportunity-radar', { limit: 20 }));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('数据异常');
@@ -115,9 +115,9 @@
         var risk = item.risk || {};
         var riskStatus = risk.status || 'watch';
         var components = item.components || {};
-        var tags = [item.topic].concat(item.newsHits || []).filter(Boolean).slice(0, 3)
+        var tags = [item.topic].concat(item.newsHits || []).filter(Boolean)
             .map(function (tag) { return '<span>' + utils.escapeHtml(tag) + '</span>'; }).join('');
-        var signals = (Array.isArray(item.signals) ? item.signals : []).slice(0, 3)
+        var signals = (Array.isArray(item.signals) ? item.signals : [])
             .map(function (signal) { return utils.escapeHtml(signal.label || '信号'); }).join(' · ');
         return '<div class="opportunity-radar-item" data-radar-code="' + utils.escapeHtml(item.code || '') + '">' +
             '<div class="opportunity-radar-head">' +
@@ -180,7 +180,7 @@
             return;
         }
         try {
-            var res = await fetch(utils.apiUrl('/hot-rank', { source: source, limit: 20 }));
+            var res = await fetch(utils.apiUrl('/hot-rank', { source: source, limit: 30 }));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data || !Array.isArray(result.data.items)) throw new Error('数据异常');
@@ -209,7 +209,7 @@
         if (timeEl && fresh) {
             timeEl.textContent = '更新 ' + utils.formatShanghaiTime(new Date().toISOString());
         }
-        listEl.innerHTML = items.slice(0, 20).map(function (it) {
+        listEl.innerHTML = items.map(function (it) {
             it = it || {};
             var pctStr = formatSignedPercent(it.pct);
             var pctCls = trendClass(it.pct);
@@ -217,7 +217,7 @@
             var chgArrow = rankChg > 0 ? '↑' + rankChg : rankChg < 0 ? '↓' + Math.abs(rankChg) : '-';
             var chgCls = trendClass(rankChg);
             if (source === 'ths') {
-                var concepts = (Array.isArray(it.concepts) ? it.concepts : []).slice(0, 2)
+                var concepts = (Array.isArray(it.concepts) ? it.concepts : [])
                     .map(function (c) { return '<span class="hot-rank-concept">' + utils.escapeHtml(c) + '</span>'; }).join('');
                 var tag = it.tag ? '<span class="hot-rank-tag">' + utils.escapeHtml(it.tag) + '</span>' : '';
                 return '<li class="hot-rank-item">' +
@@ -278,78 +278,7 @@
     }
 
     // ============================================================
-    // 龙虎榜
-    // ============================================================
-
-    // 龙虎榜 cache key — 历史遗留,直接用字面量 (跟原 app.js 一致)
-    var DRAGON_TIGER_CACHE_KEY = 'fund_tracker_dragon_tiger_cache';
-
-    async function loadDragonTigerData(force) {
-        var container = document.getElementById('dragon-tiger-list');
-        var dateEl = document.getElementById('dragon-tiger-date');
-        if (!container) return;
-        var todayKey = utils.getShanghaiDateKey();
-        var cached = cache.readDailyDataCache(DRAGON_TIGER_CACHE_KEY);
-        var bypassCache = shouldBypassDailySignalCache(force);
-
-        function renderDragonTiger(data) {
-            if (!data || !data.stocks || data.stocks.length === 0) {
-                container.innerHTML = utils.renderEmpty('暂无龙虎榜数据');
-                return;
-            }
-
-            var stocks = data.stocks.slice(0, 20);
-            if (dateEl) dateEl.textContent = data.date || '';
-
-            var html = '';
-            stocks.forEach(function (s) {
-                var netYi = (s.netBuyWan || 0) / 10000;
-                var netCls = netYi > 0 ? 'positive' : netYi < 0 ? 'negative' : '';
-                var netStr = netYi >= 0 ? '+' + netYi.toFixed(2) + '亿' : netYi.toFixed(2) + '亿';
-                html += '<div class="dragon-tiger-item">';
-                html += '  <div class="dragon-tiger-stock"><div class="dragon-tiger-stock-name">' + utils.escapeHtml(s.name) + '</div><div class="dragon-tiger-stock-code">' + utils.escapeHtml(s.code) + '</div></div>';
-                html += '  <span class="dragon-tiger-reason" title="' + utils.escapeHtml(s.reason) + '">' + utils.escapeHtml(s.reason) + '</span>';
-                html += '  <span class="dragon-tiger-net ' + netCls + '">' + utils.escapeHtml(netStr) + '</span>';
-                html += '</div>';
-            });
-            if (html) container.innerHTML = html;
-        }
-
-        if (!bypassCache && cached && cached.date === todayKey && cached.data) {
-            renderDragonTiger(cached.data);
-            return;
-        }
-
-        if (!bypassCache && !utils.isAfterCloseForDailyUpdate()) {
-            if (cached && cached.data) {
-                renderDragonTiger(cached.data);
-                return;
-            }
-            container.innerHTML = utils.renderEmpty('收盘后更新');
-            if (dateEl) dateEl.textContent = '';
-            return;
-        }
-
-        try {
-            var res = await fetch(utils.apiUrl('/dragon-tiger'));
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var json = await res.json();
-
-            if (!json.success || !json.data) throw new Error('数据异常');
-            cache.writeDailyDataCache(DRAGON_TIGER_CACHE_KEY, todayKey, json.data);
-            renderDragonTiger(json.data);
-        } catch (e) {
-            console.error('龙虎榜获取失败:', e);
-            if (cached && cached.data) {
-                renderDragonTiger(cached.data);
-                return;
-            }
-            container.innerHTML = utils.renderEmpty('龙虎榜加载失败');
-        }
-    }
-
-    // ============================================================
-    // 异动提醒 (打板层 4 池)
+    // 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停)
     // ============================================================
 
     function getActiveLimitUpType() {
@@ -423,7 +352,7 @@
                 list.innerHTML = '<div class="limit-up-empty">暂无' + KEYS.LIMIT_UP_TAB_LABELS[type] + '数据 (非交易日或接口暂不可用)</div>';
                 return;
             }
-            list.innerHTML = data.items.slice(0, 30).map(function (it) { return renderRow(type, it); }).join('');
+            list.innerHTML = data.items.map(function (it) { return renderRow(type, it); }).join('');
         }
 
         function renderSummary(s) {
@@ -443,7 +372,7 @@
                 ' · 昨涨停晋级率 ' + s.promoteRate + '%</div>';
         }
 
-        // 1) summary 永远先拉 (顶部卡片) — 日级持久 (跟龙虎榜/资金流卡片一致)
+        // 1) summary 永远先拉 (顶部卡片) — 日级持久
         var todayKey = utils.getShanghaiDateKey();
         var bypassCache = shouldBypassDailySignalCache(force);
         var sumKey = KEYS.SHORT_CACHE_KEYS.limitUpSummary;
@@ -461,7 +390,7 @@
                     renderSummary(sumCached.data);
                 }
             } catch (e) {
-                console.error('异动 summary 获取失败:', e);
+                console.error('打板情绪 summary 获取失败:', e);
                 if (sumCached && sumCached.data) renderSummary(sumCached.data);
             }
         }
@@ -479,7 +408,7 @@
         } else {
             list.innerHTML = '<div class="limit-up-empty">加载中...</div>';
             try {
-                var r = await fetch(utils.apiUrl('/limit-up', { type: activeType, limit: 30 }));
+                var r = await fetch(utils.apiUrl('/limit-up', { type: activeType, limit: 100 }));
                 var j = await r.json();
                 if (j.success) {
                     cache.writeDailyDataCache(typeCacheKey, todayKey, j.data);
@@ -491,11 +420,11 @@
                     // 关键 fetch 失败 → toast 提示
                     if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
                         window.AppAlerts.showStatusToast(
-                            '异动' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
+                            '打板情绪' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
                     }
                 }
             } catch (e) {
-                console.error('异动' + activeType + '获取失败:', e);
+                console.error('打板情绪' + activeType + '获取失败:', e);
                 if (typeCached && typeCached.date === todayKey && typeCached.data) {
                     renderItems(activeType, typeCached.data);
                 } else {
@@ -503,7 +432,7 @@
                     // 关键 fetch 失败 → toast 提示
                     if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
                         window.AppAlerts.showStatusToast(
-                            '异动' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
+                            '打板情绪' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
                     }
                 }
             }
@@ -553,8 +482,6 @@
         renderHotRankError: renderHotRankError,
         initHotRankTabs: initHotRankTabs,
         activateHotRankTab: activateHotRankTab,
-        // dragon tiger
-        loadDragonTigerData: loadDragonTigerData,
         // limit up
         getActiveLimitUpType: getActiveLimitUpType,
         setActiveLimitUpType: setActiveLimitUpType,

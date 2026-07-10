@@ -281,12 +281,13 @@ body {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
         "name value"
-        "change spark";
+        "change value"
+        "spark spark";
     align-items: center;
-    gap: 7px 10px;
-    min-height: 58px;
+    gap: 5px 10px;
+    min-height: 84px;
     background: var(--bg-surface);
-    padding: 9px 10px;
+    padding: 10px 12px;
     text-align: left;
     border: 1px solid var(--border);
     border-radius: var(--radius-xs);
@@ -300,7 +301,8 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
-.index-section .index-name {
+.index-section .index-name,
+.custom-index-section .index-name {
     grid-area: name;
     min-width: 0;
     color: var(--text-tertiary);
@@ -313,7 +315,8 @@ body {
     text-overflow: ellipsis;
 }
 
-.index-section .index-value {
+.index-section .index-value,
+.custom-index-section .index-value {
     grid-area: value;
     justify-self: end;
     min-width: 0;
@@ -331,7 +334,8 @@ body {
     white-space: nowrap;
 }
 
-.index-section .index-value .trend-arrow {
+.index-section .index-value .trend-arrow,
+.custom-index-section .index-value .trend-arrow {
     display: none;
 }
 
@@ -341,7 +345,8 @@ body {
     color: var(--text-primary);
 }
 
-.index-section .index-change {
+.index-section .index-change,
+.custom-index-section .index-change {
     grid-area: change;
     color: var(--red);
     font-size: 13px;
@@ -357,32 +362,40 @@ body {
 .index-section .index-change.negative { color: var(--green); }
 .index-section .index-change.neutral  { color: var(--text-tertiary); }
 
-.index-section .index-sparkline {
+.index-section .index-sparkline,
+.custom-index-section .index-sparkline {
     grid-area: spark;
-    width: 60px;
-    height: 22px;
-    justify-self: end;
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    justify-self: stretch;
+    overflow: hidden;
 }
 
-.index-section .index-sparkline svg {
+.index-section .index-sparkline svg,
+.custom-index-section .index-sparkline svg {
     display: block;
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 
-.index-section .index-sparkline path {
+.index-section .index-sparkline path,
+.custom-index-section .index-sparkline path {
     fill: none;
     stroke: var(--red);
-    stroke-width: 2;
+    stroke-width: 2.4;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
 
-.index-section .index-sparkline.negative path {
+.index-section .index-sparkline.negative path,
+.custom-index-section .index-sparkline.negative path {
     stroke: var(--green);
 }
 
-.index-section .index-sparkline.neutral path {
+.index-section .index-sparkline.neutral path,
+.custom-index-section .index-sparkline.neutral path {
     stroke: var(--text-tertiary);
 }
 
@@ -517,6 +530,16 @@ body {
 /* 自选指数已填项：复用 .index-item 布局，叠加删除按钮 */
 .custom-index-data {
     position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "name value"
+        "change value"
+        "spark spark";
+    align-items: center;
+    gap: 5px 10px;
+    min-height: 84px;
+    padding: 10px 12px;
 }
 
 .custom-index-data .custom-index-remove {
@@ -748,15 +771,15 @@ body {
 .watchlist-item {
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    padding: 8px 10px;
+    padding: 10px 12px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 92px auto 24px;
+    grid-template-columns: minmax(108px, 0.75fr) minmax(72px, auto) minmax(140px, 1.35fr) 28px;
     grid-template-areas:
-        "main spark price action"
-        "cost spark change action";
+        "main price spark action"
+        "cost change spark action";
     align-items: center;
-    gap: 7px 10px;
-    min-height: 64px;
+    gap: 6px 18px;
+    min-height: 70px;
     border-radius: var(--radius-xs);
     min-width: 0;
     box-shadow: none;
@@ -792,25 +815,33 @@ body {
 
 .watchlist-stock-sparkline {
     grid-area: spark;
-    width: 92px;
-    height: 34px;
+    width: 100%;
+    min-width: 0;
+    height: 44px;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: stretch;
     opacity: 0.95;
+    overflow: hidden;
 }
 
 .watchlist-stock-sparkline svg {
     display: block;
     width: 100%;
     height: 100%;
-    overflow: visible;
+    overflow: hidden;
+}
+
+.watchlist-stock-sparkline-zero {
+    stroke: rgba(134, 153, 177, 0.22);
+    stroke-width: 0.9;
+    stroke-dasharray: 4 5;
 }
 
 .watchlist-stock-sparkline-path {
     fill: none;
     stroke: var(--text-tertiary);
-    stroke-width: 2.2;
+    stroke-width: 2.4;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
@@ -825,15 +856,16 @@ body {
 
 .watchlist-stock-price {
     grid-area: price;
-    justify-self: end;
+    justify-self: start;
     color: var(--text-primary);
     font-size: clamp(13px, 1.35vw, 16px);
     font-weight: 800;
     font-family: var(--mono);
     letter-spacing: 0;
-    text-align: right;
+    text-align: left;
     font-variant-numeric: tabular-nums;
     line-height: 1;
+    white-space: nowrap;
 }
 
 .watchlist-stock-price.positive { color: var(--red); }
@@ -842,16 +874,16 @@ body {
 
 .watchlist-stock-change {
     grid-area: change;
-    justify-self: end;
+    justify-self: start;
     font-size: 12px;
     font-weight: 800;
     font-family: var(--mono);
-    text-align: right;
-    letter-spacing: -0.2px;
+    text-align: left;
+    letter-spacing: 0;
     white-space: nowrap;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 2px;
     font-variant-numeric: tabular-nums;
     padding: 0;
@@ -912,7 +944,7 @@ body {
 
 .watchlist-remove-btn {
     grid-area: action;
-    align-self: start;
+    align-self: center;
     width: 24px;
     height: 24px;
     border: 1px solid rgba(255, 23, 68, 0.45);
@@ -929,7 +961,7 @@ body {
     opacity: 0.88;
     transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease, transform 0.12s ease;
     -webkit-tap-highlight-color: transparent;
-    justify-self: center;
+    justify-self: end;
 }
 
 .watchlist-remove-btn:hover {
@@ -2174,8 +2206,6 @@ body {
     }
 }
 
-/* ---------- 龙虎榜 ---------- */
-.dragon-tiger-header-date,
 .watchlist-header-time {
     font-size: 10px;
     color: var(--text-tertiary);
@@ -2185,78 +2215,7 @@ body {
     white-space: nowrap;
 }
 
-.dragon-tiger-list { }
-.dragon-tiger-empty {
-    text-align: center;
-    padding: 14px 8px;
-    color: var(--text-tertiary);
-    font-size: 11px;
-    font-family: var(--mono);
-}
-
-.dragon-tiger-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--border);
-}
-
-.dragon-tiger-item:nth-child(even) {
-    background: var(--bg-row);
-    margin: 0 -10px;
-    padding-left: 10px;
-    padding-right: 10px;
-}
-
-.dragon-tiger-item:last-child { border-bottom: none; }
-
-.dragon-tiger-stock {
-    flex: 0 1 80px;
-    min-width: 0;
-}
-
-.dragon-tiger-stock-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 76px;
-}
-
-.dragon-tiger-stock-code {
-    font-size: 9px;
-    color: var(--text-tertiary);
-    font-family: var(--mono);
-    margin-top: 0;
-}
-
-.dragon-tiger-reason {
-    flex: 1;
-    font-size: 10px;
-    color: var(--text-secondary);
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.dragon-tiger-net {
-    flex: 0 0 auto;
-    font-size: 12px;
-    font-weight: 700;
-    font-family: var(--mono);
-    min-width: 64px;
-    text-align: right;
-    white-space: nowrap;
-}
-
-.dragon-tiger-net.positive { color: var(--red); }
-.dragon-tiger-net.negative { color: var(--green); }
-
-/* ---------- 异动提醒 (打板层 4 池) ---------- */
+/* ---------- 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停) ---------- */
 .limit-up-summary {
     margin-bottom: 8px;
 }
@@ -2361,9 +2320,8 @@ body {
 .limit-up-name {
     color: var(--text-primary);
     font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 .limit-up-code {
     color: var(--text-tertiary);
@@ -2382,20 +2340,23 @@ body {
     text-align: right;
     color: var(--text-secondary);
     font-size: 10px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    line-height: 1.25;
 }
 .limit-up-ind {
     font-size: 10px;
     color: var(--text-tertiary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    line-height: 1.25;
 }
 @media (max-width: 480px) {
     .limit-up-row { grid-template-columns: 1fr 48px 56px 64px; }
-    .limit-up-ind { display: none; }
+    .limit-up-ind {
+        grid-column: 1 / -1;
+        text-align: left;
+    }
 }
 
 /* ---------- 新闻来源 — Text Tabs ---------- */
@@ -3266,8 +3227,14 @@ body {
     padding: 11px 12px 9px;
 }
 
+.electron-app .index-section .index-item,
+.electron-app .custom-index-section .index-item {
+    min-height: 88px;
+    padding: 10px 12px;
+}
+
 .electron-app .index-name {
-    margin-bottom: 5px;
+    margin-bottom: 0;
 }
 
 .electron-app .index-value {
@@ -3276,7 +3243,7 @@ body {
 }
 
 .electron-app .index-change {
-    margin-top: 4px;
+    margin-top: 0;
 }
 
 .electron-app .watchlist-section {
@@ -3394,7 +3361,6 @@ body {
     overflow: auto;
 }
 
-.electron-app .dragon-tiger-empty,
 .electron-app .limit-up-empty,
 .electron-app .news-empty,
 .electron-app .list-empty {
@@ -3412,19 +3378,16 @@ body {
 }
 
 .electron-app .hot-rank-section[data-collapsed="true"] .card-body,
-.electron-app .dragon-tiger-section[data-collapsed="true"] .card-body,
 .electron-app .limit-up-section[data-collapsed="true"] .card-body {
     display: block;
 }
 
 .electron-app .hot-rank-section[data-collapsed="true"],
-.electron-app .dragon-tiger-section[data-collapsed="true"],
 .electron-app .limit-up-section[data-collapsed="true"] {
     opacity: 1;
 }
 
 .electron-app .hot-rank-section[data-collapsed="true"] .collapse-icon,
-.electron-app .dragon-tiger-section[data-collapsed="true"] .collapse-icon,
 .electron-app .limit-up-section[data-collapsed="true"] .collapse-icon {
     transform: none;
 }
@@ -3624,15 +3587,16 @@ body {
     .index-section .index-item,
     .custom-index-section .index-item,
     .custom-index-add {
-        min-height: 58px;
+        min-height: 80px;
         padding: 9px 11px;
         border-right: 1px solid var(--border);
         border-bottom: 1px solid var(--border);
     }
 
-    .index-section .index-sparkline {
-        width: 58px;
-        height: 22px;
+    .index-section .index-sparkline,
+    .custom-index-section .index-sparkline {
+        width: 100%;
+        height: 34px;
     }
 
     .watchlist-grid {
@@ -3651,24 +3615,25 @@ body {
     .custom-index-section .index-item,
     .custom-index-add {
         gap: 5px 7px;
-        min-height: 54px;
+        min-height: 76px;
         padding: 8px 10px;
     }
 
-    .index-section .index-sparkline {
-        width: 46px;
+    .index-section .index-sparkline,
+    .custom-index-section .index-sparkline {
+        width: 100%;
+        height: 32px;
     }
 
     .watchlist-item {
-        grid-template-columns: minmax(0, 1fr) 86px auto 22px;
-        gap: 7px;
-        min-height: 62px;
+        grid-template-columns: minmax(84px, 0.72fr) minmax(60px, auto) minmax(76px, 1fr) 22px;
+        gap: 5px 8px;
+        min-height: 64px;
         padding: 8px 10px;
     }
 
     .watchlist-stock-sparkline {
-        width: 86px;
-        height: 32px;
+        height: 34px;
     }
 }
 
@@ -3688,13 +3653,15 @@ body {
     }
 
     .watchlist-item {
-        grid-template-columns: minmax(0, 1fr) 72px auto 20px;
-        gap: 6px;
+        grid-template-columns: minmax(0, 1fr) minmax(58px, auto) 20px;
+        grid-template-areas:
+            "main price action"
+            "cost change action";
+        gap: 5px 8px;
     }
 
     .watchlist-stock-sparkline {
-        width: 72px;
-        height: 30px;
+        display: none;
     }
 
     .watchlist-header-spark,
@@ -3991,16 +3958,15 @@ body {
 .hot-rank-chg.negative { color: var(--green); }
 .hot-rank-chg.neutral { color: var(--text-tertiary); }
 .hot-rank-concepts {
-    display: none;  /* 移动到第二行 */
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
 }
 @media (min-width: 600px) {
     .hot-rank-item {
         grid-template-columns: 24px 1fr 60px 60px 50px auto;
-    }
-    .hot-rank-concepts {
-        display: flex;
-        gap: 4px;
-        align-items: center;
     }
 }
 .hot-rank-concept {

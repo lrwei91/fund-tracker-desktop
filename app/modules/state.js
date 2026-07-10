@@ -33,7 +33,7 @@
         sector: 5 * 60 * 1000,
     };
 
-    // ---------- 龙虎榜 / 资金流 / 自选股 / 告警 / 自选指数 ----------
+    // ---------- 资金流 / 自选股 / 告警 / 自选指数 ----------
     var WATCH_QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache';
     var WATCH_QUOTE_UPDATE_TIME_KEY = 'fund_tracker_watch_quote_update_time';
     var ALERT_SETTINGS_KEY = 'fund_tracker_alert_settings';
@@ -64,7 +64,7 @@
     var HOT_RANK_CACHE_EM_KEY = 'fund_tracker_hot_rank_em_cache';
     var HOT_RANK_TAB_HEADERS = { ths: '同花顺热榜', em: '东财人气榜' };
 
-    // ---------- 异动提醒 (打板层 4 池) ----------
+    // ---------- 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停) ----------
     var LIMIT_UP_TYPES = ['zt', 'zb', 'dt', 'yzt'];
     var LIMIT_UP_TAB_LABELS = { zt: '涨停', zb: '炸板', dt: '跌停', yzt: '昨涨停' };
     var LIMIT_UP_TAB_KEY = 'fund_tracker_limit_up_tab';

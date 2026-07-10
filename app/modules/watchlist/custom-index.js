@@ -73,10 +73,14 @@
             : '─';
         var arrowHtml = arrow ? ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span>' : '';
         var changeTitle = changeStr + ' / ' + pctStr;
+        var sparkSvg = (marketMod && typeof marketMod.buildIndexSparklineSvg === 'function')
+            ? marketMod.buildIndexSparklineSvg(cached || {}, cls, typeof prev === 'number' ? prev : null)
+            : '';
         return '<div class="index-item custom-index-data" data-code="' + utils.escapeHtml(code) + '">' +
             '<div class="index-name">' + utils.escapeHtml(name) + '</div>' +
             '<div class="index-value ' + cls + '">' + utils.escapeHtml(price) + arrowHtml + '</div>' +
             '<div class="index-change ' + cls + '" title="' + utils.escapeHtml(changeTitle) + '">' + utils.escapeHtml(pctStr) + '</div>' +
+            '<div class="index-sparkline ' + cls + '">' + sparkSvg + '</div>' +
             '<button type="button" class="custom-index-remove" data-remove-custom-index="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button>' +
             '</div>';
     }
