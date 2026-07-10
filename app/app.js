@@ -596,6 +596,11 @@
         var hydrate = window.AppStorage && typeof window.AppStorage.hydrate === 'function'
             ? window.AppStorage.hydrate()
             : Promise.resolve();
-        hydrate.then(bootstrapApp);
+        hydrate.then(function () {
+            if (window.AppState && typeof window.AppState.restorePersistentState === 'function') {
+                window.AppState.restorePersistentState();
+            }
+            bootstrapApp();
+        });
     });
 })();

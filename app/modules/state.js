@@ -245,6 +245,36 @@
         return window.AppState;
     }
 
+    function restorePersistentState() {
+        var restoredNewsSource = storage.getItem(NEWS_SOURCE_KEY);
+        if (restoredNewsSource === 'jin10' || restoredNewsSource === 'eastmoney') {
+            window.AppState.currentNewsSource = restoredNewsSource;
+        }
+        try {
+            var restoredCodes = JSON.parse(storage.getItem(CUSTOM_INDICES_KEY) || '[]');
+            if (Array.isArray(restoredCodes)) {
+                window.AppState.customIndexCodes = restoredCodes.filter(function (c) {
+                    return /^\d{6}$/.test(c);
+                }).slice(0, CUSTOM_INDEX_MAX);
+            }
+        } catch (_error) {}
+        try {
+            var restoredCost = JSON.parse(storage.getItem(WATCHLIST_COST_KEY) || '{}');
+            if (restoredCost && typeof restoredCost === 'object') window.AppState.watchlistCost = restoredCost;
+            var restoredRemarks = JSON.parse(storage.getItem(WATCHLIST_REMARKS_KEY) || '{}');
+            if (restoredRemarks && typeof restoredRemarks === 'object') window.AppState.watchlistRemarks = restoredRemarks;
+        } catch (_error) {}
+        try {
+            var restoredAlerts = JSON.parse(storage.getItem(ALERT_SETTINGS_KEY) || '{}');
+            if (typeof restoredAlerts.enabled === 'boolean') window.AppState.alertEnabled = restoredAlerts.enabled;
+            if (typeof restoredAlerts.threshold === 'number') window.AppState.alertThreshold = restoredAlerts.threshold;
+            var restoredAlertState = JSON.parse(storage.getItem(WATCH_ALERT_STATE_KEY) || '{}');
+            if (restoredAlertState && restoredAlertState.__v === WATCH_ALERT_SCHEMA_VERSION) {
+                window.AppState.watchAlertState = restoredAlertState;
+            }
+        } catch (_error) {}
+    }
+
     window.AppState = {
         // 缓存键
         KEYS: {
@@ -324,5 +354,6 @@
         setState: setState,
         subscribe: subscribeState,
         emit: _emitState,
+        restorePersistentState: restorePersistentState,
     };
 })();
