@@ -16,7 +16,7 @@
     async function resolveStockInput(input) {
         var value = input.trim();
         if (/^\d{6}$/.test(value)) return { code: value, name: '' };
-        var res = await fetch(utils.apiUrl('/stock-search', { q: value }));
+        var res = await window.AppDataClient.fetch('/stock-search', { q: value });
         if (!res.ok) throw new Error('搜索失败 ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || json.data.length === 0) throw new Error('未找到股票');
@@ -120,11 +120,11 @@
     }
 
     function persistWatchQuoteCache() {
-        try { localStorage.setItem(KEYS.WATCH_QUOTE_CACHE_KEY, JSON.stringify(state.watchQuoteCache)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_CACHE_KEY, JSON.stringify(state.watchQuoteCache)); } catch (e) {}
     }
 
     function persistWatchQuoteUpdateTime(value) {
-        try { localStorage.setItem(KEYS.WATCH_QUOTE_UPDATE_TIME_KEY, value || ''); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_UPDATE_TIME_KEY, value || ''); } catch (e) {}
     }
 
     async function loadWatchlistData() {
@@ -135,7 +135,7 @@
             return;
         }
         try {
-            var res = await fetch(utils.apiUrl('/stock', { codes: codes.join(',') }));
+            var res = await window.AppDataClient.fetch('/stock', { codes: codes.join(',') });
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
@@ -165,7 +165,7 @@
     async function loadSingleWatchQuote(code) {
         var updateTimeEl = document.getElementById('watchlist-update-time');
         try {
-            var res = await fetch(utils.apiUrl('/stock', { codes: code }));
+            var res = await window.AppDataClient.fetch('/stock', { codes: code });
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
@@ -322,11 +322,11 @@
     }
 
     function saveWatchlistCost() {
-        try { localStorage.setItem(KEYS.WATCHLIST_COST_KEY, JSON.stringify(state.watchlistCost)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.WATCHLIST_COST_KEY, JSON.stringify(state.watchlistCost)); } catch (e) {}
     }
 
     function saveWatchlistRemarks() {
-        try { localStorage.setItem(KEYS.WATCHLIST_REMARKS_KEY, JSON.stringify(state.watchlistRemarks || {})); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.WATCHLIST_REMARKS_KEY, JSON.stringify(state.watchlistRemarks || {})); } catch (e) {}
     }
 
     function bindWatchRemove() {
@@ -357,9 +357,9 @@
         var stale = codes.filter(function (c) { return !state.watchQuoteCache[c]; });
         if (stale.length === 0) return;
         var lastPull = 0;
-        try { lastPull = parseInt(localStorage.getItem(KEYS.WATCH_REFRESH_THROTTLE_KEY) || '0', 10) || 0; } catch (e) {}
+        try { lastPull = parseInt(window.AppStorage.getItem(KEYS.WATCH_REFRESH_THROTTLE_KEY) || '0', 10) || 0; } catch (e) {}
         if (Date.now() - lastPull < KEYS.WATCH_REFRESH_THROTTLE_MS) return;
-        fetch(utils.apiUrl('/stock', { codes: stale.join(',') }))
+        window.AppDataClient.fetch('/stock', { codes: stale.join(',') })
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (result) {
                 if (!result || !result.success || !result.data) return;
@@ -373,7 +373,7 @@
                 }
                 persistWatchQuoteCache();
                 renderWatchlist();
-                try { localStorage.setItem(KEYS.WATCH_REFRESH_THROTTLE_KEY, String(Date.now())); } catch (e) {}
+                try { window.AppStorage.setItem(KEYS.WATCH_REFRESH_THROTTLE_KEY, String(Date.now())); } catch (e) {}
             })
             .catch(function () { /* 非交易时段拉取失败属正常,静默 */ });
     }

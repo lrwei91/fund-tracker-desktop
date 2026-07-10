@@ -54,7 +54,15 @@ function createMemoryResponse() {
 async function invokeHandler(handler, query) {
     const res = createMemoryResponse();
     await Promise.resolve(handler({ query: query || {} }, res));
-    return res.json();
+    const payload = res.json();
+    if (!payload || !payload.success) throw new Error(payload && payload.message ? payload.message : '数据源返回失败');
+    return payload;
+}
+
+function sourceMeta(result) {
+    return result && result.status === 'fulfilled'
+        ? { status: 'live' }
+        : { status: 'failed', message: result && result.reason && result.reason.message ? result.reason.message : '数据源不可用' };
 }
 
 async function mapLimit(items, concurrency, mapper) {
@@ -415,15 +423,34 @@ async function handler(req, res) {
         const items = await enrichCandidates(pool);
         items.sort((a, b) => b.score - a.score);
 
+        const generatedAt = new Date().toISOString();
+        const sources = {
+            hotRankThs: sourceMeta(thsHot),
+            hotRankEm: sourceMeta(emHot),
+            limitUpZt: sourceMeta(ztPool),
+            limitUpYzt: sourceMeta(yztPool),
+            limitUpZb: sourceMeta(zbPool),
+            limitUpDt: sourceMeta(dtPool),
+            dragonTiger: sourceMeta(dragonTiger),
+            sector: sourceMeta(sector),
+        };
+        const sourceStatus = {
+            hotRank: thsHot.status === 'fulfilled' || emHot.status === 'fulfilled',
+            limitUp: ztPool.status === 'fulfilled' || yztPool.status === 'fulfilled' || zbPool.status === 'fulfilled',
+            dragonTiger: dragonTiger.status === 'fulfilled',
+            sector: sector.status === 'fulfilled',
+        };
         return ok(res, {
-            generatedAt: new Date().toISOString(),
-            sourceStatus: {
-                hotRank: thsHot.status === 'fulfilled' || emHot.status === 'fulfilled',
-                limitUp: ztPool.status === 'fulfilled' || yztPool.status === 'fulfilled' || zbPool.status === 'fulfilled',
-                dragonTiger: dragonTiger.status === 'fulfilled',
-                sector: sector.status === 'fulfilled',
-            },
+            generatedAt: generatedAt,
+            sourceStatus: sourceStatus,
             items: items.slice(0, limit),
+        }, {
+            meta: {
+                generatedAt: generatedAt,
+                sources: sources,
+                stale: false,
+                degraded: Object.values(sourceStatus).some((available) => !available),
+            },
         });
     } catch (error) {
         return fail(res, 502, '机会雷达接口不可用', { error: error.message });

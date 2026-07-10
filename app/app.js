@@ -48,7 +48,7 @@
 
     function readSettings() {
         try {
-            return JSON.parse(localStorage.getItem(KEYS.SETTINGS_KEY) || '{}') || {};
+            return JSON.parse(window.AppStorage.getItem(KEYS.SETTINGS_KEY) || '{}') || {};
         } catch (e) {
             return {};
         }
@@ -66,7 +66,7 @@
 
     function saveSettings() {
         try {
-            localStorage.setItem(KEYS.SETTINGS_KEY, JSON.stringify({
+            window.AppStorage.setItem(KEYS.SETTINGS_KEY, JSON.stringify({
                 autoRefresh: state.isAutoRefresh,
                 mainInterval: state.refreshSecondsMain,
                 signalInterval: state.refreshSecondsSignal,
@@ -108,7 +108,7 @@
 
     function handleHash() {
         var hash = window.location.hash.replace('#', '');
-        var savedTab = localStorage.getItem(KEYS.ACTIVE_TAB_KEY);
+        var savedTab = window.AppStorage.getItem(KEYS.ACTIVE_TAB_KEY);
         var tab = KEYS.VALID_TABS.includes(hash) ? hash : (KEYS.VALID_TABS.includes(savedTab) ? savedTab : 'dashboard');
         switchTab(tab, false);
     }
@@ -116,7 +116,7 @@
     function switchTab(tab, updateHash) {
         if (!KEYS.VALID_TABS.includes(tab)) return;
         state.currentTab = tab;
-        try { localStorage.setItem(KEYS.ACTIVE_TAB_KEY, tab); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.ACTIVE_TAB_KEY, tab); } catch (e) {}
 
         document.querySelectorAll('.tab-btn').forEach(function (btn) {
             btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
@@ -195,7 +195,7 @@
     // ============================================================
 
     function initSectorTabs() {
-        var savedTarget = localStorage.getItem(KEYS.SECTOR_TAB_KEY);
+        var savedTarget = window.AppStorage.getItem(KEYS.SECTOR_TAB_KEY);
         if (savedTarget) activateSectorTab(savedTarget);
 
         var tabs = document.querySelectorAll('.sector-tab');
@@ -203,7 +203,7 @@
             tab.addEventListener('click', function () {
                 var target = tab.getAttribute('data-tab');
                 activateSectorTab(target);
-                try { localStorage.setItem(KEYS.SECTOR_TAB_KEY, target); } catch (e) {}
+                try { window.AppStorage.setItem(KEYS.SECTOR_TAB_KEY, target); } catch (e) {}
             });
         });
     }
@@ -400,6 +400,19 @@
         startDailyRefresh();
     }
 
+    function startRecurring(stateKey, delayMs, shouldRun, task) {
+        if (state[stateKey]) clearTimeout(state[stateKey]);
+        var run = function () {
+            var work = shouldRun() ? Promise.resolve(task()) : Promise.resolve();
+            work.catch(function (error) {
+                console.warn('[fund-tracker] refresh task failed', error && error.message ? error.message : error);
+            }).finally(function () {
+                state[stateKey] = setTimeout(run, delayMs);
+            });
+        };
+        state[stateKey] = setTimeout(run, delayMs);
+    }
+
     function stopAllAutoRefresh() {
         stopMainAutoRefresh();
         stopSignalAutoRefresh();
@@ -409,16 +422,13 @@
 
     function startMainAutoRefresh() {
         stopMainAutoRefresh();
-        state.refreshIntervalMain = setInterval(function () {
-            if (!utils.isIntradayRefreshWindow()) return;
-            if (window.AppMarket) {
-                window.AppMarket.loadIndexData();
-            }
-            if (window.AppWatchlist) {
-                window.AppWatchlist.loadWatchlistData();
-                window.AppWatchlist.loadCustomIndexData();
-            }
-        }, state.refreshSecondsMain * 1000);
+        startRecurring('refreshIntervalMain', state.refreshSecondsMain * 1000, utils.isIntradayRefreshWindow, function () {
+            return Promise.all([
+                window.AppMarket ? window.AppMarket.loadIndexData() : null,
+                window.AppWatchlist ? window.AppWatchlist.loadWatchlistData() : null,
+                window.AppWatchlist ? window.AppWatchlist.loadCustomIndexData() : null,
+            ]);
+        });
     }
 
     function stopMainAutoRefresh() {
@@ -430,16 +440,13 @@
 
     function startSignalAutoRefresh() {
         stopSignalAutoRefresh();
-        state.refreshIntervalSignal = setInterval(function () {
-            if (!utils.isIntradayRefreshWindow()) return;
-            if (state.currentTab === 'signals' && window.AppSignals) {
-                window.AppSignals.loadOpportunityRadarData();
-            }
-            if (window.AppMarket) {
-                window.AppMarket.loadCapitalData();
-                window.AppMarket.loadSectorData();
-            }
-        }, state.refreshSecondsSignal * 1000);
+        startRecurring('refreshIntervalSignal', state.refreshSecondsSignal * 1000, utils.isIntradayRefreshWindow, function () {
+            return Promise.all([
+                state.currentTab === 'signals' && window.AppSignals ? window.AppSignals.loadOpportunityRadarData() : null,
+                window.AppMarket ? window.AppMarket.loadCapitalData() : null,
+                window.AppMarket ? window.AppMarket.loadSectorData() : null,
+            ]);
+        });
     }
 
     function stopSignalAutoRefresh() {
@@ -451,9 +458,9 @@
 
     function startNewsAutoRefresh() {
         stopNewsAutoRefresh();
-        state.refreshIntervalNews = setInterval(function () {
-            if (state.currentTab === 'news' && window.AppNews) window.AppNews.loadNewsData();
-        }, state.refreshSecondsNews * 1000);
+        startRecurring('refreshIntervalNews', state.refreshSecondsNews * 1000, function () { return true; }, function () {
+            return state.currentTab === 'news' && window.AppNews ? window.AppNews.loadNewsData() : null;
+        });
     }
 
     function stopNewsAutoRefresh() {
@@ -465,13 +472,9 @@
 
     function startDailyRefresh() {
         stopDailyRefresh();
-        state.refreshIntervalDaily = setInterval(function () {
-            // 收盘后窗口(16:00 起)触发日级数据刷新
-            if (!utils.isAfterCloseDailyWindow()) return;
-            if (window.AppSignals) {
-                window.AppSignals.loadLimitUpData(true);
-            }
-        }, 30 * 60 * 1000);
+        startRecurring('refreshIntervalDaily', 30 * 60 * 1000, utils.isAfterCloseDailyWindow, function () {
+            return window.AppSignals ? window.AppSignals.loadLimitUpData(true) : null;
+        });
     }
 
     function stopDailyRefresh() {
@@ -484,27 +487,6 @@
     // ============================================================
     // 加载入口:按市场阶段分支
     // ============================================================
-
-    function loadIntradayData(force) {
-        if (window.AppMarket) window.AppMarket.loadIndexData(force);
-        if (window.AppWatchlist) {
-            window.AppWatchlist.loadWatchlistData();
-            window.AppWatchlist.loadCustomIndexData();
-        }
-    }
-
-    function loadIntradaySignalData(force) {
-        if (!window.AppMarket) return;
-        window.AppMarket.loadCapitalData(force);
-        window.AppMarket.loadSectorData(force);
-    }
-
-    function loadAfterCloseDailyData() {
-        if (window.AppSignals) {
-            var force = utils.isAfterCloseDailyWindow();
-            window.AppSignals.loadLimitUpData(force);
-        }
-    }
 
     // 从 localStorage 缓存渲染大盘/资金/板块/自选股,并显示"最后一次实际更新"的时间
     // 不会触发任何 fetch。
@@ -555,16 +537,6 @@
         }
     }
 
-    function loadAllData() {
-        loadIntradayData();
-        loadIntradaySignalData();
-        loadAfterCloseDailyData();
-        if (window.AppSignals) window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource());
-        state.hasInitialDataLoaded = true;
-        // News is loaded on tab switch
-        if (state.currentTab === 'news' && window.AppNews) window.AppNews.loadNewsData();
-    }
-
     // 手动刷新:无视交易时段,重新拉一遍所有数据
     function manualRefreshAll(label, options) {
         options = options || {};
@@ -590,7 +562,7 @@
     // DOMContentLoaded — 启动入口
     // ============================================================
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function bootstrapApp() {
         loadSettings();
         initTabs();
         initCollapsible();
@@ -618,5 +590,12 @@
         });
         state.hasInitialDataLoaded = true;
         isBootstrapping = false;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var hydrate = window.AppStorage && typeof window.AppStorage.hydrate === 'function'
+            ? window.AppStorage.hydrate()
+            : Promise.resolve();
+        hydrate.then(bootstrapApp);
     });
 })();

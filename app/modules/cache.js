@@ -22,14 +22,14 @@
         if (_legacyCleaned) return;
         _legacyCleaned = true;
         LEGACY_CACHE_KEYS.forEach(function (key) {
-            try { localStorage.removeItem(key); } catch (e) {}
+            try { window.AppStorage.removeItem(key); } catch (e) {}
         });
     }
 
     function readJson(key, fallback) {
         cleanupLegacyCaches();
         try {
-            var raw = localStorage.getItem(key);
+            var raw = window.AppStorage.getItem(key);
             return raw ? JSON.parse(raw) : fallback;
         } catch (e) {
             return fallback;
@@ -37,7 +37,7 @@
     }
 
     function writeJson(key, value) {
-        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+        try { window.AppStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
     }
 
     // 带 TTL 的缓存: 读时如果超过 ttlMs 返回 null
@@ -58,7 +58,7 @@
     function readDailyDataCache(key) {
         cleanupLegacyCaches();
         try {
-            return JSON.parse(localStorage.getItem(key) || 'null');
+            return JSON.parse(window.AppStorage.getItem(key) || 'null');
         } catch (e) {
             return null;
         }
@@ -66,7 +66,7 @@
 
     function writeDailyDataCache(key, date, data) {
         try {
-            localStorage.setItem(key, JSON.stringify({
+            window.AppStorage.setItem(key, JSON.stringify({
                 date: date,
                 data: data,
                 updatedAt: new Date().toISOString(),

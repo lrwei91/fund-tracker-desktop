@@ -2,6 +2,18 @@
 // (保持纯函数 / 纯常量, 不放任何业务状态)
 
 const { TextDecoder } = require('util');
+const gateway = require('./_gateway');
+
+function providerFor(url) {
+    var host = new URL(url).hostname;
+    if (host.endsWith('eastmoney.com')) return 'eastmoney';
+    if (host.endsWith('gtimg.cn') || host.endsWith('qq.com')) return 'tencent';
+    return 'default';
+}
+
+function requestKey(url, options) {
+    return `${(options && options.method) || 'GET'}:${url}:${(options && options.body) || ''}`;
+}
 
 // 交易时段常量 (上海时区分钟数, 9:15=555, 11:30=690, 13:00=780, 15:00=900, 15:05=905, 16:00=960, 21:00=1260)
 // 业务时间判断函数 (isIntradayRefreshWindow 等) 在 app.js 里维护, 此处只放静态常量备以后用
@@ -38,16 +50,18 @@ function fail(res, status, message, extra) {
 }
 
 async function fetchJson(url, options) {
-    const response = await fetch(url, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
-            Referer: 'https://finance.eastmoney.com/',
-            ...(options && options.headers ? options.headers : {}),
-        },
-        signal: AbortSignal.timeout((options && options.timeout) || 10000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
+    return gateway.request(providerFor(url), requestKey(url, options), async () => {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
+                Referer: 'https://finance.eastmoney.com/',
+                ...(options && options.headers ? options.headers : {}),
+            },
+            signal: AbortSignal.timeout((options && options.timeout) || 10000),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }, { cacheTtl: (options && options.cacheTtl) || 5000 });
 }
 
 // 东财统一请求 helper(指数退避重试 + 串行限流防封):
@@ -63,8 +77,9 @@ async function emGet(url, options) {
     const baseDelay = 300;
     const timeout = (options && options.timeout) || 10000;
 
-    let lastError;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
+    return gateway.request('eastmoney', requestKey(url, options), async () => {
+      let lastError;
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
         let response;
         try {
             response = await fetch(url, {
@@ -99,10 +114,10 @@ async function emGet(url, options) {
             // 4xx(除 429)不重试,直接抛
             throw new Error(`HTTP ${response.status}`);
         }
-        return response.json();
-    }
-    // 循环正常出口不会到这里;TypeScript 友好型兜底
-    throw lastError || new Error('emGet 重试耗尽');
+          return response.json();
+      }
+      throw lastError || new Error('emGet 重试耗尽');
+    }, { cacheTtl: (options && options.cacheTtl) || 10000 });
 }
 
 function sleep(ms) {
@@ -110,7 +125,8 @@ function sleep(ms) {
 }
 
 async function fetchText(url, options) {
-    const response = await fetch(url, {
+    return gateway.request(providerFor(url), requestKey(url, options), async () => {
+      const response = await fetch(url, {
         headers: {
             'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
             Referer: 'https://finance.eastmoney.com/',
@@ -118,12 +134,14 @@ async function fetchText(url, options) {
         },
         signal: AbortSignal.timeout((options && options.timeout) || 10000),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.text();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    }, { cacheTtl: (options && options.cacheTtl) || 5000 });
 }
 
 async function fetchGbkText(url, options) {
-    const response = await fetch(url, {
+    return gateway.request('tencent', requestKey(url, options), async () => {
+      const response = await fetch(url, {
         headers: {
             'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
             Referer: 'https://finance.qq.com/',
@@ -131,9 +149,10 @@ async function fetchGbkText(url, options) {
         },
         signal: AbortSignal.timeout((options && options.timeout) || 10000),
     });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const buffer = await response.arrayBuffer();
-    return new TextDecoder('gbk').decode(buffer);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = await response.arrayBuffer();
+      return new TextDecoder('gbk').decode(buffer);
+    }, { cacheTtl: (options && options.cacheTtl) || 5000 });
 }
 
 function toNumber(value) {

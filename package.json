@@ -1,36 +1,42 @@
 {
-  "name": "fund-tracker-electron",
+  "name": "fund-tracker-desktop",
   "version": "0.1.21",
   "description": "恭喜发财本地 Electron 桌面应用",
   "main": "main.js",
   "private": true,
+  "engines": {
+    "node": ">=24 <27"
+  },
   "scripts": {
     "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && for f in renderer/*.js app/app.js app/api/*.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done",
+    "check": "node --check main.js && node --check preload.js && node --check app/config-schema.js && for f in desktop/*.js renderer/*.js app/app.js app/api/*.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done",
     "smoke": "node scripts/smoke-watchlist.js",
     "version:bump": "node scripts/bump-version.js",
-    "build:mac": "npm run version:bump && npm run build:mac:raw",
-    "build:win": "npm run version:bump && npm run build:win:raw",
-    "build:win:arm64": "npm run version:bump && npm run build:win:arm64:raw",
-    "build:all": "npm run version:bump && npm run build:mac:raw && npm run build:win:raw",
+    "build:mac": "npm run build:mac:raw",
+    "build:win": "npm run build:win:raw",
+    "build:win:arm64": "npm run build:win:arm64:raw",
+    "build:all": "npm run build:mac:raw && npm run build:win:raw",
     "build:mac:raw": "electron-builder --mac",
     "build:win:raw": "electron-builder --win --x64",
     "build:win:arm64:raw": "electron-builder --win --arm64",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" main.js preload.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "overrides": {
+    "form-data": "^4.0.6"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^9.1.2",
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
     "prettier": "^3.9.4",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.10"
   },
   "build": {
     "appId": "com.local.fundtracker",
@@ -55,6 +61,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "desktop/**/*",
       "renderer/**/*",
       "app/**/*"
     ]

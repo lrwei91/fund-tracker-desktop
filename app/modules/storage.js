@@ -1,108 +1,62 @@
-// ================================================================
-// 用户配置存储 shim
-// 关键用户数据写入 Electron config.json;行情/新闻等临时缓存仍走 localStorage。
-// 暴露到 window.AppStorage,并拦截 localStorage 的 get/set/remove。
-// ================================================================
-
+// Durable config facade. App modules call this instead of monkey-patching Storage.
 (function () {
-    var CONFIG_KEYS = [
-        'fund_tracker_settings',
-        'fund_tracker_active_main_tab',
-        'fund_tracker_news_source',
-        'fund_tracker_collapse_state',
-        'fund_tracker_sector_tab',
-        'fund_tracker_alert_settings',
-        'fund_tracker_watch_alert_state',
-        'fund_tracker_custom_indices',
-        'fund_tracker_watchlist_cost',
-        'fund_tracker_watchlist_remarks',
-        'fund_tracker_watchlist',
-        'fund_tracker_watchlist_tabs',
-        'fund_tracker_active_watch_tab',
-        'fund_tracker_hot_rank_source',
-        'fund_tracker_limit_up_tab',
-        'fund_tracker_holding_clown_mode',
-    ];
-    var CONFIG_KEY_MAP = {};
-    CONFIG_KEYS.forEach(function (key) { CONFIG_KEY_MAP[key] = true; });
+    var schema = window.AppConfigSchema || { keys: [] };
+    var durable = new Set(schema.keys || []);
+    var pending = {};
+    var flushTimer = null;
+    var nativeStorage = window.localStorage;
 
-    var nativeGetItem = Storage.prototype.getItem;
-    var nativeSetItem = Storage.prototype.setItem;
-    var nativeRemoveItem = Storage.prototype.removeItem;
-    var shellStorage = window.shell && window.shell.configStorage;
-
-    function isConfigKey(key) {
-        return !!CONFIG_KEY_MAP[String(key)];
+    function getItem(key) { return nativeStorage.getItem(String(key)); }
+    function setItem(key, value) {
+        var normalized = String(value);
+        nativeStorage.setItem(String(key), normalized);
+        if (durable.has(String(key))) schedulePatch(String(key), normalized);
     }
-
-    function readConfigItem(key) {
-        if (!shellStorage || typeof shellStorage.getItem !== 'function') return null;
-        try {
-            return shellStorage.getItem(String(key));
-        } catch (e) {
-            return null;
+    function removeItem(key) {
+        nativeStorage.removeItem(String(key));
+        if (durable.has(String(key))) schedulePatch(String(key), null);
+    }
+    function schedulePatch(key, value) {
+        pending[key] = value;
+        if (flushTimer) return;
+        flushTimer = setTimeout(flush, 150);
+    }
+    function flush() {
+        if (flushTimer) clearTimeout(flushTimer);
+        flushTimer = null;
+        var changes = pending;
+        pending = {};
+        var payload = changes;
+        if (!window.shell || !window.shell.configStorage || typeof window.shell.configStorage.patch !== 'function') {
+            return Promise.resolve();
         }
+        return window.shell.configStorage.patch(payload).catch(function (error) {
+            console.warn('[fund-tracker] config write failed', error && error.message ? error.message : error);
+        });
     }
-
-    function writeConfigItem(key, value) {
-        if (!shellStorage || typeof shellStorage.setItem !== 'function') return false;
-        try {
-            return !!shellStorage.setItem(String(key), String(value));
-        } catch (e) {
-            return false;
+    function hydrate() {
+        if (!window.shell || !window.shell.configStorage || typeof window.shell.configStorage.load !== 'function') {
+            return Promise.resolve();
         }
+        return window.shell.configStorage.load().then(function (snapshot) {
+            var data = snapshot && snapshot.data ? snapshot.data : {};
+            Object.keys(data).forEach(function (key) {
+                if (durable.has(key) && data[key] !== null) nativeStorage.setItem(key, String(data[key]));
+            });
+            var migration = {};
+            durable.forEach(function (key) {
+                if (!Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) {
+                    migration[key] = nativeStorage.getItem(key);
+                }
+            });
+            if (Object.keys(migration).length) return window.shell.configStorage.patch(migration);
+        }).catch(function (error) {
+            console.warn('[fund-tracker] config load failed', error && error.message ? error.message : error);
+        });
     }
 
-    function removeConfigItem(key) {
-        if (!shellStorage || typeof shellStorage.removeItem !== 'function') return false;
-        try {
-            return !!shellStorage.removeItem(String(key));
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function migrateConfigKey(key) {
-        if (!shellStorage || !isConfigKey(key)) return;
-        if (readConfigItem(key) !== null) return;
-        var oldValue = nativeGetItem.call(localStorage, key);
-        if (oldValue !== null) writeConfigItem(key, oldValue);
-    }
-
-    function migrateConfigKeys() {
-        CONFIG_KEYS.forEach(migrateConfigKey);
-    }
-
-    if (shellStorage) {
-        migrateConfigKeys();
-        Storage.prototype.getItem = function (key) {
-            if (this === localStorage && isConfigKey(key)) {
-                var configValue = readConfigItem(key);
-                if (configValue !== null) return configValue;
-            }
-            return nativeGetItem.call(this, key);
-        };
-        Storage.prototype.setItem = function (key, value) {
-            if (this === localStorage && isConfigKey(key)) {
-                writeConfigItem(key, value);
-            }
-            return nativeSetItem.call(this, key, value);
-        };
-        Storage.prototype.removeItem = function (key) {
-            if (this === localStorage && isConfigKey(key)) {
-                removeConfigItem(key);
-            }
-            return nativeRemoveItem.call(this, key);
-        };
-    }
-
-    window.AppStorage = {
-        isConfigKey: isConfigKey,
-        migrateConfigKeys: migrateConfigKeys,
-        getConfigPath: function () {
-            return window.shell && typeof window.shell.getConfigPath === 'function'
-                ? window.shell.getConfigPath()
-                : Promise.resolve(null);
-        },
-    };
+    window.AppStorage = { flush: flush, getConfigPath: function () {
+        return window.shell && typeof window.shell.getConfigPath === 'function' ? window.shell.getConfigPath() : Promise.resolve(null);
+    }, getItem: getItem, hydrate: hydrate, removeItem: removeItem, setItem: setItem };
+    window.addEventListener('beforeunload', function () { flush(); });
 })();

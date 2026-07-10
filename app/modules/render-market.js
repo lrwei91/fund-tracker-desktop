@@ -18,7 +18,7 @@
 
     function getIndexPrevPct() {
         try {
-            var raw = JSON.parse(localStorage.getItem(KEYS.INDEX_PREV_KEY));
+            var raw = JSON.parse(window.AppStorage.getItem(KEYS.INDEX_PREV_KEY));
             if (raw && typeof raw === 'object') return raw;
         } catch (e) { /* ignore */ }
         return { market: { _updatedAt: 0, data: {} }, custom: { _updatedAt: 0, data: {} } };
@@ -47,7 +47,7 @@
         });
         var cur = getIndexPrevPct();
         cur[bucket] = { _updatedAt: nowMs, data: cleanData };
-        try { localStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
         return true;
     }
 
@@ -59,7 +59,7 @@
         b.data[code] = pct;
         // 单点写入不动 _updatedAt,避免污染节流基准
         cur[bucket] = b;
-        try { localStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
     }
 
     // 移除自选指数时同步清掉 prev,避免幽灵 prev
@@ -69,7 +69,7 @@
         if (Object.prototype.hasOwnProperty.call(b.data, code)) {
             delete b.data[code];
             cur[bucket] = b;
-            try { localStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
+            try { window.AppStorage.setItem(KEYS.INDEX_PREV_KEY, JSON.stringify(cur)); } catch (e) {}
         }
     }
 
@@ -223,7 +223,7 @@
         }
 
         try {
-            var res = await fetch(utils.apiUrl('/market-data', { type: 'index' }));
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'index' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
@@ -247,7 +247,7 @@
 
         try {
             if (!newData) {
-                var res = await fetch(utils.apiUrl('/market-data', { type: 'capital' }));
+                var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 var result = await res.json();
                 if (result.success && result.data && result.data.mainFund && result.data.mainFund.value !== undefined) {
@@ -276,7 +276,7 @@
 
         try {
             if (!newData) {
-                var res = await fetch(utils.apiUrl('/market-data', { type: 'sector' }));
+                var res = await window.AppDataClient.fetch('/market-data', { type: 'sector' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 var result = await res.json();
                 if (result.success && result.data && result.data.inflow) {

@@ -5,6 +5,11 @@
 // ================================================================
 
 (function () {
+    var storage = window.AppStorage || {
+        getItem: function (key) { return window.localStorage ? window.localStorage.getItem(key) : null; },
+        setItem: function (key, value) { if (window.localStorage) window.localStorage.setItem(key, value); },
+        removeItem: function (key) { if (window.localStorage) window.localStorage.removeItem(key); },
+    };
     // ---------- 通用 keys ----------
     var SETTINGS_KEY = 'fund_tracker_settings';
     var ACTIVE_TAB_KEY = 'fund_tracker_active_main_tab';
@@ -131,7 +136,7 @@
     var watchAlertState = {};
 
     // 新闻源 / 列表 state
-    var currentNewsSource = localStorage.getItem(NEWS_SOURCE_KEY) || 'jin10';
+    var currentNewsSource = storage.getItem(NEWS_SOURCE_KEY) || 'jin10';
     var newsState = {
         jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false },
         eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false },
@@ -141,17 +146,17 @@
 
     // 自选股行情(避免非交易时段刷新后变成"待刷新")
     try {
-        var rawCache = localStorage.getItem(WATCH_QUOTE_CACHE_KEY);
+        var rawCache = storage.getItem(WATCH_QUOTE_CACHE_KEY);
         if (rawCache) watchQuoteCache = JSON.parse(rawCache) || {};
     } catch (e) { watchQuoteCache = {}; }
     try {
-        var rawTime = localStorage.getItem(WATCH_QUOTE_UPDATE_TIME_KEY);
+        var rawTime = storage.getItem(WATCH_QUOTE_UPDATE_TIME_KEY);
         if (rawTime) watchQuoteUpdateTime = rawTime;
     } catch (e) { /* ignore */ }
 
     // 自选指数(板块/ETF)
     try {
-        var rawCodes = localStorage.getItem(CUSTOM_INDICES_KEY);
+        var rawCodes = storage.getItem(CUSTOM_INDICES_KEY);
         if (rawCodes) {
             var parsed = JSON.parse(rawCodes);
             if (Array.isArray(parsed)) {
@@ -160,24 +165,24 @@
         }
     } catch (e) { /* ignore */ }
     try {
-        var rawCustCache = localStorage.getItem(CUSTOM_INDEX_QUOTE_CACHE_KEY);
+        var rawCustCache = storage.getItem(CUSTOM_INDEX_QUOTE_CACHE_KEY);
         if (rawCustCache) customIndexCache = JSON.parse(rawCustCache) || {};
     } catch (e) { /* ignore */ }
     try {
-        var rawCustTime = localStorage.getItem(CUSTOM_INDEX_UPDATE_TIME_KEY);
+        var rawCustTime = storage.getItem(CUSTOM_INDEX_UPDATE_TIME_KEY);
         if (rawCustTime) customIndexUpdateTime = rawCustTime;
     } catch (e) { /* ignore */ }
 
     // 自选股持仓成本/股数
     try {
-        var rawCost = localStorage.getItem(WATCHLIST_COST_KEY);
+        var rawCost = storage.getItem(WATCHLIST_COST_KEY);
         if (rawCost) {
             var parsedCost = JSON.parse(rawCost);
             if (parsedCost && typeof parsedCost === 'object') watchlistCost = parsedCost;
         }
     } catch (e) { /* ignore */ }
     try {
-        var rawRemarks = localStorage.getItem(WATCHLIST_REMARKS_KEY);
+        var rawRemarks = storage.getItem(WATCHLIST_REMARKS_KEY);
         if (rawRemarks) {
             var parsedRemarks = JSON.parse(rawRemarks);
             if (parsedRemarks && typeof parsedRemarks === 'object') watchlistRemarks = parsedRemarks;
@@ -186,17 +191,17 @@
 
     // 告警设置 + 自选股 alert 状态(带 schema 校验)
     try {
-        var saved = JSON.parse(localStorage.getItem(ALERT_SETTINGS_KEY) || '{}') || {};
+        var saved = JSON.parse(storage.getItem(ALERT_SETTINGS_KEY) || '{}') || {};
         if (typeof saved.enabled === 'boolean') alertEnabled = saved.enabled;
         if (typeof saved.threshold === 'number' && saved.threshold > 0 && saved.threshold <= 50) {
             alertThreshold = saved.threshold;
         }
     } catch (e) { /* ignore */ }
     try {
-        var rawAlertState = JSON.parse(localStorage.getItem(WATCH_ALERT_STATE_KEY) || '{}') || {};
+        var rawAlertState = JSON.parse(storage.getItem(WATCH_ALERT_STATE_KEY) || '{}') || {};
         if (rawAlertState && rawAlertState.__v !== WATCH_ALERT_SCHEMA_VERSION) {
             watchAlertState = {};
-            try { localStorage.removeItem(WATCH_ALERT_STATE_KEY); } catch (e) {}
+            try { storage.removeItem(WATCH_ALERT_STATE_KEY); } catch (e) {}
         } else {
             watchAlertState = rawAlertState;
         }

@@ -75,15 +75,12 @@ async function fetchOneCode(code, days) {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
         Referer: 'https://quote.eastmoney.com/',
     };
-    let lastError = null;
     for (const url of endpoints) {
         try {
             const json = await emGet(url, { headers, timeout: API_TIMEOUTS.push2 });
             const klines = json && json.data && Array.isArray(json.data.klines) ? json.data.klines : [];
             if (klines.length) return klines;
-        } catch (error) {
-            lastError = error;
-        }
+        } catch (_error) {}
     }
     // 所有端点均不可用 — 返回空数组,上层会跳过此股票
     return [];

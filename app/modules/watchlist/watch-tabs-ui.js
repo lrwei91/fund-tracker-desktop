@@ -10,7 +10,7 @@
     var KEYS = W.KEYS;
 
     function initWatchlistTabs() {
-        var savedId = localStorage.getItem(KEYS.ACTIVE_WATCH_TAB_KEY);
+        var savedId = window.AppStorage.getItem(KEYS.ACTIVE_WATCH_TAB_KEY);
         state.activeWatchTabId = savedId || 'default';
         W.renderWatchTabs();
         W.initWatchTabScroller();
@@ -50,7 +50,7 @@
     function switchWatchTab(tabId) {
         if (!tabId || tabId === state.activeWatchTabId) return;
         state.activeWatchTabId = tabId;
-        localStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, tabId);
+        window.AppStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, tabId);
         W.renderWatchTabs();
         W.renderWatchlist();
     }
@@ -113,7 +113,7 @@
         var id = 'tab-' + Date.now().toString(36);
         tabs.push({ id: id, name: cleanName, codes: [] });
         state.activeWatchTabId = id;
-        localStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, id);
+        window.AppStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, id);
         W.saveWatchTabs(tabs);
         W.renderWatchTabs();
         W.renderWatchlist();
@@ -133,7 +133,7 @@
         var nextTabs = tabs.filter(function (tab) { return tab.id !== tabId; });
         if (state.activeWatchTabId === tabId) {
             state.activeWatchTabId = nextTabs[0].id;
-            localStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
+            window.AppStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
         }
         W.saveWatchTabs(nextTabs);
         W.renderWatchTabs();

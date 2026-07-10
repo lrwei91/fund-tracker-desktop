@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, Menu, protocol, screen, session, Tray, nativeImage } = require('electron')
-const fs = require('fs')
 const path = require('path')
+const { createConfigStore } = require('./desktop/config-store')
+const { registerProtocol } = require('./desktop/protocol-router')
 
 const IS_WINDOWS = process.platform === 'win32'
 
@@ -31,56 +32,12 @@ const WIDGET_W = 320
 const WIDGET_H = 58
 const WIDGET_MARGIN = 20
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-}
-
 let mainWin = null
 let holdingWin = null
 let tray = null
 let lastHiddenWindow = 'main'
 let isClearingAndQuitting = false
-let userConfigCache = null
-
-const USER_CONFIG_VERSION = 1
-const CONFIG_STORAGE_KEYS = new Set([
-  'fund_tracker_settings',
-  'fund_tracker_active_main_tab',
-  'fund_tracker_news_source',
-  'fund_tracker_collapse_state',
-  'fund_tracker_sector_tab',
-  'fund_tracker_alert_settings',
-  'fund_tracker_watch_alert_state',
-  'fund_tracker_custom_indices',
-  'fund_tracker_watchlist_cost',
-  'fund_tracker_watchlist_remarks',
-  'fund_tracker_watchlist',
-  'fund_tracker_watchlist_tabs',
-  'fund_tracker_active_watch_tab',
-  'fund_tracker_hot_rank_source',
-  'fund_tracker_limit_up_tab',
-  'fund_tracker_holding_clown_mode',
-])
-const CONFIG_JSON_KEYS = new Set([
-  'fund_tracker_settings',
-  'fund_tracker_collapse_state',
-  'fund_tracker_alert_settings',
-  'fund_tracker_watch_alert_state',
-  'fund_tracker_custom_indices',
-  'fund_tracker_watchlist_cost',
-  'fund_tracker_watchlist_remarks',
-  'fund_tracker_watchlist',
-  'fund_tracker_watchlist_tabs',
-])
+const configStore = createConfigStore(() => app.getPath('userData'))
 
 const MAIN_WINDOW_CHROME = process.platform === 'darwin'
   ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 14 } }
@@ -88,18 +45,6 @@ const MAIN_WINDOW_CHROME = process.platform === 'darwin'
 
 function appUrl(pathname) {
   return `fund-tracker://app/${String(pathname || 'index.html').replace(/^\/+/, '')}`
-}
-
-function jsonResponse(status, body) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': MIME['.json'] },
-  })
-}
-
-function isInside(root, target) {
-  const relative = path.relative(root, target)
-  return Boolean(relative) && !relative.startsWith('..') && !path.isAbsolute(relative)
 }
 
 function getLocalDataPaths() {
@@ -114,121 +59,17 @@ function getLocalDataPaths() {
 }
 
 function getUserConfigPath() {
-  return path.join(app.getPath('userData'), 'config.json')
-}
-
-function createEmptyUserConfig() {
-  return {
-    version: USER_CONFIG_VERSION,
-    updatedAt: null,
-    data: {},
-  }
-}
-
-function isValidConfigKey(key) {
-  return typeof key === 'string' && CONFIG_STORAGE_KEYS.has(key)
-}
-
-function normalizeUserConfig(raw) {
-  const config = raw && typeof raw === 'object' ? raw : {}
-  const data = config.data && typeof config.data === 'object'
-    ? config.data
-    : (config.values && typeof config.values === 'object' ? config.values : {})
-  return {
-    version: USER_CONFIG_VERSION,
-    updatedAt: typeof config.updatedAt === 'string' ? config.updatedAt : null,
-    data,
-  }
-}
-
-function readUserConfig() {
-  if (userConfigCache) return userConfigCache
-  try {
-    const filePath = getUserConfigPath()
-    if (!fs.existsSync(filePath)) {
-      userConfigCache = createEmptyUserConfig()
-      return userConfigCache
-    }
-    userConfigCache = normalizeUserConfig(JSON.parse(fs.readFileSync(filePath, 'utf8')))
-  } catch (error) {
-    console.warn('[fund-tracker] config read failed', error && error.message ? error.message : error)
-    userConfigCache = createEmptyUserConfig()
-  }
-  return userConfigCache
-}
-
-function writeUserConfig() {
-  const config = readUserConfig()
-  config.version = USER_CONFIG_VERSION
-  config.updatedAt = new Date().toISOString()
-  const filePath = getUserConfigPath()
-  const tmpPath = `${filePath}.tmp`
-  fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(tmpPath, `${JSON.stringify(config, null, 2)}\n`)
-  fs.renameSync(tmpPath, filePath)
-}
-
-function encodeConfigValue(key, value) {
-  const stringValue = String(value == null ? '' : value)
-  if (!CONFIG_JSON_KEYS.has(key)) return stringValue
-  try {
-    return JSON.parse(stringValue)
-  } catch (_error) {
-    return stringValue
-  }
-}
-
-function decodeConfigValue(key, value) {
-  if (value === undefined || value === null) return null
-  if (CONFIG_JSON_KEYS.has(key) && typeof value !== 'string') {
-    try {
-      return JSON.stringify(value)
-    } catch (_error) {
-      return null
-    }
-  }
-  return String(value)
-}
-
-function getConfigStorageItem(key) {
-  if (!isValidConfigKey(key)) return null
-  const config = readUserConfig()
-  if (!Object.prototype.hasOwnProperty.call(config.data, key)) return null
-  return decodeConfigValue(key, config.data[key])
-}
-
-function setConfigStorageItem(key, value) {
-  if (!isValidConfigKey(key)) return false
-  const config = readUserConfig()
-  config.data[key] = encodeConfigValue(key, value)
-  writeUserConfig()
-  return true
-}
-
-function removeConfigStorageItem(key) {
-  if (!isValidConfigKey(key)) return false
-  const config = readUserConfig()
-  delete config.data[key]
-  writeUserConfig()
-  return true
-}
-
-function clearUserConfig() {
-  userConfigCache = createEmptyUserConfig()
-  writeUserConfig()
+  return configStore.filePath()
 }
 
 function registerConfigStorageIpc() {
-  ipcMain.on('config-storage-get', (event, key) => {
-    event.returnValue = getConfigStorageItem(String(key || ''))
-  })
-  ipcMain.on('config-storage-set', (event, key, value) => {
-    event.returnValue = setConfigStorageItem(String(key || ''), value)
-  })
-  ipcMain.on('config-storage-remove', (event, key) => {
-    event.returnValue = removeConfigStorageItem(String(key || ''))
-  })
+  ipcMain.handle('config-storage-load', () => configStore.load())
+  ipcMain.handle('config-storage-patch', (_event, changes) => configStore.patch(changes))
   ipcMain.handle('config-storage-path', () => getUserConfigPath())
+}
+
+function registerLocalProtocol() {
+  registerProtocol({ app, appRoot: APP_ROOT, protocol, rendererRoot: RENDERER_ROOT })
 }
 
 function logLocalDataPaths(reason) {
@@ -328,7 +169,7 @@ async function clearRendererStorage(win) {
 async function clearLocalData() {
   const wins = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed())
   await Promise.all(wins.map(clearRendererStorage))
-  clearUserConfig()
+  await configStore.clear()
   try {
     await session.defaultSession.clearStorageData({
       storages: [
@@ -363,105 +204,6 @@ async function clearLocalDataAndQuit(reason) {
     })
     app.quit()
   }
-}
-
-function createMemoryResponse() {
-  const chunks = []
-  const headers = new Map()
-
-  return {
-    statusCode: 200,
-    setHeader(name, value) {
-      headers.set(String(name), String(value))
-    },
-    getHeader(name) {
-      return headers.get(String(name))
-    },
-    write(chunk) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || '')))
-    },
-    end(chunk) {
-      if (chunk !== undefined) this.write(chunk)
-    },
-    toResponse() {
-      if (!headers.has('Content-Type')) headers.set('Content-Type', MIME['.json'])
-      return new Response(Buffer.concat(chunks), {
-        status: this.statusCode || 200,
-        headers: Object.fromEntries(headers.entries()),
-      })
-    },
-  }
-}
-
-async function handleApi(pathname, searchParams) {
-  const apiName = pathname.replace(/^\/api\//, '').replace(/\.js$/, '')
-  if (!/^[a-z0-9-]+$/i.test(apiName)) {
-    return jsonResponse(404, { success: false, message: 'API not found' })
-  }
-
-  const handlerPath = path.join(APP_ROOT, 'api', `${apiName}.js`)
-  const apiRoot = path.join(APP_ROOT, 'api')
-  if (!isInside(apiRoot, handlerPath) || !fs.existsSync(handlerPath)) {
-    return jsonResponse(404, { success: false, message: 'API not found' })
-  }
-
-  try {
-    if (!app.isPackaged) delete require.cache[require.resolve(handlerPath)]
-    const handler = require(handlerPath)
-    const req = { query: Object.fromEntries(searchParams.entries()) }
-    const res = createMemoryResponse()
-    await Promise.resolve(handler(req, res))
-    return res.toResponse()
-  } catch (error) {
-    return jsonResponse(500, {
-      success: false,
-      message: error && error.message ? error.message : 'API failed',
-    })
-  }
-}
-
-async function staticResponse(root, pathname) {
-  const requestPath = pathname === '/' ? '/index.html' : pathname
-  const filePath = path.normalize(path.join(root, requestPath))
-
-  if ((!isInside(root, filePath) && filePath !== path.join(root, 'index.html'))
-    || !fs.existsSync(filePath)
-    || fs.statSync(filePath).isDirectory()) {
-    return new Response('Not found', { status: 404 })
-  }
-
-  const body = await fs.promises.readFile(filePath)
-  return new Response(body, {
-    status: 200,
-    headers: { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' },
-  })
-}
-
-function registerLocalProtocol() {
-  protocol.handle('fund-tracker', async (request) => {
-    try {
-      const url = new URL(request.url)
-      const pathname = decodeURIComponent(url.pathname)
-      if (url.hostname !== 'app') {
-        return new Response('Not found', { status: 404 })
-      }
-
-      if (pathname.startsWith('/api/')) {
-        return handleApi(pathname, url.searchParams)
-      }
-
-      if (pathname.startsWith('/renderer/')) {
-        return staticResponse(RENDERER_ROOT, pathname.replace(/^\/renderer/, '') || '/holding-widget.html')
-      }
-
-      return staticResponse(APP_ROOT, pathname)
-    } catch (error) {
-      return jsonResponse(500, {
-        success: false,
-        message: error && error.message ? error.message : 'Protocol failed',
-      })
-    }
-  })
 }
 
 function getWidgetBounds() {

@@ -9,7 +9,7 @@
     var utils = W.utils;
 
     async function loadStockMinuteData(code) {
-        var res = await fetch(utils.apiUrl('/stock-minute', { code: code, count: 240 }));
+        var res = await window.AppDataClient.fetch('/stock-minute', { code: code, count: 240 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !Array.isArray(json.data.points)) throw new Error('分时数据异常');
@@ -17,7 +17,7 @@
     }
 
     async function loadStockFundFlowData(code) {
-        var res = await fetch(utils.apiUrl('/fund-flow-120d', { codes: code, days: 60 }));
+        var res = await window.AppDataClient.fetch('/fund-flow-120d', { codes: code, days: 60 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !Array.isArray(json.data.items) || !json.data.items.length) {
@@ -43,7 +43,7 @@
     }
 
     async function loadStockKlineData(code) {
-        var res = await fetch(utils.apiUrl('/stock-kline', { code: code, days: 260 }));
+        var res = await window.AppDataClient.fetch('/stock-kline', { code: code, days: 260 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !json.data.analysis) throw new Error('技术面数据异常');
@@ -51,7 +51,7 @@
     }
 
     async function loadStockNewsData(code, name) {
-        var res = await fetch(utils.apiUrl('/stock-news', { code: code, name: name || '', limit: 6 }));
+        var res = await window.AppDataClient.fetch('/stock-news', { code: code, name: name || '', limit: 6 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('新闻数据异常');

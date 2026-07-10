@@ -8,7 +8,6 @@
 (function () {
     var state = window.AppState;
     var utils = window.AppUtils;
-    var cache = window.AppCache;
     var KEYS = state.KEYS;
 
     // ============================================================
@@ -17,7 +16,7 @@
 
     function saveAlertSettings() {
         try {
-            localStorage.setItem(KEYS.ALERT_SETTINGS_KEY, JSON.stringify({
+            window.AppStorage.setItem(KEYS.ALERT_SETTINGS_KEY, JSON.stringify({
                 enabled: state.alertEnabled,
                 threshold: state.alertThreshold,
             }));
@@ -27,7 +26,7 @@
     function saveWatchAlertState() {
         try {
             var payload = Object.assign({ __v: KEYS.WATCH_ALERT_SCHEMA_VERSION }, state.watchAlertState);
-            localStorage.setItem(KEYS.WATCH_ALERT_STATE_KEY, JSON.stringify(payload));
+            window.AppStorage.setItem(KEYS.WATCH_ALERT_STATE_KEY, JSON.stringify(payload));
         } catch (e) {}
     }
 

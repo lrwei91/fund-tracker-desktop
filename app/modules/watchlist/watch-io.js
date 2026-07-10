@@ -6,7 +6,6 @@
 (function () {
     var W = window.__watch;
     var state = W.state;
-    var utils = W.utils;
     var KEYS = W.KEYS;
 
     function normalizeImportedWatchTabs(rawTabs) {
@@ -187,7 +186,7 @@
                 state.watchlistRemarks = watchlistRemarks;
                 W.saveWatchlistRemarks();
                 state.activeWatchTabId = activeWatchTabId;
-                localStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
+                window.AppStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
                 if (customIndexCodes) {
                     state.customIndexCodes = customIndexCodes;
                     state.customIndexCache = {};

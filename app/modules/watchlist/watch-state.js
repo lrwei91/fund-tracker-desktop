@@ -6,7 +6,6 @@
 (function () {
     var W = window.__watch;
     var state = W.state;
-    var utils = W.utils;
     var KEYS = W.KEYS;
 
     function isFixedWatchTab(tabId) {
@@ -15,7 +14,7 @@
 
     function getLegacyWatchlist() {
         try {
-            var data = localStorage.getItem(KEYS.STORAGE_KEY);
+            var data = window.AppStorage.getItem(KEYS.STORAGE_KEY);
             var parsed = data ? JSON.parse(data) : [];
             return W.sanitizeCodes(parsed);
         } catch (e) { return []; }
@@ -35,7 +34,7 @@
 
     function getWatchTabs() {
         try {
-            var data = localStorage.getItem(KEYS.WATCH_TABS_KEY);
+            var data = window.AppStorage.getItem(KEYS.WATCH_TABS_KEY);
             var parsed = data ? JSON.parse(data) : null;
             if (!Array.isArray(parsed) || parsed.length === 0) return defaultWatchTabs();
 
@@ -77,8 +76,8 @@
             };
         });
         try {
-            localStorage.setItem(KEYS.WATCH_TABS_KEY, JSON.stringify(cleanTabs));
-            localStorage.setItem(KEYS.STORAGE_KEY, JSON.stringify(cleanTabs[0] ? cleanTabs[0].codes : []));
+            window.AppStorage.setItem(KEYS.WATCH_TABS_KEY, JSON.stringify(cleanTabs));
+            window.AppStorage.setItem(KEYS.STORAGE_KEY, JSON.stringify(cleanTabs[0] ? cleanTabs[0].codes : []));
         } catch (e) {
             console.error('保存失败', e);
         }
@@ -95,10 +94,10 @@
     }
 
     function getPrevChangePct() {
-        try { return JSON.parse(localStorage.getItem(KEYS.PREV_KEY)) || {}; } catch (e) { return {}; }
+        try { return JSON.parse(window.AppStorage.getItem(KEYS.PREV_KEY)) || {}; } catch (e) { return {}; }
     }
     function savePrevChangePct(map) {
-        try { localStorage.setItem(KEYS.PREV_KEY, JSON.stringify(map)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.PREV_KEY, JSON.stringify(map)); } catch (e) {}
     }
     function persistCurrentChangePct() {
         var map = {};
@@ -111,7 +110,7 @@
 
     function getActiveWatchTab() {
         var tabs = getWatchTabs();
-        var savedId = localStorage.getItem(KEYS.ACTIVE_WATCH_TAB_KEY);
+        var savedId = window.AppStorage.getItem(KEYS.ACTIVE_WATCH_TAB_KEY);
         var tab = tabs.find(function (item) { return item.id === (state.activeWatchTabId || savedId); }) ||
             tabs.find(function (item) { return item.id === savedId; }) ||
             tabs[0];

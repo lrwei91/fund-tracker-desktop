@@ -62,17 +62,21 @@
         }
 
         try {
-            var res = await fetch(utils.apiUrl('/opportunity-radar', { limit: 20 }));
+            var res = await window.AppDataClient.fetch('/opportunity-radar', { limit: 20 });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('数据异常');
+            json.data.meta = json.meta || null;
             cache.writeJson(OPPORTUNITY_RADAR_CACHE_KEY, {
                 date: todayKey,
                 data: json.data,
                 updatedAt: Date.now(),
             });
             renderOpportunityRadar(json.data, true);
-            if (timeEl) timeEl.textContent = '更新 ' + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
+            if (timeEl) {
+                var prefix = json.meta && json.meta.degraded ? '部分数据源不可用 · ' : '更新 ';
+                timeEl.textContent = prefix + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
+            }
         } catch (e) {
             console.error('机会雷达获取失败:', e);
             if (cached && cached.data && Array.isArray(cached.data.items)) {
@@ -92,7 +96,10 @@
         var timeEl = document.getElementById('opportunity-radar-update-time');
         if (!container) return;
         var items = data && Array.isArray(data.items) ? data.items : [];
-        if (timeEl && fresh) timeEl.textContent = '更新 ' + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
+        if (timeEl && fresh) {
+            var prefix = data.meta && data.meta.degraded ? '部分数据源不可用 · ' : '更新 ';
+            timeEl.textContent = prefix + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
+        }
         if (!items.length) {
             container.innerHTML = '<div class="opportunity-radar-empty">暂无候选信号</div>';
             return;
@@ -164,7 +171,7 @@
     // ============================================================
 
     function getActiveHotRankSource() {
-        try { return localStorage.getItem(KEYS.HOT_RANK_SOURCE_KEY) || 'ths'; } catch (e) { return 'ths'; }
+        try { return window.AppStorage.getItem(KEYS.HOT_RANK_SOURCE_KEY) || 'ths'; } catch (e) { return 'ths'; }
     }
     function hotRankCacheKey(source) {
         return source === 'em' ? KEYS.HOT_RANK_CACHE_EM_KEY : KEYS.HOT_RANK_CACHE_THS_KEY;
@@ -180,7 +187,7 @@
             return;
         }
         try {
-            var res = await fetch(utils.apiUrl('/hot-rank', { source: source, limit: 30 }));
+            var res = await window.AppDataClient.fetch('/hot-rank', { source: source, limit: 30 });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data || !Array.isArray(result.data.items)) throw new Error('数据异常');
@@ -256,7 +263,7 @@
             tab.addEventListener('click', function () {
                 var source = tab.getAttribute('data-source');
                 activateHotRankTab(source);
-                try { localStorage.setItem(KEYS.HOT_RANK_SOURCE_KEY, source); } catch (e) {}
+                try { window.AppStorage.setItem(KEYS.HOT_RANK_SOURCE_KEY, source); } catch (e) {}
                 loadHotRankData(source);
             });
         });
@@ -283,12 +290,12 @@
 
     function getActiveLimitUpType() {
         try {
-            var t = localStorage.getItem(KEYS.LIMIT_UP_TAB_KEY);
+            var t = window.AppStorage.getItem(KEYS.LIMIT_UP_TAB_KEY);
             return KEYS.LIMIT_UP_TYPES.indexOf(t) >= 0 ? t : 'zt';
         } catch (e) { return 'zt'; }
     }
     function setActiveLimitUpType(t) {
-        try { localStorage.setItem(KEYS.LIMIT_UP_TAB_KEY, t); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.LIMIT_UP_TAB_KEY, t); } catch (e) {}
     }
 
     async function loadLimitUpData(force) {
@@ -381,7 +388,7 @@
             renderSummary(sumCached.data);
         } else {
             try {
-                var sumRes = await fetch(utils.apiUrl('/limit-up', { type: 'summary' }));
+                var sumRes = await window.AppDataClient.fetch('/limit-up', { type: 'summary' });
                 var sumJson = await sumRes.json();
                 if (sumJson.success) {
                     cache.writeDailyDataCache(sumKey, todayKey, sumJson.data);
@@ -408,7 +415,7 @@
         } else {
             list.innerHTML = '<div class="limit-up-empty">加载中...</div>';
             try {
-                var r = await fetch(utils.apiUrl('/limit-up', { type: activeType, limit: 100 }));
+                var r = await window.AppDataClient.fetch('/limit-up', { type: activeType, limit: 100 });
                 var j = await r.json();
                 if (j.success) {
                     cache.writeDailyDataCache(typeCacheKey, todayKey, j.data);

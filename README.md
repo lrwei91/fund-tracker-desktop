@@ -1,6 +1,6 @@
-# 恭喜发财 Electron 应用
+# 恭喜发财桌面版
 
-本分支只保留本地 Electron 桌面应用。主窗口、行情看板、API 代理和持仓浮窗都随应用一起打包。
+独立 Electron 桌面仓库。主窗口、行情看板、API 代理和持仓浮窗都随应用一起打包；Web 版在原 `fund-tracker` 仓库独立维护。
 
 ## 功能
 
@@ -31,6 +31,7 @@
 │   └── holding-widget.js
 ├── main.js               # Electron 主进程、窗口、协议、IPC
 ├── preload.js            # 安全暴露 window.shell
+├── desktop/              # 配置存储与自定义协议路由
 ├── package.json          # Electron 启动和打包配置
 └── package-lock.json
 ```
@@ -58,7 +59,7 @@ npm run build:all
 
 构建产物输出到 `dist/`，该目录不入库。
 
-公开打包命令会先自动递增 patch 版本号，并同步写入 `package.json` / `package-lock.json`；`build:*:raw` 仅供内部串联使用，不会改版本号。
+打包命令不会修改版本号。发布前请通过显式 release/tag 流程更新版本；`build:*:raw` 用于 CI 与本地验证。
 
 macOS 打包版复制到 `/Applications` 后，如遇到系统拦截或提示无权限打开，可执行：
 
@@ -75,7 +76,9 @@ chmod +x "/Applications/恭喜发财.app/Contents/MacOS/恭喜发财"
 - `fund-tracker://app/api/...` 转发到 `app/api/*.js`
 - `fund-tracker://app/renderer/holding-widget.html` 加载 `renderer/holding-widget.html`
 
-主窗口和浮窗共享同源配置。自选股分组、当前分组、自选指数、持仓成本/股数、持仓备注名、设置、小丑模式等关键用户数据写入 `config.json`；行情/新闻等临时缓存仍保留在 Chromium `localStorage`。
+主窗口和浮窗通过异步 IPC 共享 `config.json`。自选股分组、当前分组、自选指数、持仓成本/股数、持仓备注名、设置、小丑模式等关键用户数据写入该文件；行情/新闻等临时缓存仍保留在 Chromium `localStorage`。首次启动会迁移旧 localStorage 中的关键用户配置。
+
+所有上游行情请求都会经过进程内 data gateway：同请求会合并、东方财富请求限为最多 2 并发并带退避；机会雷达会在返回中说明数据源降级状态。
 
 顶部“导入/导出”会备份/恢复自选股分组、当前分组、自选指数、持仓成本、股数和备注名；导入兼容旧版 `costPrice`、`buyPrice`、`quantity`、`positions`、`customIndices` 等字段。
 

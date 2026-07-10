@@ -10,15 +10,15 @@
     var KEYS = W.KEYS;
 
     function saveCustomIndices() {
-        try { localStorage.setItem(KEYS.CUSTOM_INDICES_KEY, JSON.stringify(state.customIndexCodes)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.CUSTOM_INDICES_KEY, JSON.stringify(state.customIndexCodes)); } catch (e) {}
     }
 
     function persistCustomIndexCache() {
-        try { localStorage.setItem(KEYS.CUSTOM_INDEX_QUOTE_CACHE_KEY, JSON.stringify(state.customIndexCache)); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.CUSTOM_INDEX_QUOTE_CACHE_KEY, JSON.stringify(state.customIndexCache)); } catch (e) {}
     }
 
     function persistCustomIndexUpdateTime(value) {
-        try { localStorage.setItem(KEYS.CUSTOM_INDEX_UPDATE_TIME_KEY, value || ''); } catch (e) {}
+        try { window.AppStorage.setItem(KEYS.CUSTOM_INDEX_UPDATE_TIME_KEY, value || ''); } catch (e) {}
     }
 
     function renderCustomIndex() {
@@ -158,7 +158,7 @@
             return;
         }
         try {
-            var res = await fetch(utils.apiUrl('/stock', { codes: state.customIndexCodes.join(',') }));
+            var res = await window.AppDataClient.fetch('/stock', { codes: state.customIndexCodes.join(',') });
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
@@ -185,7 +185,7 @@
 
     async function loadSingleCustomIndex(code) {
         try {
-            var res = await fetch(utils.apiUrl('/stock', { codes: code }));
+            var res = await window.AppDataClient.fetch('/stock', { codes: code });
             if (!res.ok) return;
             var result = await res.json();
             if (!result.success || !result.data) return;
@@ -212,10 +212,10 @@
         if (stale.length === 0) return;
 
         var lastPull = 0;
-        try { lastPull = parseInt(localStorage.getItem(KEYS.WATCH_REFRESH_THROTTLE_KEY) || '0', 10) || 0; } catch (e) {}
+        try { lastPull = parseInt(window.AppStorage.getItem(KEYS.WATCH_REFRESH_THROTTLE_KEY) || '0', 10) || 0; } catch (e) {}
         if (Date.now() - lastPull < KEYS.WATCH_REFRESH_THROTTLE_MS) return;
 
-        fetch(utils.apiUrl('/stock', { codes: state.customIndexCodes.join(',') }))
+        window.AppDataClient.fetch('/stock', { codes: state.customIndexCodes.join(',') })
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (result) {
                 if (!result || !result.success || !result.data) return;

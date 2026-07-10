@@ -8,9 +8,8 @@ contextBridge.exposeInMainWorld('shell', {
     closeHoldingWindow: () => ipcRenderer.invoke('close-holding-window'),
     getConfigPath: () => ipcRenderer.invoke('config-storage-path'),
     configStorage: {
-        getItem: (key) => ipcRenderer.sendSync('config-storage-get', key),
-        setItem: (key, value) => ipcRenderer.sendSync('config-storage-set', key, String(value)),
-        removeItem: (key) => ipcRenderer.sendSync('config-storage-remove', key),
+        load: () => ipcRenderer.invoke('config-storage-load'),
+        patch: (changes) => ipcRenderer.invoke('config-storage-patch', changes || {}),
     },
     onHoldingWidgetRefresh: (callback) => {
         if (typeof callback !== 'function') return () => {}

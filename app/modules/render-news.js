@@ -51,7 +51,7 @@
                 parent.querySelectorAll('.news-source-tab').forEach(function (t) { t.classList.remove('active'); });
                 tab.classList.add('active');
                 state.currentNewsSource = tab.getAttribute('data-source');
-                try { localStorage.setItem(KEYS.NEWS_SOURCE_KEY, state.currentNewsSource); } catch (e) {}
+                try { window.AppStorage.setItem(KEYS.NEWS_SOURCE_KEY, state.currentNewsSource); } catch (e) {}
                 // 切换源:重置状态、清空列表、立刻展示"加载中..."
                 resetNewsState(state.currentNewsSource);
                 renderNewsList();
@@ -125,7 +125,7 @@
         if (s.cursor) query.cursor = s.cursor;
 
         try {
-            var res = await fetch(utils.apiUrl('/news', query));
+            var res = await window.AppDataClient.fetch('/news', query);
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success) throw new Error(json.error || '数据异常');
@@ -150,7 +150,7 @@
         if (s.cursor) query.cursor = s.cursor;
 
         try {
-            var res = await fetch(utils.apiUrl('/global-news', query));
+            var res = await window.AppDataClient.fetch('/global-news', query);
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success) throw new Error(json.error || '数据异常');

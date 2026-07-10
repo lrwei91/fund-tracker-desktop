@@ -1,89 +1,47 @@
-// 关键用户数据写入 Electron config.json;临时行情缓存继续走 localStorage。
 (function () {
-  var CONFIG_KEYS = [
-    'fund_tracker_settings',
-    'fund_tracker_active_main_tab',
-    'fund_tracker_news_source',
-    'fund_tracker_collapse_state',
-    'fund_tracker_sector_tab',
-    'fund_tracker_alert_settings',
-    'fund_tracker_watch_alert_state',
-    'fund_tracker_custom_indices',
-    'fund_tracker_watchlist_cost',
-    'fund_tracker_watchlist_remarks',
-    'fund_tracker_watchlist',
-    'fund_tracker_watchlist_tabs',
-    'fund_tracker_active_watch_tab',
-    'fund_tracker_hot_rank_source',
-    'fund_tracker_limit_up_tab',
-    'fund_tracker_holding_clown_mode',
-  ]
-  var CONFIG_KEY_MAP = {}
-  CONFIG_KEYS.forEach(function (key) { CONFIG_KEY_MAP[key] = true })
+  var schema = window.AppConfigSchema || { keys: [] }
+  var durable = new Set(schema.keys || [])
+  var nativeStorage = window.localStorage
+  var pending = {}
+  var flushTimer = null
 
-  var nativeGetItem = Storage.prototype.getItem
-  var nativeSetItem = Storage.prototype.setItem
-  var nativeRemoveItem = Storage.prototype.removeItem
-  var shellStorage = window.shell && window.shell.configStorage
-
-  function isConfigKey(key) {
-    return !!CONFIG_KEY_MAP[String(key)]
+  function flush() {
+    if (flushTimer) clearTimeout(flushTimer)
+    flushTimer = null
+    var changes = pending
+    pending = {}
+    var payload = changes
+    return window.shell && window.shell.configStorage && typeof window.shell.configStorage.patch === 'function'
+      ? window.shell.configStorage.patch(payload).catch(function () {})
+      : Promise.resolve()
   }
-
-  function readConfigItem(key) {
-    if (!shellStorage || typeof shellStorage.getItem !== 'function') return null
-    try {
-      return shellStorage.getItem(String(key))
-    } catch (e) {
-      return null
-    }
+  function schedule(key, value) {
+    pending[key] = value
+    if (!flushTimer) flushTimer = setTimeout(flush, 150)
   }
-
-  function writeConfigItem(key, value) {
-    if (!shellStorage || typeof shellStorage.setItem !== 'function') return false
-    try {
-      return !!shellStorage.setItem(String(key), String(value))
-    } catch (e) {
-      return false
-    }
+  function getItem(key) { return nativeStorage.getItem(String(key)) }
+  function setItem(key, value) {
+    nativeStorage.setItem(String(key), String(value))
+    if (durable.has(String(key))) schedule(String(key), String(value))
   }
-
-  function removeConfigItem(key) {
-    if (!shellStorage || typeof shellStorage.removeItem !== 'function') return false
-    try {
-      return !!shellStorage.removeItem(String(key))
-    } catch (e) {
-      return false
-    }
+  function removeItem(key) {
+    nativeStorage.removeItem(String(key))
+    if (durable.has(String(key))) schedule(String(key), null)
   }
-
-  function migrateConfigKey(key) {
-    if (!shellStorage || !isConfigKey(key)) return
-    if (readConfigItem(key) !== null) return
-    var oldValue = nativeGetItem.call(localStorage, key)
-    if (oldValue !== null) writeConfigItem(key, oldValue)
+  function hydrate() {
+    if (!window.shell || !window.shell.configStorage || typeof window.shell.configStorage.load !== 'function') return Promise.resolve()
+    return window.shell.configStorage.load().then(function (snapshot) {
+      var data = snapshot && snapshot.data ? snapshot.data : {}
+      Object.entries(data).forEach(function (entry) {
+        if (durable.has(entry[0]) && entry[1] !== null) nativeStorage.setItem(entry[0], String(entry[1]))
+      })
+      var migration = {}
+      durable.forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) migration[key] = nativeStorage.getItem(key)
+      })
+      if (Object.keys(migration).length) return window.shell.configStorage.patch(migration)
+    }).catch(function () {})
   }
-
-  if (shellStorage) {
-    CONFIG_KEYS.forEach(migrateConfigKey)
-    Storage.prototype.getItem = function (key) {
-      if (this === localStorage && isConfigKey(key)) {
-        var configValue = readConfigItem(key)
-        if (configValue !== null) return configValue
-      }
-      return nativeGetItem.call(this, key)
-    }
-    Storage.prototype.setItem = function (key, value) {
-      if (this === localStorage && isConfigKey(key)) {
-        writeConfigItem(key, value)
-      }
-      return nativeSetItem.call(this, key, value)
-    }
-    Storage.prototype.removeItem = function (key) {
-      if (this === localStorage && isConfigKey(key)) {
-        removeConfigItem(key)
-      }
-      return nativeRemoveItem.call(this, key)
-    }
-  }
+  window.AppStorage = { flush: flush, getItem: getItem, hydrate: hydrate, removeItem: removeItem, setItem: setItem }
+  window.addEventListener('beforeunload', function () { flush() })
 })()

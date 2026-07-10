@@ -11,17 +11,16 @@ module.exports = [
     js.configs.recommended,
     {
         // Node / CommonJS 上下文
-        files: ['main.js', 'preload.js', 'scripts/**/*.js', 'app/api/**/*.js'],
+        files: ['main.js', 'preload.js', 'scripts/**/*.js', 'desktop/**/*.js', 'app/api/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
             globals: { ...globals.node },
         },
         rules: {
-            'no-unused-vars': ['warn', { args: 'none' }],
+            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
             'no-undef': 'error',
-            // 空 catch 块降级为警告:团队既有"吞掉非致命持久化错误"约定,留作待清理
-            'no-empty': 'warn',
+            'no-empty': ['error', { allowEmptyCatch: true }],
         },
     },
     {
@@ -33,9 +32,15 @@ module.exports = [
             globals: { ...globals.browser, ...globals.node },
         },
         rules: {
-            'no-unused-vars': ['warn', { args: 'none' }],
+            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
             'no-undef': 'error',
-            'no-empty': 'warn',
+            'no-empty': ['error', { allowEmptyCatch: true }],
+        },
+    },
+    {
+        files: ['app/config-schema.js'],
+        languageOptions: {
+            globals: { ...globals.node, ...globals.browser },
         },
     },
     {

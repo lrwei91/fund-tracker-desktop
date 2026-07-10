@@ -14,11 +14,11 @@
   var currentCode = null
   var timer = null
   var animationTimer = null
-  var clownMode = localStorage.getItem(CLOWN_MODE_KEY) === 'true'
+  var clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
 
   function readJson(key, fallback) {
     try {
-      var raw = localStorage.getItem(key)
+      var raw = window.AppStorage.getItem(key)
       return raw ? JSON.parse(raw) : fallback
     } catch (e) {
       return fallback
@@ -245,7 +245,7 @@
     if (clownModeBtn) {
       clownModeBtn.addEventListener('click', function () {
         clownMode = !clownMode
-        try { localStorage.setItem(CLOWN_MODE_KEY, clownMode ? 'true' : 'false') } catch (e) {}
+        try { window.AppStorage.setItem(CLOWN_MODE_KEY, clownMode ? 'true' : 'false') } catch (e) {}
         syncSwitchTimer(render({ stayOnCurrent: true }), false)
       })
     }
@@ -272,7 +272,7 @@
     }
 
     if ([QUOTE_CACHE_KEY, REMARKS_KEY, SETTINGS_KEY, CLOWN_MODE_KEY].indexOf(event.key) !== -1) {
-      if (event.key === CLOWN_MODE_KEY) clownMode = localStorage.getItem(CLOWN_MODE_KEY) === 'true'
+      if (event.key === CLOWN_MODE_KEY) clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
       var refreshResult = render({ stayOnCurrent: true })
       syncSwitchTimer(refreshResult, refreshResult && refreshResult.switched)
     }
@@ -281,6 +281,14 @@
   window.addEventListener('storage', renderAfterStorageChange)
   bindControls()
   syncSwitchTimer(render({ reset: true }), true)
+
+  if (window.AppStorage && typeof window.AppStorage.hydrate === 'function') {
+    window.AppStorage.hydrate().then(function () {
+      clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
+      var result = render({ reset: true })
+      syncSwitchTimer(result, true)
+    })
+  }
 
   if (window.shell && window.shell.onHoldingWidgetRefresh) {
     window.shell.onHoldingWidgetRefresh(function () {

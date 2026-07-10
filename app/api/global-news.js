@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const { emGet, fail, fetchJson, fetchText, ok } = require('./_utils');
+const { emGet, fail, fetchText, ok } = require('./_utils');
 
 function decodeEntities(text) {
     return String(text || '')

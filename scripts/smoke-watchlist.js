@@ -46,6 +46,11 @@ window.fetch = () => Promise.resolve({ ok: false, json: () => Promise.resolve({}
 window.prompt = () => null;
 window.confirm = () => true;
 window.AppAlerts = { showStatusToast() {}, saveWatchAlertState() {}, checkAlerts() {} };
+window.AppStorage = {
+    getItem: (key) => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value),
+    removeItem: (key) => window.localStorage.removeItem(key),
+};
 window.AppMarket = {
     trendArrow: () => '─',
     readIndexPrevBucket: () => ({ data: {} }),
