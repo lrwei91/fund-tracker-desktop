@@ -30,7 +30,14 @@ jobs:
 
   package:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            command: npm run build:mac:raw -- --dir
+          - os: windows-latest
+            command: npm run build:win:raw -- --dir
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,5 +45,5 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: macOS package
-        run: npm run build:mac:raw -- --dir
+      - name: Package
+        run: ${{ matrix.command }}
