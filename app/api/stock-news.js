@@ -1,6 +1,6 @@
 // A 股个股新闻催化 / 风险词扫描（东方财富搜索）
 
-const { API_TIMEOUTS, fail, fetchText, ok } = require('./_utils');
+const { API_TIMEOUTS, emGetText, fail, ok } = require('./_utils');
 
 const POSITIVE_WORDS = [
     '订单',
@@ -116,7 +116,8 @@ async function loadEastmoneyStockNews(code, name, limit) {
         param: JSON.stringify(param),
         _: String(Date.now()),
     });
-    const text = await fetchText(`https://search-api-web.eastmoney.com/search/jsonp?${params.toString()}`, {
+    const text = await emGetText(`https://search-api-web.eastmoney.com/search/jsonp?${params.toString()}`, {
+        cacheTtl: 5 * 60 * 1000,
         headers: {
             'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
             Referer: `https://so.eastmoney.com/news/s?keyword=${encodeURIComponent(keyword)}`,
@@ -133,6 +134,7 @@ module.exports = async function handler(req, res) {
         const name = String(req.query.name || '').trim().slice(0, 24);
         const limit = Math.max(1, Math.min(10, parseInt(req.query.limit, 10) || 6));
         const items = await loadEastmoneyStockNews(code, name, limit);
+        if (!items.length) throw new Error('个股新闻为空');
         const score = scoreNews(items);
         return ok(res, {
             code,

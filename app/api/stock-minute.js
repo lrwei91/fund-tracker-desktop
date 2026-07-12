@@ -9,6 +9,7 @@ const {
     tencentSymbol,
     toNumber,
 } = require('./_utils');
+const tdxrsCapability = require('./_tdxrs');
 
 const execFileAsync = promisify(execFile);
 const MAX_POINTS = 240;
@@ -267,13 +268,29 @@ module.exports = async function handler(req, res) {
         } else if (source === 'tencent') {
             data = await loadTencentMinute(code, count);
         } else {
-            // auto / tdxrs: 优先 tdxrs -> 腾讯 -> 东财
-            const trySources = [
-                { label: 'tdxrs', fn: () => loadTdxrsMinute(code, count) },
-                { label: '腾讯', fn: () => loadTencentMinute(code, count) },
-                { label: '东财', fn: () => loadEastmoneyMinute(code, count) },
-            ];
-            const tdxrOnly = source === 'tdxrs' ? trySources.slice(0, 1) : trySources;
+            const trySources = [];
+            if (source === 'tdxrs' || tdxrsCapability.shouldTry()) {
+                trySources.push({
+                    label: 'tdxrs',
+                    fn: async () => {
+                        try {
+                            const value = await loadTdxrsMinute(code, count);
+                            tdxrsCapability.markAvailable();
+                            return value;
+                        } catch (error) {
+                            tdxrsCapability.markUnavailable();
+                            throw error;
+                        }
+                    },
+                });
+            }
+            if (source !== 'tdxrs') {
+                trySources.push(
+                    { label: '腾讯', fn: () => loadTencentMinute(code, count) },
+                    { label: '东财', fn: () => loadEastmoneyMinute(code, count) },
+                );
+            }
+            const tdxrOnly = trySources;
             for (const s of tdxrOnly) {
                 try {
                     data = await s.fn();

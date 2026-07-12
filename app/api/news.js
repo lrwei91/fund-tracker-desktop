@@ -1,6 +1,5 @@
-const crypto = require('crypto');
-
-const { emGet, fail, fetchJson, ok } = require('./_utils');
+const { fail, fetchJson, ok } = require('./_utils');
+const { loadClsTelegraph } = require('./cls-news');
 
 function stripHtml(text) {
     return String(text || '')
@@ -45,29 +44,13 @@ async function fetchJin10Page(cursor) {
     });
 }
 
-// 东财快讯 fallback（金十不可用时）
-async function fetchEastmoneyFastNewsFallback(limit) {
-    const params = new URLSearchParams({
-        client: 'web',
-        biz: 'web_724',
-        fastColumn: '102',
-        sortEnd: '',
-        pageSize: String(limit || 20),
-        req_trace: crypto.randomUUID(),
-    });
-    const json = await emGet(`https://np-weblist.eastmoney.com/comm/web/getFastNewsList?${params.toString()}`, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36',
-            Referer: 'https://kuaixun.eastmoney.com/',
-        },
-    });
-    const rows = json && json.data && Array.isArray(json.data.fastNewsList) ? json.data.fastNewsList : [];
-    if (!rows.length) throw new Error('东财快讯为空');
-    return rows.map((item) => ({
-        id: String(item.seq || item.id || item.url || Math.random()),
-        time: item.showTime || item.createTime || '',
-        data: { content: (item.title || item.summary || stripHtml(item.content || '')).trim() },
-        url: item.url || 'https://kuaixun.eastmoney.com/',
+async function fetchClsFallback(limit) {
+    const items = await loadClsTelegraph('', limit);
+    return items.map((item) => ({
+        id: item.id,
+        time: item.time,
+        data: { content: item.summary || item.title || '' },
+        url: item.url,
     }));
 }
 
@@ -83,23 +66,27 @@ module.exports = async function handler(req, res) {
 
         let json;
         let usedFallback = false;
+        let actualSource = 'jin10';
+        let fallbackReason = '';
         try {
             json = await fetchJin10Page(cursor);
         } catch (error) {
             // 首屏无可用缓存,直接报错
             if (!rows.length && cursor) throw error;
-            // 首屏:尝试东财快讯 fallback
+            // 首屏:尝试财联社独立源 fallback
             if (!cursor) {
                 try {
-                    const emItems = await fetchEastmoneyFastNewsFallback(limit);
-                    emItems.forEach((item) => {
+                    const clsItems = await fetchClsFallback(limit);
+                    clsItems.forEach((item) => {
                         if (!seen.has(item.id)) {
                             seen.add(item.id);
                             rows.push(item);
                         }
                     });
                     usedFallback = true;
-                } catch (emError) {
+                    actualSource = 'cls';
+                    fallbackReason = error.message;
+                } catch (clsError) {
                     throw error; // 抛出原始 jin10 错误
                 }
             }
@@ -143,6 +130,22 @@ module.exports = async function handler(req, res) {
             data: sliced,
             nextCursor: exhausted ? null : nextCursor,
             hasMore: !exhausted && rows.length > 0,
+            source: actualSource,
+            sourceLabel: actualSource === 'cls' ? '财联社' : '金十',
+        }, {
+            meta: {
+                asOf: new Date().toISOString(),
+                degraded: usedFallback,
+                sources: {
+                    news: {
+                        requested: 'jin10',
+                        actual: actualSource,
+                        actualLabel: actualSource === 'cls' ? '财联社' : '金十',
+                        degraded: usedFallback,
+                        fallbackReason,
+                    },
+                },
+            },
         });
     } catch (error) {
         return fail(res, 502, '真实金十快讯接口不可用', { error: error.message });

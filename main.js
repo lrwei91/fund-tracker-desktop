@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, session } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, session, shell } = require('electron')
 const path = require('path')
 const { createConfigStore } = require('./desktop/config-store')
 const { registerProtocol } = require('./desktop/protocol-router')
@@ -15,6 +15,7 @@ protocol.registerSchemesAsPrivileged([{
 const APP_ROOT = path.join(__dirname, 'app')
 const RENDERER_ROOT = path.join(__dirname, 'renderer')
 const configStore = createConfigStore(() => app.getPath('userData'))
+const EXTERNAL_HOSTS = new Set(['disc.static.szse.cn', 'pdf.dfcfw.com'])
 const appUrl = (pathname) => `fund-tracker://app/${String(pathname || 'index.html').replace(/^\/+/, '')}`
 
 function localDataPaths() {
@@ -61,6 +62,16 @@ app.whenReady().then(() => {
   ipcMain.handle('config-storage-load', () => configStore.load())
   ipcMain.handle('config-storage-patch', (_event, changes) => configStore.patch(changes))
   ipcMain.handle('config-storage-path', () => configStore.filePath())
+  ipcMain.handle('open-external-url', async (_event, rawUrl) => {
+    try {
+      const url = new URL(String(rawUrl || ''))
+      if (url.protocol !== 'https:' || !EXTERNAL_HOSTS.has(url.hostname)) throw new Error('URL not allowed')
+      await shell.openExternal(url.toString())
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error.message }
+    }
+  })
   windows.registerIpc()
   registerProtocol({ app, appRoot: APP_ROOT, protocol, rendererRoot: RENDERER_ROOT })
   windows.createMainWindow()

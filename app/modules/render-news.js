@@ -1,70 +1,57 @@
-// ================================================================
-// 财经新闻 — 金十快讯 / 东财资讯
-// 暴露到 window.AppNews;
-// 直接 script 引入,无需 import/require
-// 依赖:window.AppState, window.AppUtils
-// ================================================================
-
+// 财经新闻：金十 / 财联社 / 东方财富。分页与刷新最新分离。
 (function () {
     var state = window.AppState;
     var utils = window.AppUtils;
     var KEYS = state.KEYS;
+    var SOURCES = {
+        jin10: { label: '金十快讯', path: '/news' },
+        cls: { label: '财联社', path: '/cls-news' },
+        eastmoney: { label: '东财资讯', path: '/global-news' },
+    };
 
-    // 用 DOMParser 解析外部新闻 HTML,只取纯文本,避免 innerHTML 执行 <img onerror> 等事件处理器(XSS)
     function stripHtmlTags(html) {
         if (!html) return '';
         try {
             var doc = new DOMParser().parseFromString(String(html), 'text/html');
             return doc.body ? (doc.body.textContent || '') : '';
         } catch (e) {
-            // 解析失败兜底:去掉所有标签(不执行任何脚本)
             return String(html).replace(/<[^>]*>/g, '');
         }
     }
 
-    function formatJin10Time(timeStr) {
+    function formatNewsTime(timeStr) {
         if (!timeStr) return '';
-        var parts = timeStr.split(' ');
-        if (parts.length < 2) return timeStr;
-        var datePart = parts[0];
-        var timePart = parts[1];
-        var today = utils.getShanghaiDateKey();
-        if (datePart === today) {
-            return timePart.substring(0, 5);
-        }
-        return datePart.substring(5) + ' ' + timePart.substring(0, 5);
+        var parts = String(timeStr).split(' ');
+        if (parts.length < 2) return String(timeStr);
+        return parts[0] === utils.getShanghaiDateKey()
+            ? parts[1].substring(0, 5)
+            : parts[0].substring(5) + ' ' + parts[1].substring(0, 5);
     }
 
-    // ============================================================
-    // 新闻源 tab (金十/东财)
-    // ============================================================
+    function emptyNewsState(source) {
+        return { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: source, degraded: false };
+    }
 
     function initNewsSourceTabs() {
-        if (!['jin10', 'eastmoney'].includes(state.currentNewsSource)) state.currentNewsSource = 'jin10';
-        var tabs = document.querySelectorAll('.news-source-tab');
-        tabs.forEach(function (tab) {
+        if (!Object.prototype.hasOwnProperty.call(SOURCES, state.currentNewsSource)) state.currentNewsSource = 'jin10';
+        document.querySelectorAll('.news-source-tab').forEach(function (tab) {
             tab.classList.toggle('active', tab.getAttribute('data-source') === state.currentNewsSource);
-        });
-        tabs.forEach(function (tab) {
             tab.addEventListener('click', function () {
-                var parent = tab.parentElement;
-                parent.querySelectorAll('.news-source-tab').forEach(function (t) { t.classList.remove('active'); });
+                tab.parentElement.querySelectorAll('.news-source-tab').forEach(function (item) { item.classList.remove('active'); });
                 tab.classList.add('active');
                 state.currentNewsSource = tab.getAttribute('data-source');
                 try { window.AppStorage.setItem(KEYS.NEWS_SOURCE_KEY, state.currentNewsSource); } catch (e) {}
-                // 切换源:重置状态、清空列表、立刻展示"加载中..."
-                resetNewsState(state.currentNewsSource);
+                if (!state.newsState[state.currentNewsSource]) resetNewsState(state.currentNewsSource);
                 renderNewsList();
-                loadNewsData();
+                if (!state.newsState[state.currentNewsSource].items.length) loadMoreNews();
             });
         });
     }
 
     function resetNewsState(source) {
-        state.newsState[source] = { items: [], cursor: null, hasMore: true, isLoading: false, error: false };
+        state.newsState[source] = emptyNewsState(source);
     }
 
-    // 滚动到底部时自动加载更多(用 sentinel + 距离阈值,避免频繁触发)
     var newsScrollHandler = null;
     function initNewsScroll() {
         if (newsScrollHandler) return;
@@ -72,10 +59,7 @@
         newsScrollHandler = function () {
             if (ticking) return;
             ticking = true;
-            requestAnimationFrame(function () {
-                ticking = false;
-                maybeLoadMoreNews();
-            });
+            requestAnimationFrame(function () { ticking = false; maybeLoadMoreNews(); });
         };
         window.addEventListener('scroll', newsScrollHandler, { passive: true });
         window.addEventListener('resize', newsScrollHandler, { passive: true });
@@ -83,172 +67,155 @@
 
     function maybeLoadMoreNews() {
         if (state.currentTab !== 'news') return;
-        var s = state.newsState[state.currentNewsSource];
-        if (!s || s.isLoading || !s.hasMore) return;
-        // 距底部 400px 内即触发
-        var threshold = 400;
-        var scrolled = window.scrollY + window.innerHeight;
-        var total = document.documentElement.scrollHeight;
-        if (scrolled >= total - threshold) {
-            loadNewsData();
-        }
+        var current = state.newsState[state.currentNewsSource];
+        if (!current || current.isLoading || !current.hasMore) return;
+        if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 400) loadMoreNews();
     }
 
-    // ============================================================
-    // 拉取 + 渲染
-    // ============================================================
+    function normalizeRow(source, item) {
+        if (source === 'jin10') {
+            return {
+                id: String(item.id || ''),
+                title: '',
+                summary: stripHtmlTags(item.data && item.data.content),
+                time: item.time || '',
+                url: item.url || '',
+            };
+        }
+        return {
+            id: String(item.id || item.url || ''),
+            title: item.title || '',
+            summary: item.summary || '',
+            time: item.time || '',
+            url: item.url || '',
+        };
+    }
 
-    async function loadNewsData() {
-        var container = document.getElementById('news-list');
-        if (!container) return;
-        var s = state.newsState[state.currentNewsSource];
-        if (!s || s.isLoading) return;
-        if (s.items.length > 0 && !s.hasMore) return; // 已加载到底
+    function itemKey(item) {
+        return item.id || [item.time, item.title, item.summary].join('|');
+    }
 
-        s.isLoading = true;
+    function mergeUnique(first, second) {
+        var seen = {};
+        return first.concat(second).filter(function (item) {
+            var key = itemKey(item);
+            if (!key || seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
+    }
+
+    async function requestPage(source, cursor) {
+        var config = SOURCES[source];
+        var query = { limit: String(KEYS.NEWS_PAGE_SIZE[source]) };
+        if (cursor) query.cursor = cursor;
+        var res = await window.AppDataClient.fetch(config.path, query, { force: !cursor });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        if (!json.success) throw new Error(json.message || '数据异常');
+        var payload = json.data || {};
+        return {
+            actualSource: payload.source || source,
+            degraded: !!(json.meta && json.meta.degraded),
+            rows: (Array.isArray(payload.data) ? payload.data : []).map(function (item) { return normalizeRow(source, item); }),
+            cursor: payload.nextCursor || null,
+            hasMore: !!payload.hasMore && !!payload.nextCursor,
+        };
+    }
+
+    async function loadMoreNews() {
+        var source = state.currentNewsSource;
+        var current = state.newsState[source];
+        if (!current || current.isLoading || (current.items.length && !current.hasMore)) return;
+        current.isLoading = true;
         renderNewsList();
         try {
-            if (state.currentNewsSource === 'eastmoney') {
-                await loadEastmoneyNews();
-            } else {
-                await loadJin10News();
-            }
+            var page = await requestPage(source, current.cursor);
+            current.items = mergeUnique(current.items, page.rows);
+            current.cursor = page.cursor;
+            current.hasMore = page.hasMore;
+            current.actualSource = page.actualSource;
+            current.degraded = page.degraded;
+            current.error = false;
+        } catch (error) {
+            console.error(SOURCES[source].label + '获取失败:', error);
+            current.error = true;
         } finally {
-            s.isLoading = false;
+            current.isLoading = false;
             renderNewsList();
         }
     }
 
-    async function loadJin10News() {
-        var s = state.newsState.jin10;
-        var query = { limit: String(KEYS.NEWS_PAGE_SIZE.jin10) };
-        if (s.cursor) query.cursor = s.cursor;
-
+    async function refreshNewsData() {
+        var source = state.currentNewsSource;
+        var current = state.newsState[source];
+        if (!current || current.isLoading) return;
+        if (!current.items.length) return loadMoreNews();
+        current.isLoading = true;
         try {
-            var res = await window.AppDataClient.fetch('/news', query);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var json = await res.json();
-            if (!json.success) throw new Error(json.error || '数据异常');
-
-            var payload = json.data || {};
-            var rows = Array.isArray(payload.data) ? payload.data : [];
-            if (rows.length) {
-                s.items = s.items.concat(rows);
-            }
-            s.cursor = payload.nextCursor || null;
-            s.hasMore = !!payload.hasMore && !!s.cursor;
-            s.error = false;
-        } catch (e) {
-            console.error('金十快讯获取失败:', e);
-            s.error = true;
+            var page = await requestPage(source, null);
+            current.items = mergeUnique(page.rows, current.items);
+            current.actualSource = page.actualSource;
+            current.degraded = page.degraded;
+            current.error = false;
+        } catch (error) {
+            console.error(SOURCES[source].label + '刷新失败:', error);
+            current.error = true;
+        } finally {
+            current.isLoading = false;
+            renderNewsList();
         }
     }
 
-    async function loadEastmoneyNews() {
-        var s = state.newsState.eastmoney;
-        var query = { limit: String(KEYS.NEWS_PAGE_SIZE.eastmoney) };
-        if (s.cursor) query.cursor = s.cursor;
-
-        try {
-            var res = await window.AppDataClient.fetch('/global-news', query);
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            var json = await res.json();
-            if (!json.success) throw new Error(json.error || '数据异常');
-
-            var payload = json.data || {};
-            var rows = Array.isArray(payload.data) ? payload.data : [];
-            if (rows.length) {
-                s.items = s.items.concat(rows);
-            }
-            s.cursor = payload.nextCursor || null;
-            // 东财 fastNewsList 不支持分页,服务端 hasMore 始终会是 false,这里保留双保险
-            s.hasMore = !!payload.hasMore && !!s.cursor;
-            s.error = false;
-        } catch (e) {
-            console.error('东财资讯获取失败:', e);
-            s.error = true;
-        }
+    function actualSourceLabel(source) {
+        return SOURCES[source] ? SOURCES[source].label : source;
     }
 
-    // 把当前 source 的 items 渲染到 DOM;不重新拉数据
     function renderNewsList() {
         var container = document.getElementById('news-list');
         if (!container) return;
-        var s = state.newsState[state.currentNewsSource];
-        if (!s) return;
-
-        // 首屏加载:isLoading 且 items.length === 0,显示"加载中..."
-        if (s.isLoading && s.items.length === 0) {
+        var current = state.newsState[state.currentNewsSource];
+        if (!current) return;
+        if (current.isLoading && !current.items.length) {
             container.innerHTML = '<div class="news-status news-loading">加载中...</div>';
             return;
         }
-
-        // 加载出错且无内容
-        if (s.error && s.items.length === 0) {
-            container.innerHTML = '<div class="news-status news-error">' +
-                utils.escapeHtml(state.currentNewsSource === 'eastmoney' ? '东财资讯加载失败' : '金十快讯加载失败') +
-                '</div>';
+        if (current.error && !current.items.length) {
+            container.innerHTML = '<div class="news-status news-error">' + utils.escapeHtml(SOURCES[state.currentNewsSource].label + '加载失败') + '</div>';
             return;
         }
-
-        // 完全空
-        if (s.items.length === 0) {
-            container.innerHTML = '<div class="news-status news-empty">' +
-                utils.escapeHtml(state.currentNewsSource === 'eastmoney' ? '暂无东财资讯' : '暂无金十快讯') +
-                '</div>';
+        if (!current.items.length) {
+            container.innerHTML = '<div class="news-status news-empty">暂无' + utils.escapeHtml(SOURCES[state.currentNewsSource].label) + '</div>';
             return;
         }
-
-        // 正常:渲染瀑布流 + 底部 status
-        var html = '';
-        s.items.forEach(function (item) { html += renderNewsItem(item); });
-
-        // 底部状态行
-        if (s.isLoading) {
-            html += '<div class="news-status news-loading">加载中...</div>';
-        } else if (s.hasMore) {
-            html += '<div class="news-status news-loadmore" id="news-loadmore-sentinel">上拉加载更多</div>';
-        } else {
-            html += '<div class="news-status news-loadend">已经到底了</div>';
-        }
+        var sourceStatus = '<div class="news-actual-source' + (current.degraded ? ' degraded' : '') + '">' +
+            utils.escapeHtml(current.degraded ? '已降级至 ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource)) + '</div>';
+        var html = sourceStatus + current.items.map(renderNewsItem).join('');
+        if (current.isLoading) html += '<div class="news-status news-loading">刷新中...</div>';
+        else if (current.hasMore) html += '<div class="news-status news-loadmore">上拉加载更多</div>';
+        else html += '<div class="news-status news-loadend">已经到底了</div>';
         container.innerHTML = html;
     }
 
     function renderNewsItem(item) {
-        if (state.currentNewsSource === 'eastmoney') {
-            var title = item.title || '';
-            var summary = item.summary || '';
-            var time = item.time || '';
-            var html = '<div class="news-item">';
-            html += '  <div class="news-header">';
-            html += '    <span class="news-time">' + utils.escapeHtml(time) + '</span>';
-            html += '  </div>';
-            if (title) html += '  <div class="news-title">' + utils.escapeHtml(title) + '</div>';
-            if (summary) html += '  <div class="news-summary">' + utils.escapeHtml(summary) + '</div>';
-            html += '</div>';
-            return html;
-        }
-        // jin10
-        var content = item.data && item.data.content ? stripHtmlTags(item.data.content) : '';
-        if (!content) return '';
-        var jt = formatJin10Time(item.time);
+        if (!item.title && !item.summary) return '';
         return '<div class="news-item">' +
-            '  <div class="news-header">' +
-            '    <span class="news-time">' + utils.escapeHtml(jt) + '</span>' +
-            '  </div>' +
-            '  <div class="news-summary">' + utils.escapeHtml(content) + '</div>' +
+            '<div class="news-header"><span class="news-time">' + utils.escapeHtml(formatNewsTime(item.time)) + '</span></div>' +
+            (item.title ? '<div class="news-title">' + utils.escapeHtml(item.title) + '</div>' : '') +
+            (item.summary ? '<div class="news-summary">' + utils.escapeHtml(item.summary) + '</div>' : '') +
             '</div>';
     }
 
     window.AppNews = {
         initNewsSourceTabs: initNewsSourceTabs,
         initNewsScroll: initNewsScroll,
-        resetNewsState: resetNewsState,
+        loadNewsData: loadMoreNews,
+        loadMoreNews: loadMoreNews,
+        mergeUnique: mergeUnique,
         maybeLoadMoreNews: maybeLoadMoreNews,
-        loadNewsData: loadNewsData,
-        loadJin10News: loadJin10News,
-        loadEastmoneyNews: loadEastmoneyNews,
-        renderNewsList: renderNewsList,
+        refreshNewsData: refreshNewsData,
         renderNewsItem: renderNewsItem,
+        renderNewsList: renderNewsList,
+        resetNewsState: resetNewsState,
     };
 })();

@@ -84,7 +84,7 @@
     var TAB_TITLES = { dashboard: '市场行情', signals: '市场信号', news: '财经快讯' };
 
     // ---------- 新闻翻页 ----------
-    var NEWS_PAGE_SIZE = { jin10: 20, eastmoney: 30 };
+    var NEWS_PAGE_SIZE = { jin10: 20, eastmoney: 30, cls: 20 };
 
     // ---------- 自选股节流 ----------
     var WATCH_REFRESH_THROTTLE_KEY = 'fund_tracker_watch_refresh_throttle';
@@ -138,8 +138,9 @@
     // 新闻源 / 列表 state
     var currentNewsSource = storage.getItem(NEWS_SOURCE_KEY) || 'jin10';
     var newsState = {
-        jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false },
-        eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false },
+        jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'jin10', degraded: false },
+        eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'eastmoney', degraded: false },
+        cls: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'cls', degraded: false },
     };
 
     // ============ 启动时 IIFE 还原 ============

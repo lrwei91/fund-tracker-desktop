@@ -1100,7 +1100,7 @@ body {
     top: -12px;
     z-index: 2;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0;
     margin: -12px -12px 12px;
     border-bottom: 1px solid var(--border);
@@ -1129,6 +1129,61 @@ body {
 .stock-detail-page.active {
     display: block;
 }
+.stock-risk-block + .stock-risk-block {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border-subtle);
+}
+.stock-risk-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 42px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.stock-risk-row > div:first-child { min-width: 0; }
+.stock-risk-row span,
+.stock-risk-row em {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.stock-risk-row span {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+.stock-risk-row em {
+    margin-top: 3px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-style: normal;
+}
+.stock-risk-pdf {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--amber);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.stock-lockup-metrics {
+    flex: 0 0 auto;
+    text-align: right;
+    font-family: var(--mono);
+}
+.stock-lockup-metrics b,
+.stock-lockup-metrics small { display: block; }
+.stock-lockup-metrics b { color: var(--text-primary); font-size: 11px; }
+.stock-lockup-metrics small { margin-top: 3px; color: var(--amber); font-size: 10px; }
 .stock-cost-editor {
     margin-bottom: 12px;
     padding-bottom: 10px;
@@ -2148,7 +2203,7 @@ body {
 }
 .opportunity-radar-components {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     margin-top: 7px;
     border: 1px solid var(--border-subtle);
 }
@@ -2393,6 +2448,18 @@ body {
     border-bottom-color: var(--amber);
     background: transparent;
     box-shadow: none;
+}
+.news-actual-source {
+    margin-bottom: 8px;
+    padding: 5px 8px;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+.news-actual-source.degraded {
+    border-color: rgba(255, 179, 64, 0.35);
+    color: var(--amber);
 }
 
 /* ---------- 多日资金流向 ---------- */

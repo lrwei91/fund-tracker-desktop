@@ -11,6 +11,7 @@
     "start": "electron .",
     "check": "node --check main.js && node --check preload.js && node --check app/config-schema.js && for f in desktop/*.js renderer/*.js app/app.js app/api/*.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done",
     "smoke": "node scripts/smoke-watchlist.js",
+    "smoke:data": "node scripts/smoke-data.js",
     "version:bump": "node scripts/bump-version.js",
     "build:mac": "npm run build:mac:raw",
     "build:win": "npm run build:win:raw",

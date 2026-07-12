@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('shell', {
     maximizeHoldingWindow: () => ipcRenderer.invoke('maximize-holding-window'),
     closeHoldingWindow: () => ipcRenderer.invoke('close-holding-window'),
     getConfigPath: () => ipcRenderer.invoke('config-storage-path'),
+    openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
     configStorage: {
         load: () => ipcRenderer.invoke('config-storage-load'),
         patch: (changes) => ipcRenderer.invoke('config-storage-patch', changes || {}),

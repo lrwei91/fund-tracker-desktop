@@ -24,6 +24,7 @@
             throw new Error('资金流数据异常');
         }
         var item = json.data.items[0];
+        if (item.available === false) throw new Error(item.fallbackReason || '资金流数据不可用');
         var recent = item.recent || [];
         var last = recent.length ? recent[recent.length - 1] : null;
         var prev = recent.length > 1 ? recent[recent.length - 2] : null;
@@ -58,6 +59,15 @@
         return json.data;
     }
 
+    async function loadStockRiskData(code) {
+        var res = await window.AppDataClient.fetch('/stock-risk', { code: code, limit: 8 });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        if (!json.success || !json.data) throw new Error('公告风险数据异常');
+        json.data.meta = json.meta || null;
+        return json.data;
+    }
+
     async function showStockFundFlow(code) {
         var panel = document.getElementById('stock-fund-panel');
         var overlay = document.getElementById('stock-fund-overlay');
@@ -75,6 +85,7 @@
             loadStockFundFlowData(code),
             loadStockKlineData(code),
             loadStockNewsData(code, cachedQuote && cachedQuote.name),
+            loadStockRiskData(code),
         ]);
         var minuteData = results[0].status === 'fulfilled' ? results[0].value : null;
         var minuteError = results[0].status === 'rejected' ? results[0].reason : null;
@@ -84,6 +95,8 @@
         var klineError = results[2].status === 'rejected' ? results[2].reason : null;
         var newsData = results[3].status === 'fulfilled' ? results[3].value : null;
         var newsError = results[3].status === 'rejected' ? results[3].reason : null;
+        var riskData = results[4].status === 'fulfilled' ? results[4].value : null;
+        var riskError = results[4].status === 'rejected' ? results[4].reason : null;
 
         if (fundData && fundData.item) {
             title.textContent = W.getDisplayStockName(code, fundData.item.name || code) + ' (' + code + ')';
@@ -92,14 +105,15 @@
         } else if (klineData && klineData.name) {
             title.textContent = W.getDisplayStockName(code, klineData.name || code) + ' (' + code + ')';
         }
-        body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError);
+        body.innerHTML = renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError, riskData, riskError);
         body.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
         });
         initStockDetailTabs(body);
+        initStockRiskLinks(body);
     }
 
-    function renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError) {
+    function renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError, riskData, riskError) {
         var researchHtml = renderStockCostEditor(code) + renderStockResearchGate(code, minuteData, fundData, klineData, newsData, newsError);
         var minuteHtml = renderStockMinuteSection(minuteData, minuteError);
         var analysisHtml = renderStockAnalysisSection(klineData, klineError);
@@ -120,12 +134,14 @@
                 '<button class="stock-detail-tab" data-stock-detail-tab="minute" type="button">分时</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="analysis" type="button">技术</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="fund" type="button">资金</button>' +
+                '<button class="stock-detail-tab" data-stock-detail-tab="risk" type="button">公告/风险</button>' +
             '</div>' +
             '<div class="stock-detail-pages">' +
                 renderStockDetailPage('research', researchHtml, true) +
                 renderStockDetailPage('minute', minuteHtml, false) +
                 renderStockDetailPage('analysis', analysisHtml, false) +
                 renderStockDetailPage('fund', fundHtml, false) +
+                renderStockDetailPage('risk', renderStockRiskSection(riskData, riskError), false) +
             '</div>';
     }
 
@@ -143,6 +159,63 @@
                 root.querySelectorAll('[data-stock-detail-page]').forEach(function (page) {
                     page.classList.toggle('active', page.getAttribute('data-stock-detail-page') === target);
                 });
+            });
+        });
+    }
+
+    function sourceLabel(value) {
+        var labels = { eastmoney: '东方财富', szse: '深交所' };
+        return labels[value] || value || '--';
+    }
+
+    function formatRiskNumber(value, suffix) {
+        var number = W.readFiniteNumber(value);
+        if (number === null) return '--';
+        return number.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + (suffix || '');
+    }
+
+    function renderStockRiskSection(data, error) {
+        if (error || !data) {
+            return '<div class="stock-risk-section"><div class="list-empty">公告/风险加载失败: ' +
+                utils.escapeHtml(error && error.message ? error.message : '数据异常') + '</div></div>';
+        }
+        var announcements = data.announcements || {};
+        var lockup = data.lockup || {};
+        var source = data.meta && data.meta.sources && data.meta.sources.announcements
+            ? data.meta.sources.announcements.actual : announcements.source;
+        var announcementRows = Array.isArray(announcements.items) ? announcements.items : [];
+        var upcoming = Array.isArray(lockup.upcoming) ? lockup.upcoming : [];
+        var history = Array.isArray(lockup.history) ? lockup.history : [];
+        var announcementHtml = announcementRows.length ? announcementRows.map(function (item) {
+            var action = item.pdf ? '<button class="stock-risk-pdf" type="button" data-stock-risk-pdf="' +
+                utils.escapeHtml(item.pdf) + '">PDF</button>' : '';
+            return '<div class="stock-risk-row"><div><span>' + utils.escapeHtml(item.title || '--') + '</span>' +
+                '<em>' + utils.escapeHtml(item.time || '') + '</em></div>' + action + '</div>';
+        }).join('') : '<div class="list-empty">暂无公告</div>';
+        var lockupRows = upcoming.length ? upcoming : history.slice(0, 5);
+        var lockupHtml = lockupRows.length ? lockupRows.map(function (item) {
+            return '<div class="stock-risk-row stock-lockup-row"><div><span>' +
+                utils.escapeHtml((upcoming.length ? '待解禁 · ' : '历史 · ') + (item.type || '限售股')) + '</span>' +
+                '<em>' + utils.escapeHtml(item.date || '') + '</em></div>' +
+                '<div class="stock-lockup-metrics"><b>' + utils.escapeHtml(formatRiskNumber(item.ableShares, '万股')) + '</b>' +
+                '<small>' + utils.escapeHtml(formatRiskNumber(item.ratioPct, '%')) + '</small></div></div>';
+        }).join('') : '<div class="list-empty">未来 90 天无待解禁记录</div>';
+        return '<div class="stock-risk-section">' +
+            '<div class="stock-risk-block"><div class="stock-analysis-head"><div><div class="stock-fund-section-title">最近公告</div>' +
+            '<div class="stock-analysis-source">' + utils.escapeHtml(sourceLabel(source)) + '</div></div></div>' + announcementHtml + '</div>' +
+            '<div class="stock-risk-block"><div class="stock-analysis-head"><div><div class="stock-fund-section-title">限售解禁</div>' +
+            '<div class="stock-analysis-source">实际可流通股数 · 未来 90 天</div></div></div>' + lockupHtml + '</div>' +
+            '</div>';
+    }
+
+    function initStockRiskLinks(root) {
+        if (!root) return;
+        root.querySelectorAll('[data-stock-risk-pdf]').forEach(function (button) {
+            button.addEventListener('click', async function () {
+                var url = button.getAttribute('data-stock-risk-pdf');
+                if (!url || !window.shell || typeof window.shell.openExternalUrl !== 'function') return;
+                var result = await window.shell.openExternalUrl(url);
+                if (!result || !result.ok) W.showWatchStatus('公告链接打开失败');
             });
         });
     }
@@ -317,15 +390,15 @@
             mainFlow: mainFlow,
             technicalScore: technicalScore,
             newsScore: W.readFiniteNumber(newsScore.score),
-            historyWinRate: computeHistoryWinRate(klineData),
+            upDayRate60: computeUpDayRate60(klineData),
             triggerConditions: buildTriggerConditions(currentPct, mainFlow, analysis, positiveHits),
             invalidConditions: buildInvalidConditions(currentPct, mainFlow, analysis, riskHits),
         };
     }
 
-    function computeHistoryWinRate(klineData) {
+    function computeUpDayRate60(klineData) {
         var bars = klineData && Array.isArray(klineData.bars) ? klineData.bars : [];
-        var valid = bars.filter(function (bar) { return W.readFiniteNumber(bar.pct) !== null; });
+        var valid = bars.filter(function (bar) { return W.readFiniteNumber(bar.pct) !== null; }).slice(-60);
         if (!valid.length) return null;
         var positive = valid.filter(function (bar) { return (W.readFiniteNumber(bar.pct) || 0) > 0; }).length;
         return Math.round(positive / valid.length * 1000) / 10;
@@ -416,13 +489,13 @@
             renderResearchMetric('趋势', gate.technicalScore === null ? '--' : String(gate.technicalScore), trendClass(gate.technicalScore)),
             renderResearchMetric('资金', gate.mainFlow === null ? '--' : utils.formatYuan(gate.mainFlow), trendClass(gate.mainFlow)),
             renderResearchMetric('新闻', gate.newsScore === null ? '--' : String(gate.newsScore), trendClass(gate.newsScore)),
-            renderResearchMetric('胜率', gate.historyWinRate === null ? '--' : gate.historyWinRate + '%', gate.historyWinRate === null ? 'neutral' : trendClass(gate.historyWinRate - 50)),
+            renderResearchMetric('上涨日占比', gate.upDayRate60 === null ? '--' : gate.upDayRate60 + '%', gate.upDayRate60 === null ? 'neutral' : trendClass(gate.upDayRate60 - 50)),
         ].join('');
         return '<div class="stock-research-section ' + cls + '">' +
             '<div class="stock-analysis-head">' +
                 '<div>' +
                     '<div class="stock-fund-section-title">研究评分</div>' +
-                    '<div class="stock-analysis-source">趋势 · 资金 · 新闻 · 风险 · 近60日胜率</div>' +
+                    '<div class="stock-analysis-source">趋势 · 资金 · 新闻 · 风险 · 近60日上涨日占比</div>' +
                 '</div>' +
                 '<div class="stock-research-gate ' + cls + '">' +
                     '<span>' + utils.escapeHtml(gateLabel(gate.gate)) + '</span>' +
@@ -781,4 +854,5 @@
     W.loadStockFundFlowData = loadStockFundFlowData;
     W.loadStockKlineData = loadStockKlineData;
     W.loadStockNewsData = loadStockNewsData;
+    W.loadStockRiskData = loadStockRiskData;
 })();

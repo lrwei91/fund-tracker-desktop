@@ -210,11 +210,12 @@ function absorbDragonTiger(map, payload) {
     stocks.slice(0, 24).forEach((stock) => {
         const candidate = upsertCandidate(map, stock.code, stock.name);
         if (!candidate) return;
-        const netWan = toNumber(stock.netBuyWan) || 0;
+        const netWan = toNumber(stock.netBuyWan);
         candidate.dragonNetWan = netWan;
         candidate.dragonReason = stock.reason || '';
         addSourceType(candidate, 'dragon');
-        addSignal(candidate, '龙虎榜', clamp(netWan / 2500, -10, 13), netWan >= 0 ? '净买入' : '净卖出');
+        addSignal(candidate, '龙虎榜', netWan === null ? 0 : clamp(netWan / 2500, -10, 13),
+            netWan === null ? '交易所公开信息' : (netWan >= 0 ? '净买入' : '净卖出'));
     });
 }
 
@@ -246,9 +247,9 @@ function fundMetrics(flowItem) {
     };
 }
 
-function historyWinRate(klineData) {
+function upDayRate60(klineData) {
     const bars = klineData && Array.isArray(klineData.bars) ? klineData.bars : [];
-    const valid = bars.filter((bar) => toNumber(bar.pct) !== null);
+    const valid = bars.filter((bar) => toNumber(bar.pct) !== null).slice(-60);
     if (!valid.length) return null;
     const positive = valid.filter((bar) => (toNumber(bar.pct) || 0) > 0).length;
     return round(positive / valid.length * 100, 1);
@@ -256,7 +257,7 @@ function historyWinRate(klineData) {
 
 function componentScores(candidate, enrich) {
     enrich = enrich || {};
-    const pct = toNumber(candidate.pct) || 0;
+    const pct = toNumber(candidate.pct);
     const analysis = enrich.kline && enrich.kline.analysis ? enrich.kline.analysis : {};
     const indicators = analysis.indicators || {};
     const techScore = toNumber(analysis.score);
@@ -265,14 +266,17 @@ function componentScores(candidate, enrich) {
     const flow = fundMetrics(enrich.fund);
     const newsScore = enrich.news && enrich.news.score ? toNumber(enrich.news.score.score) : null;
 
+    const fundAvailable = !!(enrich.fund && enrich.fund.available !== false
+        && [flow.todayMain, flow.main5d, flow.main20d].some((value) => value !== null));
     const topic = clamp(48 + candidate.sourceScore + (candidate.topicTags.length ? 4 : 0), 0, 100);
-    const momentum = clamp(50 + pct * 3.2 + (momentum21 || 0) * 0.75 + (volumeRatio && volumeRatio > 1.4 ? 6 : 0), 0, 100);
-    const fund = clamp(50
+    const momentum = pct === null ? null : clamp(50 + pct * 3.2 + (momentum21 || 0) * 0.75
+        + (volumeRatio && volumeRatio > 1.4 ? 6 : 0), 0, 100);
+    const fund = fundAvailable ? clamp(50
         + (flow.todayMain || 0) / 100000000 * 11
         + (flow.main5d || 0) / 300000000 * 8
-        + ((candidate.dragonNetWan || 0) / 10000) * 3, 0, 100);
-    const technical = techScore === null ? 50 : clamp(50 + techScore * 0.5, 0, 100);
-    const news = newsScore === null ? 50 : clamp(50 + newsScore * 9, 0, 100);
+        + ((candidate.dragonNetWan || 0) / 10000) * 3, 0, 100) : null;
+    const technical = techScore === null ? null : clamp(50 + techScore * 0.5, 0, 100);
+    const news = newsScore === null ? null : clamp(50 + newsScore * 9, 0, 100);
     return {
         topic: round(topic, 0),
         momentum: round(momentum, 0),
@@ -315,18 +319,15 @@ function riskState(candidate, enrich) {
 function scoreRadarCandidate(candidate, enrich) {
     const components = componentScores(candidate, enrich);
     const risk = riskState(candidate, enrich);
-    const riskControl = clamp(100 - risk.points * 4.5, 0, 100);
-    const score = clamp(
-        components.topic * 0.22
-        + components.momentum * 0.20
-        + components.fund * 0.20
-        + components.technical * 0.20
-        + components.news * 0.12
-        + riskControl * 0.06
-        - Math.max(0, risk.points - 8) * 0.8,
-        0,
-        100,
-    );
+    const weights = { topic: 0.22, momentum: 0.20, fund: 0.20, technical: 0.20, news: 0.12 };
+    const available = Object.keys(weights).filter((key) => toNumber(components[key]) !== null);
+    const missingSources = Object.keys(weights).filter((key) => !available.includes(key));
+    const coverage = Math.round(available.length / Object.keys(weights).length * 100);
+    const weightTotal = available.reduce((sum, key) => sum + weights[key], 0);
+    const weighted = available.reduce((sum, key) => sum + components[key] * weights[key], 0);
+    const score = available.length >= 3 && weightTotal > 0
+        ? clamp(weighted / weightTotal - Math.max(0, risk.points - 8) * 0.8, 0, 100)
+        : null;
     const topic = candidate.topicTags.filter(Boolean).slice(0, 3);
     if (!topic.length && candidate.dragonReason) topic.push(candidate.dragonReason);
     return {
@@ -334,14 +335,16 @@ function scoreRadarCandidate(candidate, enrich) {
         name: candidate.name,
         price: candidate.price,
         pct: round(candidate.pct, 2),
-        score: round(score, 0),
+        score: score === null ? null : round(score, 0),
+        coverage,
+        missingSources,
         topic: topic.join(' / ') || '--',
         components,
         risk,
         signals: candidate.signals
             .sort((a, b) => Math.abs(b.points || 0) - Math.abs(a.points || 0))
             .slice(0, 5),
-        historyWinRate: historyWinRate(enrich.kline),
+        upDayRate60: upDayRate60(enrich.kline),
         newsHits: enrich.news && enrich.news.score ? (enrich.news.score.positiveHits || []) : [],
         newsRisks: enrich.news && enrich.news.score ? (enrich.news.score.riskHits || []) : [],
         latestDate: enrich.kline ? enrich.kline.latestDate : '',
@@ -421,7 +424,12 @@ async function handler(req, res) {
         const enrichCount = Math.min(ENRICH_MAX, limit);
         const pool = selectRadarPool(Array.from(candidates.values()), enrichCount);
         const items = await enrichCandidates(pool);
-        items.sort((a, b) => b.score - a.score);
+        items.sort((a, b) => {
+            if (a.score === null && b.score === null) return b.coverage - a.coverage;
+            if (a.score === null) return 1;
+            if (b.score === null) return -1;
+            return b.score - a.score;
+        });
 
         const generatedAt = new Date().toISOString();
         const sources = {
@@ -461,7 +469,7 @@ module.exports = handler;
 module.exports.componentScores = componentScores;
 module.exports.riskState = riskState;
 module.exports.scoreRadarCandidate = scoreRadarCandidate;
-module.exports.historyWinRate = historyWinRate;
+module.exports.upDayRate60 = upDayRate60;
 module.exports.sectorScoreFor = sectorScoreFor;
 module.exports.isCurrentLimitBoard = isCurrentLimitBoard;
 module.exports.hasNonLimitSource = hasNonLimitSource;

@@ -52,11 +52,13 @@ function fail(res, status, message, extra) {
 async function fetchJson(url, options) {
     return gateway.request(providerFor(url), requestKey(url, options), async () => {
         const response = await fetch(url, {
+            method: (options && options.method) || 'GET',
             headers: {
                 'User-Agent': 'Mozilla/5.0 fund-tracker/1.0',
                 Referer: 'https://finance.eastmoney.com/',
                 ...(options && options.headers ? options.headers : {}),
             },
+            body: options && options.body,
             signal: AbortSignal.timeout((options && options.timeout) || 10000),
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -72,7 +74,7 @@ async function fetchJson(url, options) {
 //  - 接收东财 6 个子域(push2 / push2his / push2ex / np-weblist / datacenter / searchapi / reportapi)
 //  - 之所以单独抽出:东财 IP 级风控(>5 QPS / 并发≥10 / 1分≥200 / 5分≥300)主要落在调用层,
 //    helper 把"重试策略"集中维护,新增端点直接复用即可。
-async function emGet(url, options) {
+async function emRequest(url, options, responseType) {
     const maxRetries = 3;
     const baseDelay = 300;
     const timeout = (options && options.timeout) || 10000;
@@ -104,6 +106,7 @@ async function emGet(url, options) {
 
         if (response.status === 429 || (response.status >= 500 && response.status < 600)) {
             lastError = new Error(`HTTP ${response.status}`);
+            lastError.status = response.status;
             if (attempt < maxRetries - 1) {
                 await sleep(baseDelay * Math.pow(2, attempt) + Math.floor(Math.random() * 100));
                 continue;
@@ -112,12 +115,61 @@ async function emGet(url, options) {
         }
         if (!response.ok) {
             // 4xx(除 429)不重试,直接抛
-            throw new Error(`HTTP ${response.status}`);
+            const error = new Error(`HTTP ${response.status}`);
+            error.status = response.status;
+            throw error;
         }
-          return response.json();
+          return responseType === 'text' ? response.text() : response.json();
       }
       throw lastError || new Error('emGet 重试耗尽');
     }, { cacheTtl: (options && options.cacheTtl) || 10000 });
+}
+
+function emGet(url, options) {
+    return emRequest(url, options, 'json');
+}
+
+function emGetText(url, options) {
+    return emRequest(url, options, 'text');
+}
+
+async function runSources(sources) {
+    const attempts = [];
+    for (const source of sources || []) {
+        try {
+            const value = await source.load();
+            if (source.validate && !source.validate(value)) throw new Error('数据为空或格式异常');
+            return {
+                value,
+                meta: {
+                    actual: source.id,
+                    actualLabel: source.label || source.id,
+                    attempts,
+                    degraded: attempts.length > 0,
+                    fallbackReason: attempts.map((item) => `${item.label}: ${item.reason}`).join('; '),
+                },
+            };
+        } catch (error) {
+            attempts.push({
+                source: source.id,
+                label: source.label || source.id,
+                reason: error && error.message ? error.message : String(error),
+            });
+        }
+    }
+    const error = new Error(attempts.map((item) => `${item.label}: ${item.reason}`).join('; ') || '所有数据源均不可用');
+    error.attempts = attempts;
+    throw error;
+}
+
+function sourceMeta(key, result, extra) {
+    return {
+        asOf: extra && extra.asOf ? extra.asOf : new Date().toISOString(),
+        degraded: !!(result && result.meta && result.meta.degraded),
+        sources: {
+            [key]: Object.assign({}, result && result.meta ? result.meta : {}, extra || {}),
+        },
+    };
 }
 
 function sleep(ms) {
@@ -182,6 +234,7 @@ module.exports = {
     API_TIMEOUTS,
     TRADING_HOURS,
     emGet,
+    emGetText,
     fail,
     fetchGbkText,
     fetchJson,
@@ -189,8 +242,10 @@ module.exports = {
     formatPct,
     formatYi,
     ok,
+    runSources,
     sendJson,
     sleep,
+    sourceMeta,
     tencentSymbol,
     toNumber,
 };

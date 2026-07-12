@@ -1,6 +1,8 @@
 const gateway = require('../app/api/_gateway');
 
 describe('API gateway', () => {
+    beforeEach(() => gateway.reset());
+
     it('合并相同在途请求并复用 TTL 缓存', async () => {
         let calls = 0;
         const loader = async () => {
@@ -29,5 +31,24 @@ describe('API gateway', () => {
             concurrency: 1, minStartInterval: 0,
         })));
         expect(maxActive).toBe(1);
+    });
+
+    it('东方财富 403 后立即熔断并允许半开探测恢复', async () => {
+        const blocked = new Error('HTTP 403');
+        blocked.status = 403;
+        await expect(gateway.request('eastmoney', 'blocked', async () => { throw blocked; }, {
+            minStartInterval: 0, startJitter: 0,
+        })).rejects.toThrow('HTTP 403');
+        await expect(gateway.request('eastmoney', 'next', async () => true)).rejects.toMatchObject({
+            code: 'PROVIDER_CIRCUIT_OPEN',
+        });
+
+        const until = gateway.diagnostics().providers.eastmoney.circuitUntil;
+        const dateNow = vi.spyOn(Date, 'now').mockReturnValue(until + 1);
+        await expect(gateway.request('eastmoney', 'probe', async () => 'ok', {
+            minStartInterval: 0, startJitter: 0,
+        })).resolves.toBe('ok');
+        expect(gateway.diagnostics().providers.eastmoney.circuitUntil).toBeNull();
+        dateNow.mockRestore();
     });
 });

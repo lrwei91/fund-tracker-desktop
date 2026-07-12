@@ -459,7 +459,7 @@
     function startNewsAutoRefresh() {
         stopNewsAutoRefresh();
         startRecurring('refreshIntervalNews', state.refreshSecondsNews * 1000, function () { return true; }, function () {
-            return state.currentTab === 'news' && window.AppNews ? window.AppNews.loadNewsData() : null;
+            return state.currentTab === 'news' && window.AppNews ? window.AppNews.refreshNewsData() : null;
         });
     }
 
@@ -554,7 +554,7 @@
             if (!options.skipOpportunityRadar && state.currentTab === 'signals') window.AppSignals.loadOpportunityRadarData(true);
             window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), true);
         }
-        if (state.currentTab === 'news' && window.AppNews) window.AppNews.loadNewsData();
+        if (state.currentTab === 'news' && window.AppNews) window.AppNews.refreshNewsData();
         utils.setLastUpdated(label || '手动刷新');
     }
 

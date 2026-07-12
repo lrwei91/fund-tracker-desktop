@@ -62,7 +62,7 @@
         }
 
         try {
-            var res = await window.AppDataClient.fetch('/opportunity-radar', { limit: 20 });
+            var res = await window.AppDataClient.fetch('/opportunity-radar', { limit: 8 });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('数据异常');
@@ -126,6 +126,11 @@
             .map(function (tag) { return '<span>' + utils.escapeHtml(tag) + '</span>'; }).join('');
         var signals = (Array.isArray(item.signals) ? item.signals : [])
             .map(function (signal) { return utils.escapeHtml(signal.label || '信号'); }).join(' · ');
+        var coverageText = '数据覆盖 ' + utils.escapeHtml(item.coverage == null ? '--' : item.coverage + '%');
+        if (Array.isArray(item.missingSources) && item.missingSources.length) {
+            var missingLabels = { topic: '题材', momentum: '动量', fund: '资金', technical: '技术', news: '新闻' };
+            coverageText += ' · 缺 ' + utils.escapeHtml(item.missingSources.map(function (key) { return missingLabels[key] || key; }).join('/'));
+        }
         return '<div class="opportunity-radar-item" data-radar-code="' + utils.escapeHtml(item.code || '') + '">' +
             '<div class="opportunity-radar-head">' +
                 '<div class="opportunity-radar-stock">' +
@@ -144,11 +149,13 @@
                 renderRadarMetric('题材', components.topic) +
                 renderRadarMetric('动量', components.momentum) +
                 renderRadarMetric('资金', components.fund) +
+                renderRadarMetric('技术', components.technical) +
                 renderRadarMetric('新闻', components.news) +
             '</div>' +
             '<div class="opportunity-radar-foot">' +
                 '<span>' + utils.escapeHtml(signals || '等待更多信号确认') + '</span>' +
-                '<span>近60日胜率 ' + utils.escapeHtml(item.historyWinRate == null ? '--' : item.historyWinRate + '%') + '</span>' +
+                '<span>近60日上涨日占比 ' + utils.escapeHtml(item.upDayRate60 == null ? '--' : item.upDayRate60 + '%') + '</span>' +
+                '<span>' + coverageText + '</span>' +
             '</div>' +
         '</div>';
     }

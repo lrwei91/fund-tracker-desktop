@@ -119,27 +119,11 @@
         }).join(' ');
     }
 
-    function buildIndexSparklineValues(data, prev) {
-        var current = typeof data.priceValue === 'number' ? data.priceValue : null;
-        if (!Number.isFinite(current)) return [];
-        var pct = typeof data.changePercent === 'number' ? data.changePercent : 0;
-        var open = typeof data.openPrice === 'number' && Number.isFinite(data.openPrice) && data.openPrice > 0
-            ? data.openPrice
-            : null;
-        var start = open || (typeof prev === 'number' && Number.isFinite(prev) && prev > 0
-            ? prev
-            : current / (1 + pct / 100 || 1));
-        if (!Number.isFinite(start) || start <= 0) start = current;
-        var seed = String(data.name || '').split('').reduce(function (sum, ch) { return sum + ch.charCodeAt(0); }, 0);
-        var values = [];
-        for (var i = 0; i < 48; i++) {
-            var t = i / 47;
-            var wave = Math.sin((seed % 7 + 1) * t * Math.PI) * 0.0018;
-            var zig = ((seed + i * 11) % 9 - 4) * 0.00045;
-            values.push(start + (current - start) * t + current * (wave + zig));
-        }
-        values[values.length - 1] = current;
-        return values;
+    function buildIndexSparklineValues(data) {
+        if (!data || !Array.isArray(data.sparkline)) return [];
+        return data.sparkline.map(function (point) {
+            return typeof point === 'number' ? point : Number(point && point.price);
+        }).filter(function (value) { return Number.isFinite(value); });
     }
 
     function buildIndexSparklineSvg(data, cls, prev) {
@@ -300,20 +284,21 @@
     // 资金流 / 板块 UI 渲染
     // ============================================================
 
-    // 6 格子: 资金 4 档 (主力/大单/中单/小单) + 北向 2 通道 (沪股通/深股通)
+    // 6 格子: 资金 4 档 + 沪股通盘中参考 + HKEX 北向官方日成交额
     function renderCapitalUI(cap) {
         var cells = [
             { id: 'main-fund-value', data: cap.mainFund },
             { id: 'large-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.large },
             { id: 'medium-value',    data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.medium },
             { id: 'small-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.small },
-            { id: 'north-hgt-value', data: cap.northHgt },
-            { id: 'north-sgt-value', data: cap.northSgt },
+            { id: 'north-hgt-value', data: cap.northHgtIntraday, note: cap.northHgtIntraday && cap.northHgtIntraday.time },
+            { id: 'north-daily-value', data: cap.northboundDaily, note: cap.northboundDaily && cap.northboundDaily.date },
         ];
         cells.forEach(function (cell) {
             var el = document.getElementById(cell.id);
             if (!el) return;
             el.textContent = cell.data && cell.data.value ? cell.data.value : '--';
+            el.title = cell.note || (cell.data && cell.data.note) || '';
             el.className = 'capital-value';
             if (cell.data && typeof cell.data.isPositive === 'boolean') {
                 el.classList.add(cell.data.isPositive ? 'positive' : 'negative');

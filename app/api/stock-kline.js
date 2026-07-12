@@ -5,6 +5,7 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 
 const { API_TIMEOUTS, emGet, fail, fetchJson, ok, tencentSymbol, toNumber } = require('./_utils');
+const tdxrsCapability = require('./_tdxrs');
 
 const execFileAsync = promisify(execFile);
 
@@ -462,12 +463,27 @@ async function handler(req, res) {
         let result;
         let fallbackReason = '';
 
-        // 尝试多个数据源: tdxrs(最快) → 腾讯(稳定) → 东方财富(推2his可能不可用)
-        const sources = [
-            { label: '通达信', fn: () => fetchTdxrsDailyKlines(code, days) },
+        // 开发环境首次探测 tdxrs；打包环境未显式配置时直接走纯 HTTP 数据源。
+        const sources = [];
+        if (tdxrsCapability.shouldTry()) {
+            sources.push({
+                label: '通达信',
+                fn: async () => {
+                    try {
+                        const value = await fetchTdxrsDailyKlines(code, days);
+                        tdxrsCapability.markAvailable();
+                        return value;
+                    } catch (error) {
+                        tdxrsCapability.markUnavailable();
+                        throw error;
+                    }
+                },
+            });
+        }
+        sources.push(
             { label: '腾讯', fn: () => fetchTencentDailyKlines(code, days) },
             { label: '东方财富', fn: () => fetchEastmoneyDailyKlines(code, days) },
-        ];
+        );
         for (const s of sources) {
             try {
                 result = await s.fn();

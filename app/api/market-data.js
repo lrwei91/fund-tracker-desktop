@@ -4,6 +4,7 @@ const {
     fail,
     fetchGbkText,
     fetchJson,
+    fetchText,
     formatPct,
     formatYi,
     ok,
@@ -11,10 +12,10 @@ const {
 } = require('./_utils');
 
 const INDEXES = {
-    shangzhi: { symbol: 's_sh000001', name: '上证指数' },
-    shengzheng: { symbol: 's_sz399001', name: '深证成指' },
-    chuangye: { symbol: 's_sz399006', name: '创业板指' },
-    zhuanke50: { symbol: 's_sh000688', name: '科创50' },
+    shangzhi: { symbol: 's_sh000001', minuteSymbol: 'sh000001', name: '上证指数' },
+    shengzheng: { symbol: 's_sz399001', minuteSymbol: 'sz399001', name: '深证成指' },
+    chuangye: { symbol: 's_sz399006', minuteSymbol: 'sz399006', name: '创业板指' },
+    zhuanke50: { symbol: 's_sh000688', minuteSymbol: 'sh000688', name: '科创50' },
 };
 
 const dailyCache = {
@@ -23,7 +24,10 @@ const dailyCache = {
 
 async function loadIndexes() {
     const symbols = Object.values(INDEXES).map((item) => item.symbol).join(',');
-    const text = await fetchGbkText(`https://qt.gtimg.cn/q=${symbols}`);
+    const [text, minuteRows] = await Promise.all([
+        fetchGbkText(`https://qt.gtimg.cn/q=${symbols}`),
+        Promise.all(Object.values(INDEXES).map((item) => loadIndexMinute(item.minuteSymbol).catch(() => ({ date: '', points: [] })))),
+    ]);
     const lines = text.split(';').filter(Boolean);
     const bySymbol = {};
     lines.forEach((rawLine) => {
@@ -33,7 +37,7 @@ async function loadIndexes() {
         const key = line.slice(2, line.indexOf('='));
         bySymbol[key] = line.slice(line.indexOf('"') + 1, line.lastIndexOf('"')).split('~');
     });
-    const entries = Object.entries(INDEXES).map(([id, item]) => {
+    const entries = Object.entries(INDEXES).map(([id, item], index) => {
         const data = bySymbol[item.symbol];
         if (!data || data.length < 6) throw new Error(`指数无数据 ${item.symbol}`);
         const value = toNumber(data[3]);
@@ -45,22 +49,52 @@ async function loadIndexes() {
             priceValue: value, // 数值型价格,前端 trend-arrow 用它做对比
             change: `${change > 0 ? '+' : ''}${change === null ? '--' : change.toFixed(2)} / ${formatPct(changePercent)}`,
             changePercent: changePercent || 0,
+            sparkline: minuteRows[index].points,
+            sparklineDate: minuteRows[index].date,
         }];
     });
     return Object.fromEntries(entries);
 }
 
-async function loadCapital() {
-    const [mainFund, northFund] = await Promise.all([
-        loadMarketMainFund(),
-        loadNorthFund(),
-    ]);
-    // northFund 内嵌了 northHgt / northSgt, 提一层方便前端 6 格子渲染
+async function loadIndexMinute(symbol) {
+    const json = await fetchJson(`https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${symbol}`, {
+        cacheTtl: 60 * 1000,
+        headers: { Referer: 'https://gu.qq.com/' },
+        timeout: API_TIMEOUTS.normal,
+    });
+    const data = json && json.data && json.data[symbol] && json.data[symbol].data;
+    const rows = data && Array.isArray(data.data) ? data.data : [];
     return {
-        mainFund,
-        northFund: { value: northFund.value, isPositive: northFund.isPositive, time: northFund.time },
-        northHgt: northFund.northHgt,
-        northSgt: northFund.northSgt,
+        date: String(data && data.date || '').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3'),
+        points: parseIndexMinuteRows(rows),
+    };
+}
+
+function parseIndexMinuteRows(rows) {
+    return (Array.isArray(rows) ? rows : []).map((line) => {
+        const parts = String(line || '').trim().split(/\s+/);
+        const price = toNumber(parts[1]);
+        return price === null ? null : price;
+    }).filter((price) => price !== null);
+}
+
+async function loadCapital() {
+    const [mainFund, northHgtIntraday, northboundDaily] = await Promise.all([
+        loadMarketMainFund(),
+        loadNorthHgtIntraday(),
+        loadHkexNorthboundDaily(),
+    ]);
+    return {
+        data: { mainFund, northHgtIntraday, northboundDaily },
+        meta: {
+            asOf: new Date().toISOString(),
+            degraded: !mainFund.available || !northHgtIntraday.available || !northboundDaily.available,
+            sources: {
+                marketFund: { actual: mainFund.source, status: mainFund.available ? 'live' : 'unavailable' },
+                northHgtIntraday: { actual: 'hexin', status: northHgtIntraday.available ? 'live' : 'unavailable' },
+                northboundDaily: { actual: 'hkex', status: northboundDaily.available ? 'live' : 'unavailable' },
+            },
+        },
     };
 }
 
@@ -149,27 +183,31 @@ async function loadMarketMainFund() {
     } catch (error) {
         // push2 不可用时返回空数据
         return {
+            available: false,
+            source: null,
             value: '--',
-            isPositive: true,
+            isPositive: null,
             note: 'push2 不可用',
             breakdown: {
-                superLarge: { value: '--', isPositive: true },
-                large:      { value: '--', isPositive: true },
-                medium:     { value: '--', isPositive: true },
-                small:      { value: '--', isPositive: true },
+                superLarge: { value: '--', isPositive: null },
+                large:      { value: '--', isPositive: null },
+                medium:     { value: '--', isPositive: null },
+                small:      { value: '--', isPositive: null },
             },
         };
     }
     if (!rows.length) {
         return {
+            available: false,
+            source: null,
             value: '--',
-            isPositive: true,
+            isPositive: null,
             note: '暂无数据',
             breakdown: {
-                superLarge: { value: '--', isPositive: true },
-                large:      { value: '--', isPositive: true },
-                medium:     { value: '--', isPositive: true },
-                small:      { value: '--', isPositive: true },
+                superLarge: { value: '--', isPositive: null },
+                large:      { value: '--', isPositive: null },
+                medium:     { value: '--', isPositive: null },
+                small:      { value: '--', isPositive: null },
             },
         };
     }
@@ -189,6 +227,8 @@ async function loadMarketMainFund() {
     // 这里"主力"用 f62 (超大单+大单), "大单"=f66 超大单 (按金额大小排列),
     // "中单"=f78, "小单"=f84, 跟散户最关心的层级一致
     return {
+        available: true,
+        source: 'eastmoney',
         value: formatYi(totalMain),
         isPositive: totalMain >= 0,
         breakdown: {
@@ -200,7 +240,7 @@ async function loadMarketMainFund() {
     };
 }
 
-async function loadNorthFund() {
+async function loadNorthHgtIntraday() {
     let json;
     try {
         json = await fetchJson('https://data.hexin.cn/market/hsgtApi/method/dayChart/', {
@@ -213,43 +253,76 @@ async function loadNorthFund() {
     } catch (error) {
         // hexin 不可用时返回空数据
         return {
+            available: false,
             value: '--',
-            isPositive: true,
+            isPositive: null,
             time: '',
-            northHgt: { value: '--', isPositive: true },
-            northSgt: { value: '--', isPositive: true },
         };
     }
     const times = Array.isArray(json.time) ? json.time : [];
     let latest = null;
     times.forEach((time, index) => {
         const hgt = toNumber(json.hgt && json.hgt[index]);
-        const sgt = toNumber(json.sgt && json.sgt[index]);
-        if (hgt === null || sgt === null) return;
-        latest = { time, hgt, sgt, value: hgt + sgt };
+        if (hgt === null) return;
+        latest = { time, hgt };
     });
     if (!latest) {
         return {
+            available: false,
             value: '--',
-            isPositive: true,
+            isPositive: null,
             time: '',
-            northHgt: { value: '--', isPositive: true },
-            northSgt: { value: '--', isPositive: true },
         };
     }
     return {
-        value: `${latest.value > 0 ? '+' : ''}${latest.value.toFixed(2)}亿`,
-        isPositive: latest.value >= 0,
+        available: true,
+        value: `${latest.hgt > 0 ? '+' : ''}${latest.hgt.toFixed(2)}亿`,
+        isPositive: latest.hgt >= 0,
         time: latest.time,
-        northHgt: {
-            value: `${latest.hgt > 0 ? '+' : ''}${latest.hgt.toFixed(2)}亿`,
-            isPositive: latest.hgt >= 0,
-        },
-        northSgt: {
-            value: `${latest.sgt > 0 ? '+' : ''}${latest.sgt.toFixed(2)}亿`,
-            isPositive: latest.sgt >= 0,
-        },
     };
+}
+
+function parseHkexDaily(text) {
+    const raw = String(text || '');
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    if (start < 0 || end <= start) throw new Error('HKEX 数据格式异常');
+    const rows = JSON.parse(raw.slice(start, end + 1));
+    const markets = rows.filter((item) => /Northbound/.test(String(item.market || '')));
+    let turnoverMillion = 0;
+    markets.forEach((market) => {
+        const value = market && market.content && market.content[0]
+            && market.content[0].table && market.content[0].table.tr
+            && market.content[0].table.tr[0] && market.content[0].table.tr[0].td
+            && market.content[0].table.tr[0].td[0] && market.content[0].table.tr[0].td[0][0];
+        const number = toNumber(String(value || '').replace(/,/g, ''));
+        if (number !== null) turnoverMillion += number;
+    });
+    return {
+        date: markets[0] && markets[0].date || '',
+        turnoverYi: turnoverMillion / 100,
+    };
+}
+
+async function loadHkexNorthboundDaily() {
+    for (let offset = 0; offset < 7; offset += 1) {
+        const date = new Date(Date.now() - offset * 86400000);
+        const key = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(date).replace(/-/g, '');
+        try {
+            const text = await fetchText(`https://www.hkex.com.hk/chi/csm/DailyStat/data_tab_daily_${key}c.js`, {
+                cacheTtl: 30 * 60 * 1000,
+                headers: { Referer: 'https://www.hkex.com.hk/' },
+                timeout: API_TIMEOUTS.normal,
+            });
+            const data = parseHkexDaily(text);
+            if (data.turnoverYi > 0) {
+                return { available: true, value: `${data.turnoverYi.toFixed(2)}亿`, isPositive: null, date: data.date };
+            }
+        } catch (error) {}
+    }
+    return { available: false, value: '--', isPositive: null, date: '' };
 }
 
 async function loadIndustryRows() {
@@ -356,7 +429,10 @@ module.exports = async function handler(req, res) {
     try {
         const type = req.query.type;
         if (type === 'index') return ok(res, await loadIndexes());
-        if (type === 'capital') return ok(res, await loadCapital());
+        if (type === 'capital') {
+            const result = await loadCapital();
+            return ok(res, result.data, { meta: result.meta });
+        }
         if (type === 'sector') return ok(res, await loadSector());
         if (type === 'multiday-flow') return ok(res, await loadMultiDayFlow());
         return fail(res, 400, '未知 market-data 类型');
@@ -364,3 +440,7 @@ module.exports = async function handler(req, res) {
         return fail(res, 502, '真实行情接口不可用', { error: error.message });
     }
 };
+
+module.exports.loadIndexMinute = loadIndexMinute;
+module.exports.parseHkexDaily = parseHkexDaily;
+module.exports.parseIndexMinuteRows = parseIndexMinuteRows;

@@ -1,8 +1,8 @@
 const radar = require('../app/api/opportunity-radar');
 
 describe('opportunity-radar helpers', () => {
-    it('historyWinRate 计算近 K 线上涨日占比', () => {
-        const rate = radar.historyWinRate({
+    it('upDayRate60 计算近 K 线上涨日占比', () => {
+        const rate = radar.upDayRate60({
             bars: [
                 { pct: 1.2 },
                 { pct: -0.4 },
@@ -11,6 +11,12 @@ describe('opportunity-radar helpers', () => {
             ],
         });
         expect(rate).toBe(50);
+    });
+
+    it('上涨日占比只统计最后 60 根有效 K 线', () => {
+        const bars = Array.from({ length: 20 }, () => ({ pct: 1 }))
+            .concat(Array.from({ length: 60 }, () => ({ pct: -1 })));
+        expect(radar.upDayRate60({ bars })).toBe(0);
     });
 
     it('riskState 识别新闻风险和技术弱势', () => {
@@ -50,6 +56,18 @@ describe('opportunity-radar helpers', () => {
         expect(row.components).toHaveProperty('topic');
         expect(row.risk.status).toBe('pass');
         expect(row.topic).toContain('银行');
+        expect(row.coverage).toBe(100);
+        expect(row.missingSources).toEqual([]);
+    });
+
+    it('核心组件少于三个时不生成综合分', () => {
+        const row = radar.scoreRadarCandidate({
+            code: '600000', name: '浦发银行', pct: null, topicTags: [], signals: [], sourceScore: 1,
+            dragonNetWan: null, isLimitDown: false,
+        }, {});
+        expect(row.score).toBeNull();
+        expect(row.coverage).toBe(20);
+        expect(row.missingSources).toEqual(expect.arrayContaining(['momentum', 'fund', 'technical', 'news']));
     });
 
     it('sectorScoreFor 匹配板块资金流入和流出', () => {
