@@ -1,7 +1,30 @@
-.env*
-.DS_Store
-dist/
+# ===== Dependencies =====
 node_modules/
+
+# ===== Build & package output (electron-builder) =====
+dist/
+out/
+release/
+.electron-builder-cache/
+
+# ===== Environment & secrets =====
+.env*
+*.pem
+*.key
+
+# ===== Logs =====
 *.log
 npm-debug.log*
-.electron-builder-cache/
+logs/
+
+# ===== Test & coverage (vitest) =====
+coverage/
+.nyc_output/
+
+# ===== Editor & OS =====
+.vscode/
+.idea/
+.DS_Store
+
+# ===== Cache =====
+.cache/
