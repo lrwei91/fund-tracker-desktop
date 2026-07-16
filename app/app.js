@@ -41,6 +41,8 @@
             holdingColorMode: document.getElementById('holding-color-mode'),
             holdingOpacity: document.getElementById('holding-opacity-input'),
             holdingOpacityValue: document.getElementById('holding-opacity-value'),
+            taskbarTicker: document.getElementById('taskbar-ticker-toggle'),
+            taskbarTickerRow: document.getElementById('taskbar-ticker-row'),
             alertEnabled: document.getElementById('alert-enabled-toggle'),
             alertThreshold: document.getElementById('alert-threshold-input'),
         };
@@ -62,6 +64,9 @@
         state.refreshSecondsNews = parseInt(normalizeOptionValue(saved.newsInterval, ['60', '600', '1800'], state.refreshSecondsNews), 10);
         state.holdingColorMode = normalizeOptionValue(saved.holdingColorMode, ['market', 'white'], state.holdingColorMode);
         state.holdingOpacity = normalizePercentValue(saved.holdingOpacity, state.holdingOpacity);
+        state.taskbarTickerEnabled = typeof saved.taskbarTickerEnabled === 'boolean'
+            ? saved.taskbarTickerEnabled
+            : saved.holdingTaskbarEnabled !== false;
     }
 
     function saveSettings() {
@@ -73,6 +78,7 @@
                 newsInterval: state.refreshSecondsNews,
                 holdingColorMode: state.holdingColorMode,
                 holdingOpacity: state.holdingOpacity,
+                taskbarTickerEnabled: state.taskbarTickerEnabled,
             }));
         } catch (e) {}
     }
@@ -86,8 +92,15 @@
         if (controls.holdingColorMode) controls.holdingColorMode.value = state.holdingColorMode;
         if (controls.holdingOpacity) controls.holdingOpacity.value = String(state.holdingOpacity);
         if (controls.holdingOpacityValue) controls.holdingOpacityValue.textContent = state.holdingOpacity + '%';
+        if (controls.taskbarTicker) controls.taskbarTicker.checked = state.taskbarTickerEnabled;
+        if (controls.taskbarTickerRow) controls.taskbarTickerRow.hidden = !(window.shell && window.shell.isWindows);
         if (controls.alertEnabled) controls.alertEnabled.checked = state.alertEnabled;
         if (controls.alertThreshold) controls.alertThreshold.value = String(state.alertThreshold);
+    }
+
+    function applyTaskbarTickerSetting() {
+        if (!window.shell || typeof window.shell.setTaskbarTickerEnabled !== 'function') return;
+        window.shell.setTaskbarTickerEnabled(state.taskbarTickerEnabled).catch(function () {});
     }
 
     // ============================================================
@@ -338,6 +351,15 @@
             });
         }
 
+        var taskbarTickerToggle = document.getElementById('taskbar-ticker-toggle');
+        if (taskbarTickerToggle) {
+            taskbarTickerToggle.addEventListener('change', function (e) {
+                state.taskbarTickerEnabled = !!e.target.checked;
+                saveSettings();
+                applyTaskbarTickerSetting();
+            });
+        }
+
         var holdingOpacityInput = document.getElementById('holding-opacity-input');
         var holdingOpacityValue = document.getElementById('holding-opacity-value');
         if (holdingOpacityInput) {
@@ -564,6 +586,7 @@
 
     function bootstrapApp() {
         loadSettings();
+        applyTaskbarTickerSetting();
         initTabs();
         initCollapsible();
         initSectorTabs();

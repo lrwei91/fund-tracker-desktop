@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('shell', {
     minimizeHoldingWindow: () => ipcRenderer.invoke('minimize-holding-window'),
     maximizeHoldingWindow: () => ipcRenderer.invoke('maximize-holding-window'),
     closeHoldingWindow: () => ipcRenderer.invoke('close-holding-window'),
+    setTaskbarTickerEnabled: (enabled) => ipcRenderer.invoke('set-taskbar-ticker-enabled', enabled !== false),
+    isWindows: process.platform === 'win32',
     getConfigPath: () => ipcRenderer.invoke('config-storage-path'),
     openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
     configStorage: {

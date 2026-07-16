@@ -6,6 +6,7 @@
   var REMARKS_KEY = 'fund_tracker_watchlist_remarks'
   var SETTINGS_KEY = 'fund_tracker_settings'
   var CLOWN_MODE_KEY = 'fund_tracker_holding_clown_mode'
+  var taskbarMode = new URLSearchParams(window.location.search).get('mode') === 'taskbar'
 
   var slot = document.getElementById('quote-slot')
   var shell = document.getElementById('widget-shell')
@@ -15,6 +16,9 @@
   var timer = null
   var animationTimer = null
   var clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
+
+  document.body.classList.toggle('taskbar-mode', taskbarMode)
+  if (taskbarMode) document.title = '任务栏行情'
 
   function readJson(key, fallback) {
     try {
@@ -242,6 +246,7 @@
   }
 
   function bindControls() {
+    if (taskbarMode) return
     if (clownModeBtn) {
       clownModeBtn.addEventListener('click', function () {
         clownMode = !clownMode

@@ -108,6 +108,7 @@
     // 持仓股浮窗设置
     var holdingColorMode = 'market';
     var holdingOpacity = 100;
+    var taskbarTickerEnabled = true;
 
     // 主 tab
     var currentTab = 'dashboard';
@@ -332,6 +333,7 @@
         refreshSecondsNews: refreshSecondsNews,
         holdingColorMode: holdingColorMode,
         holdingOpacity: holdingOpacity,
+        taskbarTickerEnabled: taskbarTickerEnabled,
         currentTab: currentTab,
         activeWatchTabId: activeWatchTabId,
         liveIndexData: liveIndexData,
