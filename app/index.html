@@ -153,6 +153,11 @@
                 <span class="collapse-icon">▼</span>
             </div>
             <div class="card-body">
+                <form class="custom-index-add-form" id="custom-index-add-form" hidden>
+                    <input type="text" id="custom-index-input" autocomplete="off" placeholder="输入指数 / ETF / 板块代码或名称" aria-label="指数或 ETF 代码/名称">
+                    <button type="submit">添加</button>
+                    <button type="button" class="secondary" id="custom-index-add-cancel">取消</button>
+                </form>
                 <div class="index-grid" id="custom-index-grid"></div>
             </div>
         </section>

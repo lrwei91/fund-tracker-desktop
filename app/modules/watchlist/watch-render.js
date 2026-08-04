@@ -200,6 +200,7 @@
             : '─';
         var data = state.watchQuoteCache[code];
         var priceValue = data && typeof data.priceValue === 'number' ? data.priceValue : null;
+        var displayPrice = utils.formatQuotePrice(priceValue, price, code, data && data.name ? data.name : name);
         var costCell = showCost ? renderCostCell(code, priceValue) : '';
         var spark = renderWatchSparklineCell(code, cls);
         return '<div class="watchlist-item clickable" data-code="' + utils.escapeHtml(code) + '" data-pct="' + utils.escapeHtml(changePercent) + '">' +
@@ -208,7 +209,7 @@
             '<div class="watchlist-stock-code">' + utils.escapeHtml(code) + '</div></div>' +
             spark +
             costCell +
-            '<div class="watchlist-stock-price ' + cls + '">' + utils.escapeHtml(price) + '</div>' +
+            '<div class="watchlist-stock-price ' + cls + '">' + utils.escapeHtml(displayPrice) + '</div>' +
             '<div class="watchlist-stock-change ' + cls + '">' + utils.escapeHtml(pt) + ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span></div>' +
             '<button class="watchlist-remove-btn" data-code="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button></div>';
     }

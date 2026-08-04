@@ -48,6 +48,7 @@
         grid.innerHTML = items.join('');
         bindCustomIndexRemove();
         bindCustomIndexAdd();
+        bindCustomIndexAddForm();
         if (updateTimeEl) updateTimeEl.textContent = state.customIndexUpdateTime || '';
     }
 
@@ -63,6 +64,7 @@
         // 半小时对比箭头:跟大盘指数一致,挂在价格后面,从 custom bucket 取 prev 价格
         var cached = state.customIndexCache[code];
         var priceValue = cached && typeof cached.priceValue === 'number' ? cached.priceValue : null;
+        var displayPrice = utils.formatQuotePrice(priceValue, price, code, name);
         var marketMod = window.AppMarket;
         var prevBucket = (marketMod && typeof marketMod.readIndexPrevBucket === 'function')
             ? marketMod.readIndexPrevBucket('custom').data
@@ -78,7 +80,7 @@
             : '';
         return '<div class="index-item custom-index-data" data-code="' + utils.escapeHtml(code) + '">' +
             '<div class="index-name">' + utils.escapeHtml(name) + '</div>' +
-            '<div class="index-value ' + cls + '">' + utils.escapeHtml(price) + arrowHtml + '</div>' +
+            '<div class="index-value ' + cls + '">' + utils.escapeHtml(displayPrice) + arrowHtml + '</div>' +
             '<div class="index-change ' + cls + '" title="' + utils.escapeHtml(changeTitle) + '">' + utils.escapeHtml(pctStr) + '</div>' +
             '<div class="index-sparkline ' + cls + '">' + sparkSvg + '</div>' +
             '<button type="button" class="custom-index-remove" data-remove-custom-index="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button>' +
@@ -104,13 +106,57 @@
         });
     }
 
-    // 用 prompt 快速加;避免在卡片里塞输入框布局
     function openCustomIndexAddForm() {
-        var raw = window.prompt('输入指数 / ETF / 板块代码(6 位数字)或名称', '');
-        if (raw == null) return;
-        var value = String(raw).trim();
-        if (!value) return;
-        addCustomIndexByInput(value);
+        bindCustomIndexAddForm();
+        var form = document.getElementById('custom-index-add-form');
+        var input = document.getElementById('custom-index-input');
+        if (!form || !input) {
+            showCustomIndexStatus('添加表单不可用', 'error');
+            return;
+        }
+        form.hidden = false;
+        input.value = '';
+        input.focus();
+    }
+
+    function closeCustomIndexAddForm() {
+        var form = document.getElementById('custom-index-add-form');
+        var input = document.getElementById('custom-index-input');
+        if (!form) return;
+        form.hidden = true;
+        form.dataset.submitting = 'false';
+        if (input) input.value = '';
+    }
+
+    function bindCustomIndexAddForm() {
+        var form = document.getElementById('custom-index-add-form');
+        var input = document.getElementById('custom-index-input');
+        var cancel = document.getElementById('custom-index-add-cancel');
+        if (!form || !input || form.dataset.bound === 'true') return;
+        form.dataset.bound = 'true';
+        form.dataset.submitting = 'false';
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            if (form.dataset.submitting === 'true') return;
+            var value = input.value.trim();
+            if (!value) {
+                input.focus();
+                return;
+            }
+            form.dataset.submitting = 'true';
+            var submit = form.querySelector('button[type="submit"]');
+            if (submit) submit.disabled = true;
+            addCustomIndexByInput(value).then(function (added) {
+                if (added) closeCustomIndexAddForm();
+            }).finally(function () {
+                form.dataset.submitting = 'false';
+                if (submit) submit.disabled = false;
+            });
+        });
+        if (cancel) cancel.addEventListener('click', closeCustomIndexAddForm);
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeCustomIndexAddForm();
+        });
     }
 
     async function addCustomIndexByInput(rawValue) {
@@ -120,19 +166,21 @@
             var code = match.code;
             if (state.customIndexCodes.includes(code)) {
                 showCustomIndexStatus('已在自选指数中', 'error');
-                return;
+                return false;
             }
             if (state.customIndexCodes.length >= KEYS.CUSTOM_INDEX_MAX) {
                 showCustomIndexStatus('自选指数最多 ' + KEYS.CUSTOM_INDEX_MAX + ' 个,请先删除', 'error');
-                return;
+                return false;
             }
             state.customIndexCodes.push(code);
             saveCustomIndices();
             renderCustomIndex();
             showCustomIndexStatus((match.name || code) + ' 已添加');
             loadSingleCustomIndex(code);
+            return true;
         } catch (e) {
             showCustomIndexStatus(e.message || '未找到匹配指数', 'error');
+            return false;
         }
     }
 
@@ -240,7 +288,9 @@
     W.renderCustomIndexItem = renderCustomIndexItem;
     W.bindCustomIndexRemove = bindCustomIndexRemove;
     W.bindCustomIndexAdd = bindCustomIndexAdd;
+    W.bindCustomIndexAddForm = bindCustomIndexAddForm;
     W.openCustomIndexAddForm = openCustomIndexAddForm;
+    W.closeCustomIndexAddForm = closeCustomIndexAddForm;
     W.addCustomIndexByInput = addCustomIndexByInput;
     W.removeCustomIndex = removeCustomIndex;
     W.showCustomIndexStatus = showCustomIndexStatus;

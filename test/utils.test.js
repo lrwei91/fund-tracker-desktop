@@ -36,6 +36,19 @@ describe('escapeHtml: 防 XSS 转义', () => {
     });
 });
 
+describe('formatQuotePrice: ETF 价格保留三位', () => {
+    it('名称含 ETF 时使用三位小数', () => {
+        expect(U.formatQuotePrice(2.3456, '--', '159915', '创业板ETF')).toBe('2.346');
+    });
+    it('常见 ETF 代码段使用三位小数', () => {
+        expect(U.formatQuotePrice(1.2349, '--', '510300', '沪深300')).toBe('1.235');
+    });
+    it('普通股票仍保留两位小数并支持无数据回退', () => {
+        expect(U.formatQuotePrice(12.345, '--', '600000', '浦发银行')).toBe('12.35');
+        expect(U.formatQuotePrice(null, '--', '600000', '浦发银行')).toBe('--');
+    });
+});
+
 describe('isTradingWeekday', () => {
     it('周一到周五为交易日', () => {
         expect(U.isTradingWeekday('周一')).toBe(true);

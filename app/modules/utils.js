@@ -15,6 +15,21 @@
             .replace(/'/g, '&#39;');
     }
 
+    function isEtf(code, name) {
+        var normalizedName = String(name || '').toUpperCase();
+        if (normalizedName.indexOf('ETF') !== -1) return true;
+        return /^(159|510|511|512|513|515|516|517|518|560|561|562|563|588)\d{3}$/.test(String(code || '').trim());
+    }
+
+    function formatQuotePrice(value, fallback, code, name) {
+        if (value === null || value === undefined || value === '') {
+            return fallback === null || fallback === undefined ? '--' : String(fallback);
+        }
+        var number = Number(value);
+        if (!Number.isFinite(number)) return fallback === null || fallback === undefined ? '--' : String(fallback);
+        return number.toFixed(isEtf(code, name) ? 3 : 2);
+    }
+
     // 元 → 亿/万 文本。yuan 可为正负/0;0 / null / undefined 一律返回 '0'
     // 与 app.js 原 3 处内联 fmtYuan/fmtYi 行为完全等价
     function formatYuan(yuan) {
@@ -126,6 +141,8 @@
     window.AppUtils = {
         escapeHtml: escapeHtml,
         formatYuan: formatYuan,
+        isEtf: isEtf,
+        formatQuotePrice: formatQuotePrice,
         apiUrl: apiUrl,
         formatShanghaiTime: formatShanghaiTime,
         getShanghaiNow: getShanghaiNow,

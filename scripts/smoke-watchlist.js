@@ -29,6 +29,11 @@ const html = `<!DOCTYPE html><html><body>
   <div id="watchlist-tabs"></div>
   <div id="custom-index-grid"></div>
   <div id="custom-index-update-time"></div>
+  <form id="custom-index-add-form" hidden>
+    <input id="custom-index-input" />
+    <button type="submit">添加</button>
+    <button type="button" id="custom-index-add-cancel">取消</button>
+  </form>
   <input id="stock-code-input" />
   <button id="add-stock-btn"></button>
   <div id="stock-fund-panel" hidden></div>
@@ -96,8 +101,8 @@ const expected = [
     'persistCurrentChangePct', 'getPrevChangePct', 'bindWatchRemove', 'bindWatchItemClick',
     'showStockFundFlow', 'renderStockCostEditor', 'saveStockCostFromForm', 'renderStockFundFlowBody',
     'closeStockFundFlow', 'initStockFundFlowModal',
-    'renderCustomIndex', 'renderCustomIndexItem', 'bindCustomIndexRemove', 'bindCustomIndexAdd',
-    'openCustomIndexAddForm', 'addCustomIndexByInput', 'removeCustomIndex', 'loadCustomIndexData', 'loadSingleCustomIndex',
+    'renderCustomIndex', 'renderCustomIndexItem', 'bindCustomIndexRemove', 'bindCustomIndexAdd', 'bindCustomIndexAddForm',
+    'openCustomIndexAddForm', 'closeCustomIndexAddForm', 'addCustomIndexByInput', 'removeCustomIndex', 'loadCustomIndexData', 'loadSingleCustomIndex',
     'saveCustomIndices', 'persistCustomIndexCache', 'persistCustomIndexUpdateTime',
     'refreshStaleWatchQuotes', 'refreshStaleCustomIndex',
     'showWatchStatus', 'showCustomIndexStatus', 'showDataStatus',
@@ -129,6 +134,28 @@ try {
     api.initStockFundFlowModal();
     api.renderStockFundFlowBody({ code: '600000', recent: [] }, null, null, null, { includeEditor: false });
     console.log('OK: 核心主流程(标签/列表/自选指数/弹窗初始化/资金流空态)执行无异常');
+
+    window.AppState.watchQuoteCache['159915'] = {
+        name: '创业板ETF', price: '2.35', priceValue: 2.3456, changePercent: 1,
+    };
+    const watchEtfHtml = api.renderWatchItem('159915', '创业板ETF', '2.35', 1, '--', undefined, false);
+    if (!watchEtfHtml.includes('>2.346</div>')) throw new Error('自选股 ETF 价格未保留三位');
+
+    window.AppState.customIndexCodes = ['510300'];
+    window.AppState.customIndexCache = {
+        '510300': { name: '沪深300ETF', price: '1.23', priceValue: 1.2349, changePercent: 1, change: 0.01 },
+    };
+    api.renderCustomIndex();
+    const customIndexPrice = window.document.querySelector('#custom-index-grid .index-value');
+    if (!customIndexPrice || !customIndexPrice.textContent.startsWith('1.235')) {
+        throw new Error('自选指数 ETF 价格未保留三位');
+    }
+    api.closeCustomIndexAddForm();
+    api.openCustomIndexAddForm();
+    const customIndexAddForm = window.document.getElementById('custom-index-add-form');
+    if (!customIndexAddForm || customIndexAddForm.hidden) throw new Error('自选指数添加表单未打开');
+    api.closeCustomIndexAddForm();
+    console.log('OK: 自选股/自选指数 ETF 价格均保留三位');
 } catch (e) {
     console.error('FAIL: 主流程抛错 ->', e && e.stack ? e.stack : e);
     process.exit(1);

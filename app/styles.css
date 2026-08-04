@@ -578,6 +578,10 @@ body {
     margin-bottom: 8px;
 }
 
+.custom-index-add-form[hidden] {
+    display: none !important;
+}
+
 .custom-index-add-form input {
     flex: 1;
     padding: 6px 10px;
@@ -609,6 +613,12 @@ body {
 .custom-index-add-form button:disabled {
     opacity: 0.5;
     cursor: wait;
+}
+
+.custom-index-add-form button.secondary {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-card);
 }
 
 /* .custom-index-status 旧的内嵌提示条已废弃,统一改用顶部 alert-toast 弹窗 */
