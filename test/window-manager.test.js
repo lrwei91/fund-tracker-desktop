@@ -14,7 +14,8 @@ class MockWindow extends EventEmitter {
         this.visible = options.show !== false;
         this.minimized = false;
         this.webContents = new EventEmitter();
-        this.webContents.send = () => {};
+        this.webContents.sent = [];
+        this.webContents.send = (channel, payload) => { this.webContents.sent.push({ channel, payload }); };
         MockWindow.instances.push(this);
     }
 
@@ -74,26 +75,13 @@ function setup() {
 }
 
 describe('Windows window manager', () => {
-    it('keeps the original holding widget independent from the taskbar', () => {
+    it('creates the holding widget as an independent window', () => {
         const { handlers } = setup();
         handlers['open-holding-window']();
         const holdingWindow = MockWindow.instances[0];
         expect(holdingWindow.options.skipTaskbar).toBe(true);
         expect(holdingWindow.options.focusable).toBe(false);
-        expect(holdingWindow.url).not.toContain('mode=taskbar');
-    });
-
-    it('creates a separate compact ticker inside a bottom Windows taskbar', () => {
-        const { handlers } = setup();
-        expect(handlers['set-taskbar-ticker-enabled'](null, true)).toEqual({ ok: true, enabled: true });
-        const ticker = MockWindow.instances[0];
-        expect(ticker.url).toContain('mode=taskbar');
-        expect(ticker.options).toMatchObject({ x: 1238, y: 1040, width: 260, height: 40, skipTaskbar: true, focusable: false, transparent: true });
-        expect(ticker.alwaysOnTop).toEqual({ value: true, level: 'screen-saver' });
-        expect(ticker.ignoreMouseEvents).toBe(true);
-
-        handlers['set-taskbar-ticker-enabled'](null, false);
-        expect(ticker.destroyed).toBe(true);
+        expect(holdingWindow.url).toContain('renderer/holding-widget.html');
     });
 
     it('keeps the main window in the taskbar and adds a restorable tray icon when minimized', () => {
@@ -110,5 +98,38 @@ describe('Windows window manager', () => {
         expect(mainWindow.minimized).toBe(false);
         expect(mainWindow.focused).toBe(true);
         expect(MockTray.instances[0].destroyed).toBe(true);
+    });
+
+    it('shows stock alerts in a separate always-on-top window without stealing focus', () => {
+        const { handlers } = setup();
+        const result = handlers['show-stock-alert'](null, {
+            code: '600000', name: '浦发银行', price: 10.5, changePct: 2.3,
+            basePrice: 10.26, baseLabel: '开盘价', threshold: 2, opacity: 0.8,
+            soundEnabled: false, time: new Date().toISOString(),
+        });
+        expect(result).toEqual({ ok: true });
+
+        const alertWindow = MockWindow.instances[0];
+        expect(alertWindow.url).toContain('renderer/alert-popup.html');
+        expect(alertWindow.options).toMatchObject({ frame: false, alwaysOnTop: true, skipTaskbar: true, focusable: false, show: false });
+        expect(alertWindow.alwaysOnTop).toEqual({ value: true, level: 'screen-saver' });
+        expect(alertWindow.ignoreMouseEvents).toBe(true);
+
+        alertWindow.webContents.emit('did-finish-load');
+        expect(alertWindow.visible).toBe(true);
+        expect(alertWindow.focused).not.toBe(true);
+        expect(alertWindow.webContents.sent[0]).toMatchObject({
+            channel: 'stock-alert',
+            payload: { code: '600000', name: '浦发银行', opacity: 0.8, soundEnabled: false },
+        });
+    });
+
+    it('rejects invalid stock alert payloads', () => {
+        const { handlers } = setup();
+        expect(handlers['show-stock-alert'](null, { price: 0, changePct: 'bad' })).toEqual({
+            ok: false,
+            error: 'Invalid alert payload',
+        });
+        expect(MockWindow.instances).toHaveLength(0);
     });
 });

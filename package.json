@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "恭喜发财本地 Electron 桌面应用",
   "main": "main.js",
   "private": true,
@@ -15,11 +15,9 @@
     "version:bump": "node scripts/bump-version.js",
     "build:mac": "npm run build:mac:raw",
     "build:win": "npm run build:win:raw",
-    "build:win:arm64": "npm run build:win:arm64:raw",
     "build:all": "npm run build:mac:raw && npm run build:win:raw",
-    "build:mac:raw": "electron-builder --mac",
-    "build:win:raw": "electron-builder --win --x64",
-    "build:win:arm64:raw": "electron-builder --win --arm64",
+    "build:mac:raw": "electron-builder --mac zip",
+    "build:win:raw": "electron-builder --win portable --x64",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" main.js preload.js",
     "test": "vitest run",
@@ -46,20 +44,17 @@
       "output": "dist"
     },
     "mac": {
-      "target": "dmg",
+      "target": "zip",
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
       "category": "public.app-category.finance",
       "icon": "build/icon.icns"
     },
     "win": {
-      "target": "nsis",
-      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",
+      "target": "portable",
       "icon": "build/icon.ico"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
-      "include": "build/installer.nsh"
+    "portable": {
+      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
     },
     "files": [
       "main.js",

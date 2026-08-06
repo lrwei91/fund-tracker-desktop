@@ -6,17 +6,21 @@ function createWindowManager(options) {
   const WIDGET_W = 320
   const WIDGET_H = 58
   const WIDGET_MARGIN = 20
-  const TASKBAR_TICKER_W = 260
-  const TASKBAR_SYSTEM_AREA_MIN_W = 300
+  const ALERT_W = 420
+  const ALERT_H = 116
+  const ALERT_MARGIN_TOP = 24
+  const ALERT_TTL_MS = 6000
   const mainChrome = process.platform === 'darwin'
     ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 12, y: 14 } }
     : {}
   let mainWin = null
   let holdingWin = null
-  let taskbarWin = null
+  let alertWin = null
+  let alertReady = false
+  let pendingAlert = null
+  let alertHideTimer = null
   let tray = null
   let lastHiddenWindow = 'main'
-  let taskbarTickerEnabled = true
 
   function diagnostics(win, name) {
     win.webContents.on('render-process-gone', (_event, details) => console.error('[fund-tracker] renderer gone', { name, details }))
@@ -45,60 +49,91 @@ function createWindowManager(options) {
     const display = source ? screen.getDisplayMatching(source.getBounds()) : screen.getPrimaryDisplay()
     return { x: display.workArea.x + display.workArea.width - WIDGET_W - WIDGET_MARGIN, y: display.workArea.y + display.workArea.height - WIDGET_H - WIDGET_MARGIN, width: WIDGET_W, height: WIDGET_H }
   }
-  function taskbarBounds() {
+  function alertBounds() {
     const display = mainWin && !mainWin.isDestroyed()
       ? screen.getDisplayMatching(mainWin.getBounds())
       : screen.getPrimaryDisplay()
     const area = display.workArea
-    const full = display.bounds
-    const topGap = area.y - full.y
-    const bottomGap = (full.y + full.height) - (area.y + area.height)
-    const horizontalTaskbarHeight = Math.max(topGap, bottomGap)
-    if (horizontalTaskbarHeight > 0) {
-      const systemAreaWidth = Math.min(
-        Math.max(TASKBAR_SYSTEM_AREA_MIN_W, Math.round(area.width * 0.22)),
-        Math.floor(area.width / 3),
-      )
-      const width = Math.min(TASKBAR_TICKER_W, Math.max(160, area.width - systemAreaWidth))
-      return {
-        x: area.x + area.width - width - systemAreaWidth,
-        y: topGap > bottomGap ? full.y : area.y + area.height,
-        width,
-        height: Math.max(32, Math.min(WIDGET_H, horizontalTaskbarHeight)),
-      }
+    return {
+      x: area.x + Math.round((area.width - ALERT_W) / 2),
+      y: area.y + ALERT_MARGIN_TOP,
+      width: ALERT_W,
+      height: ALERT_H,
     }
-    return { x: area.x + area.width - TASKBAR_TICKER_W - WIDGET_MARGIN, y: area.y + area.height - 40, width: TASKBAR_TICKER_W, height: 40 }
+  }
+  function normalizeAlert(rawAlert) {
+    if (!rawAlert || typeof rawAlert !== 'object') return null
+    const price = Number(rawAlert.price)
+    const changePct = Number(rawAlert.changePct)
+    if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(changePct)) return null
+    const optionalNumber = (value) => {
+      const number = Number(value)
+      return Number.isFinite(number) && number > 0 ? number : null
+    }
+    return {
+      code: String(rawAlert.code || '').slice(0, 32),
+      name: String(rawAlert.name || rawAlert.code || '自选股').slice(0, 80),
+      price,
+      openPrice: optionalNumber(rawAlert.openPrice),
+      changePct,
+      basePrice: optionalNumber(rawAlert.basePrice),
+      baseLabel: String(rawAlert.baseLabel || '基准').slice(0, 16),
+      threshold: optionalNumber(rawAlert.threshold),
+      time: typeof rawAlert.time === 'string' ? rawAlert.time : new Date().toISOString(),
+      opacity: Math.max(0.2, Math.min(1, Number(rawAlert.opacity) || 1)),
+      soundEnabled: rawAlert.soundEnabled !== false,
+    }
+  }
+  function displayPendingAlert() {
+    if (!alertReady || !pendingAlert || !alertWin || alertWin.isDestroyed()) return
+    const alert = pendingAlert
+    pendingAlert = null
+    alertWin.setBounds(alertBounds())
+    alertWin.webContents.send('stock-alert', alert)
+    alertWin.showInactive()
+    if (alertHideTimer) clearTimeout(alertHideTimer)
+    alertHideTimer = setTimeout(() => {
+      alertHideTimer = null
+      if (alertWin && !alertWin.isDestroyed()) alertWin.hide()
+    }, ALERT_TTL_MS)
+  }
+  function createAlertWindow() {
+    if (alertWin && !alertWin.isDestroyed()) return alertWin
+    alertReady = false
+    alertWin = new BrowserWindow({
+      ...alertBounds(), title: '自选股涨跌提醒', frame: false, transparent: true,
+      backgroundColor: '#00000000', alwaysOnTop: true, skipTaskbar: true, show: false,
+      resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+      focusable: false, hasShadow: false,
+      webPreferences: { preload: preloadPath, nodeIntegration: false, contextIsolation: true, sandbox: true },
+    })
+    diagnostics(alertWin, 'stock-alert')
+    alertWin.setMenuBarVisibility(false)
+    alertWin.setAlwaysOnTop(true, 'screen-saver')
+    alertWin.setIgnoreMouseEvents(true)
+    alertWin.loadURL(appUrl('renderer/alert-popup.html'))
+    alertWin.webContents.on('did-finish-load', () => {
+      alertReady = true
+      displayPendingAlert()
+    })
+    alertWin.on('closed', () => {
+      if (alertHideTimer) clearTimeout(alertHideTimer)
+      alertHideTimer = null
+      alertReady = false
+      alertWin = null
+    })
+    return alertWin
+  }
+  function showStockAlert(rawAlert) {
+    const alert = normalizeAlert(rawAlert)
+    if (!alert) return { ok: false, error: 'Invalid alert payload' }
+    pendingAlert = alert
+    createAlertWindow()
+    displayPendingAlert()
+    return { ok: true }
   }
   function refreshQuoteWindows() {
     if (holdingWin && !holdingWin.isDestroyed()) holdingWin.webContents.send('holding-widget-refresh')
-    if (taskbarWin && !taskbarWin.isDestroyed()) taskbarWin.webContents.send('holding-widget-refresh')
-  }
-  function createTaskbarTicker() {
-    if (!isWindows || !taskbarTickerEnabled || (taskbarWin && !taskbarWin.isDestroyed())) return taskbarWin
-    taskbarWin = new BrowserWindow({
-      ...taskbarBounds(), title: '恭喜发财任务栏行情', frame: false, transparent: true, backgroundColor: '#00000000',
-      alwaysOnTop: true, skipTaskbar: true, show: false, resizable: false, minimizable: false, maximizable: false,
-      fullscreenable: false, focusable: false, hasShadow: false,
-      webPreferences: { preload: preloadPath, nodeIntegration: false, contextIsolation: true, sandbox: true },
-    })
-    diagnostics(taskbarWin, 'taskbar-ticker')
-    taskbarWin.setMenuBarVisibility(false)
-    taskbarWin.setAlwaysOnTop(true, 'screen-saver')
-    taskbarWin.setIgnoreMouseEvents(true)
-    taskbarWin.loadURL(`${appUrl('renderer/holding-widget.html')}?mode=taskbar`)
-    taskbarWin.webContents.on('did-finish-load', () => {
-      if (!taskbarWin || taskbarWin.isDestroyed()) return
-      taskbarWin.webContents.send('holding-widget-refresh')
-      taskbarWin.showInactive()
-    })
-    taskbarWin.on('closed', () => { taskbarWin = null })
-    return taskbarWin
-  }
-  function setTaskbarTickerEnabled(enabled) {
-    taskbarTickerEnabled = enabled !== false
-    if (taskbarTickerEnabled) createTaskbarTicker()
-    else if (taskbarWin && !taskbarWin.isDestroyed()) taskbarWin.destroy()
-    return { ok: true, enabled: taskbarTickerEnabled }
   }
   function showHoldingWindow() {
     if (!holdingWin || holdingWin.isDestroyed()) return
@@ -149,7 +184,7 @@ function createWindowManager(options) {
       if (isWindows) ensureTrayIcon()
     })
     mainWin.on('closed', () => {
-      if (taskbarWin && !taskbarWin.isDestroyed()) taskbarWin.destroy()
+      if (alertWin && !alertWin.isDestroyed()) alertWin.destroy()
       mainWin = null
     })
     return mainWin
@@ -201,7 +236,7 @@ function createWindowManager(options) {
     ipcMain.handle('minimize-holding-window', () => { minimizeHoldingWidget(); return { ok: true } })
     ipcMain.handle('maximize-holding-window', () => { restoreMainWindow(); return { ok: true } })
     ipcMain.handle('close-holding-window', () => { closeHoldingWidget(); return { ok: true } })
-    ipcMain.handle('set-taskbar-ticker-enabled', (_event, enabled) => setTaskbarTickerEnabled(enabled))
+    ipcMain.handle('show-stock-alert', (_event, alert) => showStockAlert(alert))
   }
 
   return { createMainWindow, registerIpc, removeTrayIcon, showAppFromDock }

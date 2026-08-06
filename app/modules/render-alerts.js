@@ -19,6 +19,9 @@
             window.AppStorage.setItem(KEYS.ALERT_SETTINGS_KEY, JSON.stringify({
                 enabled: state.alertEnabled,
                 threshold: state.alertThreshold,
+                opacity: state.alertOpacity,
+                bullSoundEnabled: state.bullSoundEnabled,
+                bearSoundEnabled: state.bearSoundEnabled,
             }));
         } catch (e) {}
     }
@@ -61,7 +64,7 @@
         container.appendChild(item);
     }
 
-    function pushAlertToast(alert) {
+    function renderAlertToast(alert) {
         var container = document.getElementById('alert-toast-container');
         if (!container) return;
         if (!alert || typeof alert.price !== 'number') return;
@@ -138,6 +141,37 @@
         toast.__alertTimer = timerId;
 
         container.appendChild(toast);
+    }
+
+    function pushAlertToast(alert) {
+        if (window.shell && typeof window.shell.showStockAlert === 'function') {
+            var desktopAlert = Object.assign({}, alert, {
+                opacity: state.alertOpacity,
+                soundEnabled: alert.changePct >= 0 ? state.bullSoundEnabled : state.bearSoundEnabled,
+            });
+            window.shell.showStockAlert(desktopAlert).then(function (result) {
+                if (!result || result.ok !== true) renderAlertToast(alert);
+            }).catch(function () { renderAlertToast(alert); });
+            return;
+        }
+        renderAlertToast(alert);
+    }
+
+    function previewAlert(direction) {
+        var rising = direction !== 'falling';
+        var basePrice = 10;
+        var changePct = rising ? state.alertThreshold : -state.alertThreshold;
+        pushAlertToast({
+            code: 'DEMO',
+            name: '提醒测试',
+            price: basePrice * (1 + changePct / 100),
+            openPrice: basePrice,
+            changePct: changePct,
+            basePrice: basePrice,
+            baseLabel: '基准价',
+            threshold: state.alertThreshold,
+            time: new Date().toISOString(),
+        });
     }
 
     function removeAlertToast(toast, immediate) {
@@ -232,14 +266,13 @@
         var triggered = [];
         var stateChanged = false;
 
-        // 只监控 fixed tabs(持仓股 + 候选股);其他自建分组一律不告警
+        // 只监控持仓股(default);候选股和其他自建分组一律不告警
         var watchTabs = watchlistMod.getWatchTabs();
         var monitoredCodeSet = {};
-        watchTabs.forEach(function (tab) {
-            if (watchlistMod.isFixedWatchTab(tab.id)) {
-                tab.codes.forEach(function (c) { monitoredCodeSet[c] = true; });
-            }
-        });
+        var holdingTab = watchTabs.find(function (tab) { return tab && tab.id === 'default'; });
+        if (holdingTab && Array.isArray(holdingTab.codes)) {
+            holdingTab.codes.forEach(function (c) { monitoredCodeSet[c] = true; });
+        }
 
         Object.keys(quotes).forEach(function (code) {
             if (!monitoredCodeSet[code]) return;
@@ -314,6 +347,7 @@
         pushAlertToast: pushAlertToast,
         removeAlertToast: removeAlertToast,
         showStatusToast: showStatusToast,
+        previewAlert: previewAlert,
         checkAlerts: checkAlerts,
     };
 })();

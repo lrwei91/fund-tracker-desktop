@@ -14,6 +14,7 @@
 - 市场信号：机会雷达、热榜、打板情绪（涨停/炸板/跌停/昨涨停）
 - 财经快讯：金十、财联社、东方财富；首屏失败时使用独立来源自动降级
 - 桌面浮窗：独立 Electron renderer，读取主窗口本地数据
+- 桌面提醒：持仓股越过涨跌阈值时，以独立置顶的小牛/小熊卡片和提示音提醒，支持在设置中直接测试
 
 ## 目录结构
 
@@ -59,6 +60,8 @@ npm run build:all
 
 构建产物输出到 `dist/`，该目录不入库。
 
+`build:win` 只产出无需安装的单个 portable `.exe`；`build:mac` 只产出单个 `.zip` 分发文件，解压后仍是 macOS 要求的 `.app` 应用包。不再生成 DMG 或 NSIS 安装包。
+
 打包命令不会修改版本号。发布前请通过显式 release/tag 流程更新版本；`build:*:raw` 用于 CI 与本地验证。
 
 macOS 打包版复制到 `/Applications` 后，如遇到系统拦截或提示无权限打开，可执行：
@@ -75,6 +78,7 @@ chmod +x "/Applications/恭喜发财.app/Contents/MacOS/恭喜发财"
 - `fund-tracker://app/index.html` 加载 `app/index.html`
 - `fund-tracker://app/api/...` 转发到 `app/api/*.js`
 - `fund-tracker://app/renderer/holding-widget.html` 加载 `renderer/holding-widget.html`
+- `fund-tracker://app/renderer/alert-popup.html` 加载独立桌面提醒卡片
 
 主窗口和浮窗通过异步 IPC 共享 `config.json`。自选股分组、当前分组、自选指数、持仓成本/股数、持仓备注名、设置、小丑模式等关键用户数据写入该文件；行情/新闻等临时缓存仍保留在 Chromium `localStorage`。首次启动会迁移旧 localStorage 中的关键用户配置。
 
@@ -86,9 +90,7 @@ chmod +x "/Applications/恭喜发财.app/Contents/MacOS/恭喜发财"
 
 Windows 打包版的关键用户配置默认在 `%APPDATA%\恭喜发财\config.json`；开发模式通常在 `%APPDATA%\fund-tracker-electron\config.json`。浏览器 `localStorage` 临时缓存位于 `Local Storage\leveldb`。应用启动和 Windows 清理退出时会在日志里输出实际 `userData`、`config`、`localStorage`、`sessionStorage` 和 `Cache` 路径。
 
-Windows 安装包启动安装/卸载时会自动结束旧版 `恭喜发财.exe` 和历史包名 `fund-tracker-electron.exe` 进程，避免残留托盘或隐藏窗口占用安装目录。
-
-Windows 默认在任务栏中显示与浮窗一致的自选股轮播行情条，可在“设置 → 桌面浮窗”中关闭。主窗口最小化后仍保留任务栏按钮和系统托盘入口；浮窗保持独立，点击最小化会隐藏到系统托盘。
+Windows 主窗口最小化后仍保留任务栏按钮和系统托盘入口；持仓浮窗保持独立，点击最小化会隐藏到系统托盘。
 
 ## 数据说明
 

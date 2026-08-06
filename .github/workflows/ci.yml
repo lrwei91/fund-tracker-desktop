@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -34,9 +35,9 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            command: npm run build:mac:raw -- --dir
+            command: npm run build:mac:raw
           - os: windows-latest
-            command: npm run build:win:raw -- --dir
+            command: npm run build:win:raw
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

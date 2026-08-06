@@ -2916,6 +2916,19 @@ body {
     cursor: pointer;
 }
 
+.alert-preview-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.alert-preview-actions .data-action-btn {
+    width: 100%;
+    min-width: 0;
+}
+
 /* ---------- Footer ---------- */
 .footer {
     text-align: center;

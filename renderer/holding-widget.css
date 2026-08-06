@@ -243,60 +243,6 @@ body {
   background: rgba(255, 70, 70, 0.34);
 }
 
-.taskbar-mode .widget-shell {
-  border-radius: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  background: transparent;
-  box-shadow: none;
-  cursor: default;
-  opacity: 1;
-  -webkit-app-region: no-drag;
-}
-
-.taskbar-mode .drag-region,
-.taskbar-mode .window-controls {
-  display: none;
-}
-
-.taskbar-mode .quote-slot {
-  grid-template-columns: minmax(86px, 1fr) 50px 64px;
-  gap: 6px;
-  padding: 0 10px;
-  cursor: default;
-  -webkit-app-region: no-drag;
-}
-
-.taskbar-mode .quote-main {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-
-.taskbar-mode .quote-name {
-  font-size: 12px;
-}
-
-.taskbar-mode .quote-code {
-  font-size: 9px;
-}
-
-.taskbar-mode .quote-price {
-  font-size: 13px;
-}
-
-.taskbar-mode .quote-change {
-  padding: 2px 4px;
-  font-size: 11px;
-}
-
-.taskbar-mode .quote-name,
-.taskbar-mode .quote-code,
-.taskbar-mode .quote-price,
-.taskbar-mode .quote-change {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .quote-switching .quote-main,
   .quote-switching .quote-price,

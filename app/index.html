@@ -392,9 +392,9 @@
                 <option value="1800">30分钟</option>
             </select>
         </div>
-        <div class="settings-section-label">自选股涨跌幅告警</div>
+        <div class="settings-section-label">持仓股涨跌幅告警</div>
         <div class="settings-row">
-            <label>弹窗提醒</label>
+            <label>桌面弹窗提醒</label>
             <label class="toggle">
                 <input type="checkbox" id="alert-enabled-toggle" checked>
                 <span class="toggle-track"></span>
@@ -404,14 +404,32 @@
             <label>触发阈值 (%)</label>
             <input type="number" id="alert-threshold-input" min="0.1" max="20" step="0.1" value="2" class="settings-number-input">
         </div>
-        <div class="settings-section-label">桌面浮窗</div>
-        <div class="settings-row" id="taskbar-ticker-row" hidden>
-            <label>任务栏行情条</label>
+        <div class="settings-row settings-row-stacked">
+            <div class="settings-row-title">
+                <label>提醒不透明度</label>
+                <span class="settings-range-value" id="alert-opacity-value">92%</span>
+            </div>
+            <input type="range" id="alert-opacity-input" min="20" max="100" step="5" value="92" class="settings-range-input">
+        </div>
+        <div class="settings-row">
+            <label>🐂 小牛提示音</label>
             <label class="toggle">
-                <input type="checkbox" id="taskbar-ticker-toggle" checked>
+                <input type="checkbox" id="bull-sound-toggle" checked>
                 <span class="toggle-track"></span>
             </label>
         </div>
+        <div class="settings-row">
+            <label>🐻 小熊提示音</label>
+            <label class="toggle">
+                <input type="checkbox" id="bear-sound-toggle" checked>
+                <span class="toggle-track"></span>
+            </label>
+        </div>
+        <div class="alert-preview-actions">
+            <button type="button" class="data-action-btn secondary" id="preview-bull-alert">测试上涨提醒</button>
+            <button type="button" class="data-action-btn secondary" id="preview-bear-alert">测试下跌提醒</button>
+        </div>
+        <div class="settings-section-label">桌面浮窗</div>
         <div class="settings-row">
             <label>价格颜色</label>
             <select id="holding-color-mode">
