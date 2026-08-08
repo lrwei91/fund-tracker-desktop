@@ -1,0 +1,87 @@
+{
+  "stock": {
+    "success": true,
+    "data": {
+      "600000": {
+        "code": "600000",
+        "name": "浦发银行",
+        "price": "10.50",
+        "priceValue": 10.5,
+        "change": 0.2,
+        "changePercent": 1.94,
+        "openPrice": 10.3
+      }
+    },
+    "meta": {"degraded": false, "stale": false}
+  },
+  "stock-search": {
+    "success": true,
+    "data": [{"code": "600000", "name": "浦发银行"}],
+    "meta": {"degraded": false, "stale": false}
+  },
+  "hot-rank": {
+    "success": true,
+    "data": {"source": "ths", "items": []},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "limit-up": {
+    "success": true,
+    "data": {"items": [], "summary": {}},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "cls-news": {
+    "success": true,
+    "data": {"data": [], "nextCursor": null, "hasMore": false, "source": "cls"},
+    "meta": {"degraded": false, "stale": false, "sources": {"news": {"actual": "cls"}}}
+  },
+  "global-news": {
+    "success": true,
+    "data": {"data": [], "nextCursor": null, "hasMore": false, "source": "eastmoney"},
+    "meta": {"degraded": false, "stale": false, "sources": {"news": {"actual": "eastmoney"}}}
+  },
+  "news": {
+    "success": true,
+    "data": {"data": [], "nextCursor": null, "hasMore": false, "source": "jin10"},
+    "meta": {"degraded": false, "stale": false, "sources": {"news": {"actual": "jin10"}}}
+  },
+  "stock-news": {
+    "success": true,
+    "data": {"code": "600000", "items": [], "score": {}},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "stock-risk": {
+    "success": true,
+    "data": {"code": "600000", "announcements": {"available": false, "items": []}, "lockup": {"available": false}},
+    "meta": {"degraded": true, "stale": false}
+  },
+  "dragon-tiger": {
+    "success": true,
+    "data": {"date": "2026-08-08", "stocks": []},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "fund-flow-120d": {
+    "success": true,
+    "data": {"days": 60, "count": 1, "items": [{"code": "600000", "available": false, "recent": [], "latestDate": null}]},
+    "meta": {"degraded": true, "stale": false}
+  },
+  "market-data": {
+    "success": true,
+    "data": {},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "stock-kline": {
+    "success": true,
+    "data": {"bars": [], "analysis": {}, "latestDate": null},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "stock-minute": {
+    "success": true,
+    "data": {"points": [], "latest": null},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "opportunity-radar": {
+    "success": true,
+    "data": {"generatedAt": "2026-08-08T00:00:00Z", "items": [], "sourceStatus": {}},
+    "meta": {"degraded": true, "stale": false}
+  }
+}

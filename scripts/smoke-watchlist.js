@@ -145,6 +145,7 @@ try {
     window.AppState.customIndexCache = {
         '510300': { name: '沪深300ETF', price: '1.23', priceValue: 1.2349, changePercent: 1, change: 0.01 },
     };
+    window.AppState.customIndexFreshCodes = { '510300': true };
     api.renderCustomIndex();
     const customIndexPrice = window.document.querySelector('#custom-index-grid .index-value');
     if (!customIndexPrice || !customIndexPrice.textContent.startsWith('1.235')) {

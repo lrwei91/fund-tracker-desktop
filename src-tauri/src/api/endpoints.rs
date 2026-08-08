@@ -1,4 +1,7 @@
-use super::http::{ApiError, Gateway, RequestSpec};
+use super::{
+    http::{ApiError, Gateway, RequestSpec},
+    policy,
+};
 use chrono::Utc;
 use chrono_tz::Asia::Shanghai;
 use md5::Md5;
@@ -26,7 +29,7 @@ use std::{
     sync::Arc,
 };
 
-type Query = HashMap<String, String>;
+pub(crate) type Query = HashMap<String, String>;
 fn q<'a>(query: &'a Query, key: &str) -> &'a str {
     query.get(key).map(String::as_str).unwrap_or("")
 }
@@ -34,17 +37,27 @@ fn int(query: &Query, key: &str, default: i64, min: i64, max: i64) -> i64 {
     q(query, key).parse().unwrap_or(default).clamp(min, max)
 }
 fn ok(data: Value) -> Value {
-    json!({"success":true,"data":data})
+    json!({"success":true,"data":data,"meta":{"degraded":false,"stale":false}})
 }
 fn ok_extra(data: Value, extra: Value) -> Value {
-    let mut out = json!({"success":true,"data":data});
+    let mut out = json!({"success":true,"data":data,"meta":{"degraded":false,"stale":false}});
     if let (Some(a), Some(b)) = (out.as_object_mut(), extra.as_object()) {
         a.extend(b.clone())
     }
     out
 }
 fn fail(message: &str, error: impl ToString) -> Value {
-    json!({"success":false,"message":message,"error":error.to_string()})
+    policy::failure(message, &error.to_string(), None)
+}
+fn fail_api(message: &str, error: &ApiError) -> Value {
+    let mut value = policy::failure(message, &error.message, error.status);
+    if let Some(meta) = value.get_mut("meta").and_then(Value::as_object_mut) {
+        meta.insert(
+            "sourceError".into(),
+            json!({"status": error.status, "code": error.error_code().0}),
+        );
+    }
+    value
 }
 fn number(v: &Value) -> Option<f64> {
     v.as_f64().or_else(|| v.as_str()?.parse().ok())
@@ -70,27 +83,6 @@ fn today() -> String {
         .to_string()
 }
 
-pub async fn dispatch(g: Arc<Gateway>, path: &str, query: Query) -> Value {
-    match path.trim_start_matches('/') {
-        "stock" => stock(g, query).await,
-        "stock-search" => stock_search(g, query).await,
-        "hot-rank" => hot_rank(g, query).await,
-        "limit-up" => limit_up(g, query).await,
-        "cls-news" => cls_news(g, query).await,
-        "global-news" => global_news(g, query).await,
-        "news" => news(g, query).await,
-        "stock-news" => stock_news(g, query).await,
-        "stock-risk" => stock_risk(g, query).await,
-        "dragon-tiger" => dragon_tiger(g, query).await,
-        "fund-flow-120d" => fund_flow(g, query).await,
-        "market-data" => market_data(g, query).await,
-        "stock-kline" => stock_kline(g, query).await,
-        "stock-minute" => stock_minute(g, query).await,
-        "opportunity-radar" => opportunity_radar(g, query).await,
-        _ => json!({"success":false,"message":"API not found"}),
-    }
-}
-
 fn tencent_symbol(code: &str) -> String {
     format!(
         "{}{}",
@@ -106,7 +98,7 @@ fn valid_code(code: &str) -> bool {
     code.len() == 6 && code.bytes().all(|b| b.is_ascii_digit())
 }
 
-async fn stock(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
     let codes: Vec<&str> = q(&query, "codes")
         .split(',')
         .map(str::trim)
@@ -181,11 +173,11 @@ async fn stock(g: Arc<Gateway>, query: Query) -> Value {
                 json!({"time":latest.clone().unwrap_or(request_time),"timeSource":if latest.is_some(){"quote"}else{"request"}}),
             )
         }
-        Err(e) => fail("真实股票行情接口不可用", e),
+        Err(e) => fail_api("真实股票行情接口不可用", &e),
     }
 }
 
-async fn stock_search(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock_search(g: Arc<Gateway>, query: Query) -> Value {
     let term = q(&query, "q").trim();
     if term.is_empty() {
         return fail("缺少搜索关键词", "");
@@ -213,11 +205,11 @@ async fn stock_search(g: Arc<Gateway>, query: Query) -> Value {
                     .collect(),
             ))
         }
-        Err(e) => fail("真实股票搜索接口不可用", e),
+        Err(e) => fail_api("真实股票搜索接口不可用", &e),
     }
 }
 
-async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
     let source = if q(&query, "source").is_empty() {
         "ths"
     } else {
@@ -235,7 +227,7 @@ async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
                 let items:Vec<Value>=v.pointer("/data/stock_list").and_then(Value::as_array).into_iter().flatten().take(30).map(|x|json!({"rank":field(x,"order"),"code":field(x,"code"),"name":field(x,"name"),"heat":number(field(x,"rate")).unwrap_or(0.0).div_euclid(10000.0).round(),"pct":number(field(x,"rise_and_fall")).unwrap_or(0.0),"rankChg":field(x,"hot_rank_chg"),"concepts":x.pointer("/tag/concept_tag").cloned().unwrap_or(json!([])),"tag":x.pointer("/tag/popularity_tag").cloned().unwrap_or(json!(""))})).collect();
                 ok(json!({"source":source,"period":period,"items":items}))
             }
-            Err(e) => fail("真实市场热度接口不可用", e),
+            Err(e) => fail_api("真实市场热度接口不可用", &e),
         };
     }
     if source != "em" {
@@ -253,7 +245,7 @@ async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
         .await
     {
         Ok(v) => v,
-        Err(e) => return fail("真实市场热度接口不可用", e),
+        Err(e) => return fail_api("真实市场热度接口不可用", &e),
     };
     let data = main
         .get("data")
@@ -272,7 +264,7 @@ async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
     let url=format!("https://push2.eastmoney.com/api/qt/ulist.np/get?ut=f057cbcbce2a86e2866ab8877db1d059&fltt=2&invt=2&fields=f14%2Cf3%2Cf12%2Cf2&secids={}",urlencoding::encode(&secids));
     let lookup = match g.json(RequestSpec::get(url).em()).await {
         Ok(v) => v,
-        Err(e) => return fail("真实市场热度接口不可用", e),
+        Err(e) => return fail_api("真实市场热度接口不可用", &e),
     };
     let mut names = HashMap::new();
     if let Some(diff) = lookup.pointer("/data/diff") {
@@ -340,7 +332,7 @@ fn map_pool(kind: &str, p: &Value) -> Value {
     o.extend(extra.as_object().unwrap().clone());
     Value::Object(o)
 }
-async fn limit_up(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn limit_up(g: Arc<Gateway>, query: Query) -> Value {
     let kind = if q(&query, "type").is_empty() {
         "zt"
     } else {
@@ -383,7 +375,7 @@ async fn limit_up(g: Arc<Gateway>, query: Query) -> Value {
             let items: Vec<_> = raw.iter().map(|p| map_pool(kind, p)).collect();
             ok(json!({"type":kind,"date":date,"count":items.len(),"items":items}))
         }
-        Err(e) => fail("真实打板接口不可用", e),
+        Err(e) => fail_api("真实打板接口不可用", &e),
     }
 }
 
@@ -452,9 +444,23 @@ fn source_meta(
     reason: &str,
     requested: &str,
 ) -> Value {
-    json!({"asOf":now_iso(),"degraded":degraded,"sources":{key:{"actual":actual,"actualLabel":label,"attempts":if degraded{json!([{"source":requested,"label":requested,"reason":reason}])}else{json!([])},"degraded":degraded,"fallbackReason":reason,"requested":requested}}})
+    let attempts = if degraded {
+        let failed_status = reason
+            .strip_prefix("HTTP ")
+            .and_then(|value| value.split_whitespace().next())
+            .and_then(|value| value.parse::<u16>().ok())
+            .map(|status| json!(status))
+            .unwrap_or_else(|| json!("failed"));
+        json!([
+            {"source":requested,"label":requested,"status":failed_status,"reason":reason},
+            {"source":actual,"label":label,"status":200,"reason":"备用源成功"}
+        ])
+    } else {
+        json!([])
+    };
+    json!({"asOf":now_iso(),"degraded":degraded,"stale":false,"sources":{key:{"actual":actual,"actualLabel":label,"attempts":attempts,"degraded":degraded,"fallbackReason":reason,"requested":requested}}})
 }
-async fn cls_news(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn cls_news(g: Arc<Gateway>, query: Query) -> Value {
     let limit = int(&query, "limit", 20, 1, 40) as usize;
     let cursor = q(&query, "cursor").trim();
     let mut degraded = false;
@@ -478,7 +484,7 @@ async fn cls_news(g: Arc<Gateway>, query: Query) -> Value {
                 _ => return fail("财联社快讯接口不可用", reason),
             }
         }
-        Err(e) => return fail("财联社快讯接口不可用", e),
+        Err(e) => return fail_api("财联社快讯接口不可用", &e),
         _ => return fail("财联社快讯接口不可用", "数据为空"),
     };
     let sliced: Vec<_> = items.into_iter().take(limit).collect();
@@ -496,7 +502,7 @@ async fn cls_news(g: Arc<Gateway>, query: Query) -> Value {
         json!({"meta":source_meta("news",actual,label,degraded,&reason,"cls")}),
     )
 }
-async fn global_news(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn global_news(g: Arc<Gateway>, query: Query) -> Value {
     let limit = int(&query, "limit", 20, 1, 40) as usize;
     let cursor = q(&query, "cursor").trim();
     let mut degraded = false;
@@ -519,7 +525,7 @@ async fn global_news(g: Arc<Gateway>, query: Query) -> Value {
                 _ => return fail("真实东财资讯接口不可用", reason),
             }
         }
-        Err(e) => return fail("真实东财资讯接口不可用", e),
+        Err(e) => return fail_api("真实东财资讯接口不可用", &e),
         _ => return fail("真实东财资讯接口不可用", "数据为空"),
     };
     let sliced: Vec<_> = items.into_iter().take(limit).collect();
@@ -556,7 +562,7 @@ fn strip_html(text: &str) -> String {
         .trim()
         .to_string()
 }
-async fn news(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn news(g: Arc<Gateway>, query: Query) -> Value {
     let limit = int(&query, "limit", 20, 1, 40) as usize;
     let cursor = serde_json::from_str::<Value>(q(&query, "cursor")).ok();
     let mut url = "https://flash-api.jin10.com/get_flash_list?channel=-8200&vip=1".to_string();
@@ -636,7 +642,7 @@ async fn news(g: Arc<Gateway>, query: Query) -> Value {
     )
 }
 
-async fn stock_news(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock_news(g: Arc<Gateway>, query: Query) -> Value {
     let code = q(&query, "code").trim();
     if !valid_code(code) {
         return fail("缺少股票代码", "");
@@ -666,7 +672,7 @@ async fn stock_news(g: Arc<Gateway>, query: Query) -> Value {
         .await
     {
         Ok(v) => v,
-        Err(e) => return fail("个股新闻接口不可用", e),
+        Err(e) => return fail_api("个股新闻接口不可用", &e),
     };
     let Some(start) = text.find('(') else {
         return fail("个股新闻接口不可用", "东财新闻返回格式异常");
@@ -718,7 +724,7 @@ async fn stock_news(g: Arc<Gateway>, query: Query) -> Value {
     )
 }
 
-async fn stock_risk(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock_risk(g: Arc<Gateway>, query: Query) -> Value {
     let code = q(&query, "code").trim();
     if !valid_code(code) {
         return fail("缺少股票代码", "");
@@ -808,39 +814,39 @@ async fn stock_risk(g: Arc<Gateway>, query: Query) -> Value {
     let degraded = a.is_err() || l.is_err() || a.as_ref().ok().is_some_and(|x| x.2);
     ok_extra(
         json!({"code":code,"announcements":announcements,"lockup":lockup}),
-        json!({"meta":{"asOf":now_iso(),"degraded":degraded,"sources":{"announcements":a.as_ref().map(|x|json!({"actual":x.1})).unwrap_or_else(|e|json!({"actual":null,"error":e.to_string()})),"lockup":l.as_ref().map(|_|json!({"actual":"eastmoney","actualLabel":"东方财富"})).unwrap_or_else(|e|json!({"actual":null,"error":e.to_string()}))}}}),
+        json!({"meta":{"asOf":now_iso(),"degraded":degraded,"stale":false,"sources":{"announcements":a.as_ref().map(|x|json!({"actual":x.1,"actualLabel":if x.1 == "szse" {"深圳证券交易所"} else {"东方财富"},"degraded":x.2,"fallbackReason":x.3,"attempts":if x.2 {json!([{"source":"szse","status":"empty"},{"source":"eastmoney","status":200}])} else {json!([])}})).unwrap_or_else(|e|json!({"actual":null,"error":e.to_string(),"attempts":[{"source":"eastmoney","status":e.status,"reason":e.to_string()}]})),"lockup":l.as_ref().map(|_|json!({"actual":"eastmoney","actualLabel":"东方财富","attempts":[{"source":"eastmoney","status":200}]})).unwrap_or_else(|e|json!({"actual":null,"error":e.to_string(),"attempts":[{"source":"eastmoney","status":e.status,"reason":e.to_string()}]}))}}}),
     )
 }
 
-async fn dragon_tiger(g: Arc<Gateway>, _query: Query) -> Value {
+pub(crate) async fn dragon_tiger(g: Arc<Gateway>, _query: Query) -> Value {
     let url="https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=TRADE_DATE&sortTypes=-1&pageSize=40&pageNumber=1&reportName=RPT_DAILYBILLBOARD_DETAILS&columns=ALL";
-    let mut reason = String::new();
-    if let Ok(v) = g.json(RequestSpec::get(url).em().cache(1800)).await {
-        let rows = v
-            .pointer("/result/data")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let stocks:Vec<_>=rows.iter().filter_map(|x|{let code=string(x.get("SECURITY_CODE"));if !valid_code(&code){return None}Some(json!({"code":code,"name":field(x,"SECURITY_NAME_ABBR"),"reason":x.get("EXPLANATION").or_else(||x.get("EXPLAIN")).cloned().unwrap_or(json!("")),"netBuyWan":number(field(x,"BILLBOARD_NET_AMT")).map(|n|n/10000.0)}))}).collect();
-        if !stocks.is_empty() {
-            let date = rows
-                .first()
-                .map(|x| {
-                    string(x.get("TRADE_DATE"))
-                        .chars()
-                        .take(10)
-                        .collect::<String>()
-                })
+    let reason = match g.json(RequestSpec::get(url).em().cache(1800)).await {
+        Ok(v) => {
+            let rows = v
+                .pointer("/result/data")
+                .and_then(Value::as_array)
+                .cloned()
                 .unwrap_or_default();
-            return ok_extra(
-                json!({"date":date,"stocks":stocks}),
-                json!({"meta":source_meta("dragonTiger","eastmoney","东方财富",false,"","eastmoney")}),
-            );
+            let stocks:Vec<_>=rows.iter().filter_map(|x|{let code=string(x.get("SECURITY_CODE"));if !valid_code(&code){return None}Some(json!({"code":code,"name":field(x,"SECURITY_NAME_ABBR"),"reason":x.get("EXPLANATION").or_else(||x.get("EXPLAIN")).cloned().unwrap_or(json!("")),"netBuyWan":number(field(x,"BILLBOARD_NET_AMT")).map(|n|n/10000.0)}))}).collect();
+            if !stocks.is_empty() {
+                let date = rows
+                    .first()
+                    .map(|x| {
+                        string(x.get("TRADE_DATE"))
+                            .chars()
+                            .take(10)
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
+                return ok_extra(
+                    json!({"date":date,"stocks":stocks}),
+                    json!({"meta":source_meta("dragonTiger","eastmoney","东方财富",false,"","eastmoney")}),
+                );
+            }
+            "东方财富: 数据为空".to_string()
         }
-        reason = "东方财富: 数据为空".into()
-    } else if let Err(e) = g.json(RequestSpec::get(url).em().cache(1800)).await {
-        reason = e.to_string()
-    }
+        Err(e) => e.to_string(),
+    };
     let re = regex::Regex::new(r"证券代码:\s*(\d{6}).*证券简称:\s*([^\s]+)").unwrap();
     for offset in 0..7 {
         let date = (Utc::now() - chrono::Duration::days(offset))
@@ -954,7 +960,7 @@ async fn flow_names(g: &Arc<Gateway>, codes: &[String]) -> HashMap<String, Strin
     }
     out
 }
-async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
     let codes: Vec<String> = q(&query, "codes")
         .split(',')
         .map(str::trim)
@@ -1048,14 +1054,14 @@ async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
         .collect();
     ok_extra(
         json!({"days":days,"count":items.len(),"items":items}),
-        json!({"meta":{"asOf":now_iso(),"degraded":items.iter().any(|x|field(x,"available").as_bool()!=Some(true)||field(x,"source")!="eastmoney"),"sources":{"fundFlow":{"actual":if sources.len()==1{sources.iter().next().copied()}else if sources.is_empty(){None}else{Some("mixed")},"unavailable":unavailable}}}}),
+        json!({"meta":{"asOf":now_iso(),"degraded":items.iter().any(|x|field(x,"available").as_bool()!=Some(true)||field(x,"source")!="eastmoney"),"stale":false,"sources":{"fundFlow":{"actual":if sources.len()==1{sources.iter().next().copied()}else if sources.is_empty(){None}else{Some("mixed")},"unavailable":unavailable}}}}),
     )
 }
 
-async fn market_data(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn market_data(g: Arc<Gateway>, query: Query) -> Value {
     super::market::handle(g, q(&query, "type")).await
 }
-async fn stock_kline(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock_kline(g: Arc<Gateway>, query: Query) -> Value {
     super::kline::handle(
         g,
         q(&query, "code"),
@@ -1063,7 +1069,7 @@ async fn stock_kline(g: Arc<Gateway>, query: Query) -> Value {
     )
     .await
 }
-async fn stock_minute(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn stock_minute(g: Arc<Gateway>, query: Query) -> Value {
     let source = if q(&query, "source").is_empty() {
         "auto"
     } else {
@@ -1374,7 +1380,7 @@ fn score_candidate(c: &Candidate, fund: &Value, kline: &Value, news: &Value) -> 
     };
     json!({"code":c.code,"name":c.name,"price":c.price,"pct":c.pct.map(|x|round(x,2)),"score":score.map(|x|round(x,0)),"coverage":(available.len()as f64/5.0*100.0).round(),"missingSources":weights.iter().filter(|(k,_)|number(&components[*k]).is_none()).map(|x|x.0).collect::<Vec<_>>(),"topic":if topic_tags.is_empty(){"--".into()}else{topic_tags.join(" / ")},"components":components,"risk":{"status":status,"label":if status=="block"{"回避"}else if status=="watch"{"观察"}else{"可跟踪"},"points":risk_points,"reasons":risk_items.iter().take(4).map(|x|x.1).collect::<Vec<_>>()},"signals":signals,"upDayRate60":up_rate,"newsHits":positive,"newsRisks":risks,"latestDate":kline.get("latestDate").cloned().unwrap_or(json!(""))})
 }
-async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
+pub(crate) async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
     use futures::{stream, StreamExt};
     let limit = int(&query, "limit", 8, 1, 20) as usize;
     let (ths, em, zt, yzt, zb, dt, dragon, sector) = tokio::join!(

@@ -1,4 +1,5 @@
 use super::http::{ApiError, Gateway, RequestSpec};
+use super::policy;
 use serde_json::{json, Value};
 use std::{cell::Cell, process::Stdio, sync::Arc};
 use tokio::process::Command;
@@ -468,37 +469,63 @@ fn chips(bars: &[Bar]) -> Value {
 
 pub async fn handle(g: Arc<Gateway>, code: &str, days: usize) -> Value {
     if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
-        return json!({"success":false,"message":"缺少股票代码"});
+        return policy::failure("缺少股票代码", "", None);
     }
     let mut reason = String::new();
+    let mut attempts = Vec::new();
     let mut result = None;
     if std::env::var("TDXRS_BIN").is_ok() || std::env::var("TDXRS_PYTHON").is_ok() {
         match tdx(code, days).await {
-            Ok(v) if v.3.len() >= 60 => result = Some(v),
-            Ok(v) => reason = format!("通达信: 数据不足({}条)", v.3.len()),
-            Err(e) => reason = format!("通达信: {e}"),
+            Ok(v) if v.3.len() >= 60 => {
+                attempts.push(json!({"source":"tdxrs","status":200}));
+                result = Some(v);
+            }
+            Ok(v) => {
+                attempts.push(json!({"source":"tdxrs","status":"empty","count":v.3.len()}));
+                reason = format!("通达信: 数据不足({}条)", v.3.len());
+            }
+            Err(e) => {
+                attempts.push(json!({"source":"tdxrs","status":e.status,"reason":e.to_string()}));
+                reason = format!("通达信: {e}");
+            }
         }
     }
     if result.is_none() {
         match tencent(&g, code, days).await {
-            Ok(v) if v.3.len() >= 60 => result = Some(v),
-            Ok(v) => reason = format!("腾讯: 数据不足({}条)", v.3.len()),
-            Err(e) => reason = format!("腾讯: {e}"),
+            Ok(v) if v.3.len() >= 60 => {
+                attempts.push(json!({"source":"tencent","status":200}));
+                result = Some(v);
+            }
+            Ok(v) => {
+                attempts.push(json!({"source":"tencent","status":"empty","count":v.3.len()}));
+                reason = format!("腾讯: 数据不足({}条)", v.3.len());
+            }
+            Err(e) => {
+                attempts.push(json!({"source":"tencent","status":e.status,"reason":e.to_string()}));
+                reason = format!("腾讯: {e}");
+            }
         }
     }
     if result.is_none() {
         match eastmoney(&g, code, days).await {
-            Ok(v) if !v.3.is_empty() => result = Some(v),
-            Ok(_) => {}
-            Err(e) => reason = format!("东方财富: {e}"),
+            Ok(v) if !v.3.is_empty() => {
+                attempts.push(json!({"source":"eastmoney","status":200}));
+                result = Some(v);
+            }
+            Ok(_) => attempts.push(json!({"source":"eastmoney","status":"empty"})),
+            Err(e) => {
+                attempts
+                    .push(json!({"source":"eastmoney","status":e.status,"reason":e.to_string()}));
+                reason = format!("东方财富: {e}");
+            }
         }
     }
     let Some((name, source, label, bars)) = result else {
-        return json!({"success":false,"message":"暂无日 K 数据","error":reason});
+        return policy::failure("暂无日 K 数据", &reason, None);
     };
     let a = analysis(&bars);
     let latest = a["latestDate"].clone();
-    json!({"success":true,"data":{"code":code,"name":name,"days":days,"source":source,"sourceLabel":label,"fallbackReason":reason,"latestDate":latest,"count":bars.len(),"analysis":a,"chips":chips(&bars),"bars":bars.iter().rev().take(60).collect::<Vec<_>>().into_iter().rev().map(|b|json!({"date":b.date,"close":rounded(Some(b.close),2),"pct":rounded(b.pct,2),"volume":b.volume})).collect::<Vec<_>>()}})
+    json!({"success":true,"data":{"code":code,"name":name,"days":days,"source":source,"sourceLabel":label,"fallbackReason":reason,"latestDate":latest,"count":bars.len(),"analysis":a,"chips":chips(&bars),"bars":bars.iter().rev().take(60).collect::<Vec<_>>().into_iter().rev().map(|b|json!({"date":b.date,"close":rounded(Some(b.close),2),"pct":rounded(b.pct,2),"volume":b.volume})).collect::<Vec<_>>()},"meta":{"asOf":chrono::Utc::now().to_rfc3339(),"degraded":!reason.is_empty(),"stale":false,"sources":{"kline":{"actual":source,"actualLabel":label,"fallbackReason":reason,"attempts":attempts}}}})
 }
 
 #[cfg(test)]

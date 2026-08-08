@@ -190,22 +190,24 @@
         if (item) renderIndexSparkline(item, data, cls, prev);
     }
 
+    function clearIndexUI() {
+        document.querySelectorAll('[data-index]').forEach(function (item) {
+            var id = item.getAttribute('data-index');
+            var value = document.getElementById(id + '-value');
+            var change = document.getElementById(id + '-change');
+            if (value) { value.textContent = '--'; value.className = 'index-value neutral'; }
+            if (change) { change.textContent = '--'; change.title = ''; change.className = 'index-change neutral'; }
+            item.classList.remove('positive', 'negative', 'neutral');
+            var spark = item.querySelector('.index-sparkline');
+            if (spark) spark.innerHTML = '';
+        });
+    }
+
     // ============================================================
     // loadIndexData / loadCapitalData / loadSectorData
     // ============================================================
 
     async function loadIndexData(force) {
-        var cached = force ? null : cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.index, KEYS.SHORT_CACHE_TTL.index);
-        if (cached) {
-            state.liveIndexData = cached;
-            Object.keys(cached).forEach(function (id) { updateIndexUI(id, cached[id]); });
-            var meta = cache.readJson(KEYS.SHORT_CACHE_KEYS.index, null);
-            if (meta && meta.updatedAt) {
-                utils.setLastUpdated('行情已更新', utils.formatShanghaiTime(meta.updatedAt));
-            }
-            return;
-        }
-
         try {
             var res = await window.AppDataClient.fetch('/market-data', { type: 'index' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -218,66 +220,48 @@
             persistIndexPrevIfDue('market', snapshotIndexPrice(result.data));
             utils.setLastUpdated('行情已更新');
         } catch (e) {
-            if (!state.liveIndexData) utils.setLastUpdated('行情获取失败');
+            state.liveIndexData = null;
+            clearIndexUI();
+            utils.setLastUpdated('行情获取失败');
         }
     }
 
     async function loadCapitalData(force) {
         var newData = null;
-        var cached = force ? null : cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.capital, KEYS.SHORT_CACHE_TTL.capital);
-        if (cached) {
-            newData = cached;
-        }
 
         try {
-            if (!newData) {
-                var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                var result = await res.json();
-                if (result.success && result.data && result.data.mainFund && result.data.mainFund.value !== undefined) {
-                    newData = result.data;
-                    cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.capital, result.data);
-                }
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var result = await res.json();
+            if (result.success && result.data && result.data.mainFund && result.data.mainFund.value !== undefined) {
+                newData = result.data;
+                cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.capital, result.data);
             }
         } catch (e) {
-            newData = cached || null;
+            newData = null;
         }
 
-        if (newData) {
-            state.liveCapitalData = newData;
-        }
-
-        if (!state.liveCapitalData) return;
-        renderCapitalUI(state.liveCapitalData);
+        state.liveCapitalData = newData;
+        renderCapitalUI(state.liveCapitalData || {});
     }
 
     async function loadSectorData(force) {
         var newData = null;
-        var cached = force ? null : cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.sector, KEYS.SHORT_CACHE_TTL.sector);
-        if (cached) {
-            newData = cached;
-        }
 
         try {
-            if (!newData) {
-                var res = await window.AppDataClient.fetch('/market-data', { type: 'sector' });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                var result = await res.json();
-                if (result.success && result.data && result.data.inflow) {
-                    newData = result.data;
-                    cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.sector, result.data);
-                }
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'sector' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var result = await res.json();
+            if (result.success && result.data && result.data.inflow) {
+                newData = result.data;
+                cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.sector, result.data);
             }
         } catch (e) {
-            newData = cached || null;
+            newData = null;
         }
 
-        if (newData) {
-            state.liveSectorData = newData;
-        }
-
-        if (!state.liveSectorData) return;
-        renderSectorUI(state.liveSectorData);
+        state.liveSectorData = newData;
+        renderSectorUI(state.liveSectorData || {});
     }
 
     // ============================================================

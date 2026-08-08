@@ -7,12 +7,14 @@
     var W = window.__watch;
     var state = W.state;
     var utils = W.utils;
+    var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
 
     async function loadStockMinuteData(code) {
         var res = await window.AppDataClient.fetch('/stock-minute', { code: code, count: 240 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !Array.isArray(json.data.points)) throw new Error('分时数据异常');
+        json.data.meta = json.meta || null;
         return json.data;
     }
 
@@ -40,6 +42,7 @@
             last: last,
             prevMain: prev ? prev.mainNet : null,
             lastDate: last ? last.date : (item.latestDate || ''),
+            meta: json.meta || null,
         };
     }
 
@@ -48,6 +51,7 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !json.data.analysis) throw new Error('技术面数据异常');
+        json.data.meta = json.meta || null;
         return json.data;
     }
 
@@ -56,6 +60,7 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('新闻数据异常');
+        json.data.meta = json.meta || null;
         return json.data;
     }
 
@@ -123,6 +128,9 @@
                 includeEditor: false,
                 date: fundData.lastDate,
             });
+            if (fundData.meta && (fundData.meta.stale || fundData.meta.degraded)) {
+                fundHtml = '<div class="stock-analysis-source">' + utils.escapeHtml(dataStatus.label(fundData.meta, '资金流')) + '</div>' + fundHtml;
+            }
         } else {
             fundHtml += '<div class="stock-fund-summary">' +
                 '<div class="stock-fund-section-title">资金流</div>' +
@@ -183,6 +191,7 @@
         var lockup = data.lockup || {};
         var source = data.meta && data.meta.sources && data.meta.sources.announcements
             ? data.meta.sources.announcements.actual : announcements.source;
+        var riskStatus = dataStatus.label(data.meta, sourceLabel(source));
         var announcementRows = Array.isArray(announcements.items) ? announcements.items : [];
         var upcoming = Array.isArray(lockup.upcoming) ? lockup.upcoming : [];
         var history = Array.isArray(lockup.history) ? lockup.history : [];
@@ -202,7 +211,7 @@
         }).join('') : '<div class="list-empty">未来 90 天无待解禁记录</div>';
         return '<div class="stock-risk-section">' +
             '<div class="stock-risk-block"><div class="stock-analysis-head"><div><div class="stock-fund-section-title">最近公告</div>' +
-            '<div class="stock-analysis-source">' + utils.escapeHtml(sourceLabel(source)) + '</div></div></div>' + announcementHtml + '</div>' +
+            '<div class="stock-analysis-source">' + utils.escapeHtml(riskStatus) + '</div></div></div>' + announcementHtml + '</div>' +
             '<div class="stock-risk-block"><div class="stock-analysis-head"><div><div class="stock-fund-section-title">限售解禁</div>' +
             '<div class="stock-analysis-source">实际可流通股数 · 未来 90 天</div></div></div>' + lockupHtml + '</div>' +
             '</div>';
@@ -470,7 +479,10 @@
         }
         var items = newsData && Array.isArray(newsData.items) ? newsData.items : [];
         if (!items.length) return '<div class="stock-news-list"><div class="list-empty">暂无个股新闻</div></div>';
-        return '<ul class="stock-news-list">' + items.slice(0, 5).map(function (item) {
+        var status = newsData.meta && (newsData.meta.stale || newsData.meta.degraded)
+            ? '<div class="stock-analysis-source">' + utils.escapeHtml(dataStatus.label(newsData.meta, newsData.sourceLabel || '个股新闻')) + '</div>'
+            : '';
+        return status + '<ul class="stock-news-list">' + items.slice(0, 5).map(function (item) {
             var meta = [item.time, item.source].filter(Boolean).join(' · ');
             var summary = item.summary ? '<em>' + utils.escapeHtml(item.summary) + '</em>' : '';
             return '<li>' +
@@ -608,6 +620,7 @@
         var scoreCls = trendClass(score);
         var scoreText = score === null ? '--' : (score > 0 ? '+' : '') + String(score);
         var sourceText = [data.sourceLabel || '', data.latestDate || analysis.latestDate || ''].filter(Boolean).join(' · ');
+        if (data.meta && (data.meta.stale || data.meta.degraded)) sourceText = dataStatus.label(data.meta, sourceText || '日 K');
         var metrics = [
             renderStockMetricCell('收盘', formatPriceValue(indicators.close), trendClass(indicators.momentum21)),
             renderStockMetricCell('MA20', formatPriceValue(indicators.ma20), compareClass(indicators.close, indicators.ma20)),
@@ -717,10 +730,13 @@
                 '<span>低 ' + utils.escapeHtml(stats.low.time) + ' ' + utils.escapeHtml(formatPercentValue(stats.low.pct)) + '</span>' +
             '</div>'
             : '';
+        var minuteStatus = data.meta && (data.meta.stale || data.meta.degraded)
+            ? '<div class="stock-analysis-source">' + utils.escapeHtml(dataStatus.label(data.meta, data.sourceLabel || '分时')) + '</div>'
+            : '';
         return '<div class="stock-minute-card ' + cls + '">' +
             '<div class="stock-minute-top">' +
                 '<div class="stock-fund-section-title">分时</div>' +
-            '</div>' +
+            '</div>' + minuteStatus +
             '<div class="stock-minute-summary">' +
                 '<div class="stock-minute-price ' + cls + '">' + utils.escapeHtml(formatPriceValue(latest.price)) + '</div>' +
                 '<div class="stock-minute-pct ' + cls + '">' + utils.escapeHtml(formatPercentValue(pct)) + '</div>' +

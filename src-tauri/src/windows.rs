@@ -9,6 +9,11 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+#[cfg(windows)]
+use winreg::{
+    enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
+    RegKey,
+};
 
 #[cfg(windows)]
 static RESTORE_HOLDING: AtomicBool = AtomicBool::new(false);
@@ -17,6 +22,60 @@ const HOLDING_W: f64 = 320.0;
 const HOLDING_H: f64 = 58.0;
 const ALERT_W: f64 = 420.0;
 const ALERT_H: f64 = 116.0;
+
+#[cfg(windows)]
+const WEBVIEW2_DOWNLOAD_URL: &str =
+    "https://developer.microsoft.com/microsoft-edge/webview2/#download-section";
+
+#[cfg(windows)]
+pub fn ensure_webview2_runtime() -> bool {
+    if webview2_runtime_available() {
+        return true;
+    }
+    let title: Vec<u16> = "恭喜发财需要 Microsoft Edge WebView2"
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    let message: Vec<u16> = format!(
+        "未检测到 WebView2 Runtime，无法启动桌面窗口。\n\n请安装后重新启动：\n{WEBVIEW2_DOWNLOAD_URL}"
+    )
+    .encode_utf16()
+    .chain([0])
+    .collect();
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            std::ptr::null_mut(),
+            message.as_ptr(),
+            title.as_ptr(),
+            windows_sys::Win32::UI::WindowsAndMessaging::MB_OK
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+        );
+    }
+    let _ = open::that(WEBVIEW2_DOWNLOAD_URL);
+    false
+}
+
+#[cfg(windows)]
+fn webview2_runtime_available() -> bool {
+    if std::env::var_os("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER").is_some() {
+        return true;
+    }
+    const CLIENT: &str =
+        r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    const WOW_CLIENT: &str =
+        r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE]
+        .into_iter()
+        .any(|root| {
+            let key = RegKey::predef(root);
+            [CLIENT, WOW_CLIENT].into_iter().any(|path| {
+                key.open_subkey(path)
+                    .ok()
+                    .and_then(|client| client.get_value::<String, _>("pv").ok())
+                    .is_some_and(|version| !version.trim().is_empty() && version != "0.0.0.0")
+            })
+        })
+}
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -127,6 +186,9 @@ fn create_windows_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
                 if let Err(error) = app.state::<crate::config::ConfigStore>().clear() {
                     eprintln!("failed to clear config: {error}");
                     return;
+                }
+                if let Err(error) = app.state::<crate::api::ApiState>().clear_diagnostics() {
+                    eprintln!("failed to clear diagnostics: {error}");
                 }
                 for window in app.webview_windows().values() {
                     let _ = window.clear_all_browsing_data();

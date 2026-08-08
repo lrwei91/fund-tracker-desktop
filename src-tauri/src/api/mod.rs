@@ -1,8 +1,12 @@
+mod diagnostics;
 mod endpoints;
+mod handlers;
 mod http;
 mod kline;
 mod market;
 mod minute;
+mod policy;
+mod routes;
 
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
@@ -17,6 +21,24 @@ impl ApiState {
             gateway: http::Gateway::new(),
         }
     }
+
+    pub fn clear_diagnostics(&self) -> Result<(), String> {
+        self.gateway.clear_diagnostics()
+    }
+
+    pub fn diagnostics(&self) -> Value {
+        diagnostics::redacted_diagnostic_payload(self.gateway.diagnostics().snapshot())
+    }
+}
+
+#[tauri::command]
+pub fn diagnostics_snapshot(state: tauri::State<'_, ApiState>) -> Value {
+    state.diagnostics()
+}
+
+#[tauri::command]
+pub fn diagnostics_clear(state: tauri::State<'_, ApiState>) -> Result<(), String> {
+    state.clear_diagnostics()
 }
 
 #[tauri::command]
@@ -26,7 +48,7 @@ pub async fn fetch_data(
     query: HashMap<String, String>,
 ) -> Result<Value, String> {
     let gateway = state.gateway.clone();
-    Ok(endpoints::dispatch(gateway, &path, query).await)
+    Ok(routes::dispatch(gateway, &path, query).await)
 }
 
 #[cfg(test)]
@@ -58,7 +80,7 @@ mod tests {
                 .iter()
                 .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
                 .collect();
-            let result = endpoints::dispatch(gateway.clone(), path, query).await;
+            let result = routes::dispatch(gateway.clone(), path, query).await;
             assert_eq!(result["success"], true, "{path}: {result}");
             eprintln!("OK: {path}");
         }

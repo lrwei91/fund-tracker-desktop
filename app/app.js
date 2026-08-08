@@ -531,48 +531,25 @@
     // 加载入口:按市场阶段分支
     // ============================================================
 
-    // 从 localStorage 缓存渲染大盘/资金/板块/自选股,并显示"最后一次实际更新"的时间
-    // 不会触发任何 fetch。
+    // 只恢复用户界面结构和信息类缓存；实时行情必须等待 Rust gateway 返回新数据。
     function renderRealtimeFromCache() {
         var anyRendered = false;
 
-        var idxCached = cache.readJson(KEYS.SHORT_CACHE_KEYS.index, null);
-        if (idxCached && idxCached.data) {
-            state.liveIndexData = idxCached.data;
-            Object.keys(idxCached.data).forEach(function (id) {
-                if (window.AppMarket) window.AppMarket.updateIndexUI(id, idxCached.data[id]);
-            });
-            utils.setLastUpdated('行情已更新', utils.formatShanghaiTime(idxCached.updatedAt));
-            anyRendered = true;
-        }
-
-        var capCached = cache.readJson(KEYS.SHORT_CACHE_KEYS.capital, null);
-        if (capCached && capCached.data) {
-            state.liveCapitalData = capCached.data;
-            if (window.AppMarket) window.AppMarket.renderCapitalUI(capCached.data);
-            anyRendered = true;
-        }
-
-        var secCached = cache.readJson(KEYS.SHORT_CACHE_KEYS.sector, null);
-        if (secCached && secCached.data) {
-            state.liveSectorData = secCached.data;
-            if (window.AppMarket) window.AppMarket.renderSectorUI(secCached.data);
-            anyRendered = true;
-        }
-
-        // 自选股:watchQuoteCache 已在启动时从 localStorage 恢复
+        // 自选股名称可以从本地恢复，但价格和涨跌必须等本次 live 请求成功后才显示。
         if (window.AppWatchlist) {
             var codes = window.AppWatchlist.getAllWatchCodes();
             if (codes.length > 0) {
+                state.watchQuoteFreshCodes = {};
                 window.AppWatchlist.renderWatchlist();
                 anyRendered = true;
                 window.AppWatchlist.refreshStaleWatchQuotes();
             }
-            window.AppWatchlist.renderCustomIndex();
             if (state.customIndexCodes.length > 0) {
+                state.customIndexFreshCodes = {};
                 anyRendered = true;
                 window.AppWatchlist.refreshStaleCustomIndex();
             }
+            window.AppWatchlist.renderCustomIndex();
         }
 
         if (!anyRendered) {

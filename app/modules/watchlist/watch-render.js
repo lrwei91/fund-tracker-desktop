@@ -96,27 +96,30 @@
         var prevMap = W.getPrevChangePct();
         grid.innerHTML = codes.map(function (code) {
             var data = state.watchQuoteCache[code];
+            var fresh = !!state.watchQuoteFreshCodes[code];
             var rawName = data ? data.name : code + '（待刷新）';
             var prev = Object.prototype.hasOwnProperty.call(prevMap, code) ? prevMap[code] : undefined;
             return renderWatchItem(
                 code,
                 W.getDisplayStockName(code, rawName),
-                data ? data.price : '--',
-                data ? data.changePercent : 0,
-                data ? data.volume : '--',
+                fresh && data ? data.price : '--',
+                fresh && data ? data.changePercent : null,
+                fresh && data ? data.volume : '--',
                 prev,
                 showCost,
+                fresh,
             );
         }).join('');
         bindWatchRemove();
         grid.classList.toggle('with-cost', showCost);
         document.querySelector('.watchlist-header-row')?.classList.toggle('with-cost', showCost);
         bindWatchItemClick();
-        hydrateWatchSparklines(codes);
+        hydrateWatchSparklines(codes.filter(function (code) { return !!state.watchQuoteFreshCodes[code]; }));
         grid.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
         });
-        if (updateTimeEl) updateTimeEl.textContent = state.watchQuoteUpdateTime || '';
+        var allFresh = codes.length > 0 && codes.every(function (code) { return !!state.watchQuoteFreshCodes[code]; });
+        if (updateTimeEl) updateTimeEl.textContent = allFresh ? (state.watchQuoteUpdateTime || '') : '等待实时行情';
     }
 
     function persistWatchQuoteCache() {
@@ -139,10 +142,16 @@
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
+            var freshCodes = {};
             Object.keys(result.data).forEach(function (code) {
                 var d = result.data[code];
-                if (d && d.price !== '0.00') state.watchQuoteCache[code] = d;
+                if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
+                    state.watchQuoteCache[code] = d;
+                    freshCodes[code] = true;
+                }
             });
+            state.watchQuoteFreshCodes = freshCodes;
+            try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, Object.keys(freshCodes).length === codes.length ? 'fresh' : 'stale'); } catch (e) {}
             if (result.time) {
                 state.watchQuoteUpdateTime = result.time;
                 persistWatchQuoteUpdateTime(result.time);
@@ -156,6 +165,8 @@
             }
         } catch (e) {
             console.error('自选股失败:', e);
+            state.watchQuoteFreshCodes = {};
+            try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (storageError) {}
             W.showWatchStatus('自选股行情加载失败', 'error');
             utils.setLastUpdated('加载失败');
             renderWatchlist();
@@ -170,7 +181,17 @@
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
             var data = result.data[code];
-            if (data && data.price !== '0.00') state.watchQuoteCache[code] = data;
+            if (data && data.price !== '0.00' && Number.isFinite(Number(data.priceValue))) {
+                state.watchQuoteCache[code] = data;
+                state.watchQuoteFreshCodes[code] = true;
+                var holdingCodes = W.getAllWatchCodes();
+                var allFresh = holdingCodes.length > 0 && holdingCodes.every(function (item) {
+                    return !!state.watchQuoteFreshCodes[item];
+                });
+                try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, allFresh ? 'fresh' : 'stale'); } catch (e) {}
+            } else {
+                delete state.watchQuoteFreshCodes[code];
+            }
             if (result.time) {
                 state.watchQuoteUpdateTime = result.time;
                 persistWatchQuoteUpdateTime(result.time);
@@ -184,25 +205,29 @@
             }
         } catch (e) {
             console.error('新增股票行情获取失败:', e);
+            delete state.watchQuoteFreshCodes[code];
+            try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (storageError) {}
             W.showWatchStatus('已添加,行情稍后自动刷新', 'error');
             utils.setLastUpdated('加载失败');
             renderWatchlist();
         }
     }
 
-    function renderWatchItem(code, name, price, changePercent, volume, prev, showCost) {
-        var cls = changePercent > 0 ? 'positive' : changePercent < 0 ? 'negative' : 'neutral';
-        var pt = changePercent !== 0
-            ? (changePercent > 0 ? '+' + Number(changePercent).toFixed(2) : Number(changePercent).toFixed(2)) + '%'
-            : '0.00%';
+    function renderWatchItem(code, name, price, changePercent, volume, prev, showCost, quoteFresh) {
+        var numericChange = Number(changePercent);
+        var cls = numericChange > 0 ? 'positive' : numericChange < 0 ? 'negative' : 'neutral';
+        var pt = Number.isFinite(numericChange)
+            ? (numericChange > 0 ? '+' + numericChange.toFixed(2) : numericChange.toFixed(2)) + '%'
+            : '--';
         var arrow = (window.AppMarket && typeof window.AppMarket.trendArrow === 'function')
             ? window.AppMarket.trendArrow(changePercent, prev)
             : '─';
         var data = state.watchQuoteCache[code];
-        var priceValue = data && typeof data.priceValue === 'number' ? data.priceValue : null;
+        var fresh = quoteFresh === undefined ? true : !!quoteFresh;
+        var priceValue = fresh && data && typeof data.priceValue === 'number' ? data.priceValue : null;
         var displayPrice = utils.formatQuotePrice(priceValue, price, code, data && data.name ? data.name : name);
         var costCell = showCost ? renderCostCell(code, priceValue) : '';
-        var spark = renderWatchSparklineCell(code, cls);
+        var spark = renderWatchSparklineCell(code, cls, fresh);
         return '<div class="watchlist-item clickable" data-code="' + utils.escapeHtml(code) + '" data-pct="' + utils.escapeHtml(changePercent) + '">' +
             '<div class="watchlist-item-main">' +
             '<div class="watchlist-stock-name">' + utils.escapeHtml(name) + '</div>' +
@@ -214,7 +239,10 @@
             '<button class="watchlist-remove-btn" data-code="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button></div>';
     }
 
-    function renderWatchSparklineCell(code, cls) {
+    function renderWatchSparklineCell(code, cls, quoteFresh) {
+        if (quoteFresh === false) {
+            return '<div class="watchlist-stock-sparkline ' + cls + '" data-watch-spark="' + utils.escapeHtml(code) + '"></div>';
+        }
         var cached = watchSparkCache[code];
         var svg = cached && Array.isArray(cached.points)
             ? renderWatchSparkline(cached.points, cls, cached.preClose)
@@ -355,7 +383,7 @@
     function refreshStaleWatchQuotes() {
         var codes = W.getAllWatchCodes();
         if (codes.length === 0) return;
-        var stale = codes.filter(function (c) { return !state.watchQuoteCache[c]; });
+        var stale = codes.filter(function (c) { return !state.watchQuoteFreshCodes[c]; });
         if (stale.length === 0) return;
         var lastPull = 0;
         try { lastPull = parseInt(window.AppStorage.getItem(KEYS.WATCH_REFRESH_THROTTLE_KEY) || '0', 10) || 0; } catch (e) {}
@@ -364,10 +392,16 @@
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (result) {
                 if (!result || !result.success || !result.data) return;
+                var freshCodes = {};
                 Object.keys(result.data).forEach(function (code) {
                     var d = result.data[code];
-                    if (d && d.price !== '0.00') state.watchQuoteCache[code] = d;
+                    if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
+                        state.watchQuoteCache[code] = d;
+                        freshCodes[code] = true;
+                    }
                 });
+                state.watchQuoteFreshCodes = freshCodes;
+                try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, Object.keys(freshCodes).length === codes.length ? 'fresh' : 'stale'); } catch (e) {}
                 if (result.time) {
                     state.watchQuoteUpdateTime = result.time;
                     persistWatchQuoteUpdateTime(result.time);

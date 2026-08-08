@@ -1,6 +1,6 @@
 [package]
 name = "fund-tracker"
-version = "0.1.24"
+version = "0.1.25"
 description = "恭喜发财本地 Tauri 桌面应用"
 edition = "2021"
 
@@ -36,6 +36,10 @@ tokio = { version = "1", features = ["macros", "process", "sync", "time"] }
 url = "2"
 urlencoding = "2"
 uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows-sys = { version = "0.59", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 codegen-units = 1

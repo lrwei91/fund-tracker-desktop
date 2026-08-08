@@ -41,6 +41,7 @@
     // ---------- 资金流 / 自选股 / 告警 / 自选指数 ----------
     var WATCH_QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache';
     var WATCH_QUOTE_UPDATE_TIME_KEY = 'fund_tracker_watch_quote_update_time';
+    var WATCH_QUOTE_STATUS_KEY = 'fund_tracker_watch_quote_status';
     var ALERT_SETTINGS_KEY = 'fund_tracker_alert_settings';
     var WATCH_ALERT_STATE_KEY = 'fund_tracker_watch_alert_state';
     var CUSTOM_INDICES_KEY = 'fund_tracker_custom_indices';
@@ -122,8 +123,10 @@
     // 自选股 / 自选指数 (从 localStorage 还原)
     var watchQuoteCache = {};
     var watchQuoteUpdateTime = '';
+    var watchQuoteFreshCodes = {};
     var customIndexCodes = [];
     var customIndexCache = {};
+    var customIndexFreshCodes = {};
     var customIndexUpdateTime = '';
     var watchlistCost = {};
     var watchlistRemarks = {};
@@ -140,9 +143,9 @@
     // 新闻源 / 列表 state
     var currentNewsSource = storage.getItem(NEWS_SOURCE_KEY) || 'jin10';
     var newsState = {
-        jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'jin10', degraded: false },
-        eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'eastmoney', degraded: false },
-        cls: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'cls', degraded: false },
+        jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'jin10', degraded: false, stale: false, staleAgeSeconds: 0 },
+        eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'eastmoney', degraded: false, stale: false, staleAgeSeconds: 0 },
+        cls: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'cls', degraded: false, stale: false, staleAgeSeconds: 0 },
     };
 
     // ============ 启动时 IIFE 还原 ============
@@ -152,6 +155,7 @@
         var rawCache = storage.getItem(WATCH_QUOTE_CACHE_KEY);
         if (rawCache) watchQuoteCache = JSON.parse(rawCache) || {};
     } catch (e) { watchQuoteCache = {}; }
+    try { storage.setItem(WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (e) {}
     try {
         var rawTime = storage.getItem(WATCH_QUOTE_UPDATE_TIME_KEY);
         if (rawTime) watchQuoteUpdateTime = rawTime;
@@ -296,6 +300,7 @@
             SHORT_CACHE_TTL: SHORT_CACHE_TTL,
             WATCH_QUOTE_CACHE_KEY: WATCH_QUOTE_CACHE_KEY,
             WATCH_QUOTE_UPDATE_TIME_KEY: WATCH_QUOTE_UPDATE_TIME_KEY,
+            WATCH_QUOTE_STATUS_KEY: WATCH_QUOTE_STATUS_KEY,
             ALERT_SETTINGS_KEY: ALERT_SETTINGS_KEY,
             WATCH_ALERT_STATE_KEY: WATCH_ALERT_STATE_KEY,
             CUSTOM_INDICES_KEY: CUSTOM_INDICES_KEY,
@@ -347,8 +352,10 @@
         liveSectorData: liveSectorData,
         watchQuoteCache: watchQuoteCache,
         watchQuoteUpdateTime: watchQuoteUpdateTime,
+        watchQuoteFreshCodes: watchQuoteFreshCodes,
         customIndexCodes: customIndexCodes,
         customIndexCache: customIndexCache,
+        customIndexFreshCodes: customIndexFreshCodes,
         customIndexUpdateTime: customIndexUpdateTime,
         watchlistCost: watchlistCost,
         watchlistRemarks: watchlistRemarks,

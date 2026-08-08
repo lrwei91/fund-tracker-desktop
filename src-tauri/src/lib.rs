@@ -46,6 +46,10 @@ fn open_external_url(url: String) -> Value {
 }
 
 pub fn run() {
+    #[cfg(windows)]
+    if !windows::ensure_webview2_runtime() {
+        return;
+    }
     let store = ConfigStore::new(ConfigStore::product_path());
     let app = tauri::Builder::default()
         .manage(store)
@@ -59,6 +63,8 @@ pub fn run() {
             config_storage_patch,
             config_storage_path,
             open_external_url,
+            api::diagnostics_snapshot,
+            api::diagnostics_clear,
             windows::open_holding_window,
             windows::minimize_holding_window,
             windows::maximize_holding_window,

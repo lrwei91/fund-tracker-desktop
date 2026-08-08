@@ -1,4 +1,5 @@
 use super::http::{ApiError, Gateway, RequestSpec};
+use super::policy;
 use serde_json::{json, Value};
 use std::{process::Stdio, sync::Arc};
 use tokio::process::Command;
@@ -159,12 +160,13 @@ async fn eastmoney(g: &Arc<Gateway>, code: &str, count: usize) -> Result<Value, 
 }
 pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> Value {
     if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
-        return json!({"success":false,"message":"缺少股票代码"});
+        return policy::failure("缺少股票代码", "", None);
     }
     if !["auto", "tdxrs", "tencent", "eastmoney"].contains(&source) {
-        return json!({"success":false,"message":"未知分时数据源"});
+        return policy::failure("未知分时数据源", "minute source invalid", None);
     }
     let mut fallback = String::new();
+    let mut attempts = Vec::new();
     let result = if source == "tdxrs" {
         tdx(code, count).await
     } else if source == "tencent" {
@@ -175,14 +177,26 @@ pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> 
         let mut found = None;
         if std::env::var("TDXRS_BIN").is_ok() || std::env::var("TDXRS_PYTHON").is_ok() {
             match tdx(code, count).await {
-                Ok(v) => found = Some(v),
-                Err(e) => fallback = format!("tdxrs: {e}"),
+                Ok(v) => {
+                    attempts.push(json!({"source":"tdxrs","status":200}));
+                    found = Some(v)
+                }
+                Err(e) => {
+                    attempts
+                        .push(json!({"source":"tdxrs","status":e.status,"reason":e.to_string()}));
+                    fallback = format!("tdxrs: {e}")
+                }
             }
         }
         if found.is_none() {
             match tencent(&g, code, count).await {
-                Ok(v) => found = Some(v),
+                Ok(v) => {
+                    attempts.push(json!({"source":"tencent","status":200}));
+                    found = Some(v)
+                }
                 Err(e) => {
+                    attempts
+                        .push(json!({"source":"tencent","status":e.status,"reason":e.to_string()}));
                     fallback = if fallback.is_empty() {
                         format!("腾讯: {e}")
                     } else {
@@ -193,8 +207,20 @@ pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> 
         }
         if found.is_none() {
             match eastmoney(&g, code, count).await {
-                Ok(v) => found = Some(v),
-                Err(e) => fallback = format!("{fallback}; 东财: {e}"),
+                Ok(v) => {
+                    attempts.push(json!({"source":"eastmoney","status":200}));
+                    found = Some(v)
+                }
+                Err(e) => {
+                    attempts.push(
+                        json!({"source":"eastmoney","status":e.status,"reason":e.to_string()}),
+                    );
+                    fallback = if fallback.is_empty() {
+                        format!("东财: {e}")
+                    } else {
+                        format!("{fallback}; 东财: {e}")
+                    }
+                }
             }
         }
         found.ok_or_else(|| ApiError::new(&fallback))
@@ -214,8 +240,8 @@ pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> 
                 .unwrap_or(json!(""));
             let points = data["points"].as_array().cloned().unwrap_or_default();
             data.as_object_mut().unwrap().extend(json!({"code":code,"market":market(code),"count":points.len(),"latestTime":latest,"fallbackReason":fallback}).as_object().unwrap().clone());
-            json!({"success":true,"data":data,"time":chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai).format("%H:%M:%S").to_string()})
+            json!({"success":true,"data":data,"time":chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai).format("%H:%M:%S").to_string(),"meta":{"degraded":!fallback.is_empty(),"stale":false,"sources":{"minute":{"actual":data["source"],"actualLabel":data["sourceLabel"],"fallbackReason":fallback,"attempts":attempts}}}})
         }
-        Err(e) => json!({"success":false,"message":"分时数据接口不可用","error":e.to_string()}),
+        Err(e) => policy::failure("分时数据接口不可用", &e.to_string(), e.status),
     }
 }

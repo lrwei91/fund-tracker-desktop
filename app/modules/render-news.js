@@ -2,6 +2,7 @@
 (function () {
     var state = window.AppState;
     var utils = window.AppUtils;
+    var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
     var KEYS = state.KEYS;
     var SOURCES = {
         jin10: { label: '金十快讯', path: '/news' },
@@ -29,7 +30,7 @@
     }
 
     function emptyNewsState(source) {
-        return { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: source, degraded: false };
+        return { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: source, degraded: false, stale: false, staleAgeSeconds: 0 };
     }
 
     function initNewsSourceTabs() {
@@ -117,6 +118,9 @@
         return {
             actualSource: payload.source || source,
             degraded: !!(json.meta && json.meta.degraded),
+            stale: !!(json.meta && json.meta.stale),
+            staleAgeSeconds: Number(json.meta && json.meta.staleAgeSeconds) || 0,
+            meta: json.meta || null,
             rows: (Array.isArray(payload.data) ? payload.data : []).map(function (item) { return normalizeRow(source, item); }),
             cursor: payload.nextCursor || null,
             hasMore: !!payload.hasMore && !!payload.nextCursor,
@@ -136,6 +140,8 @@
             current.hasMore = page.hasMore;
             current.actualSource = page.actualSource;
             current.degraded = page.degraded;
+            current.stale = page.stale;
+            current.staleAgeSeconds = page.staleAgeSeconds;
             current.error = false;
         } catch (error) {
             console.error(SOURCES[source].label + '获取失败:', error);
@@ -157,6 +163,8 @@
             current.items = mergeUnique(page.rows, current.items);
             current.actualSource = page.actualSource;
             current.degraded = page.degraded;
+            current.stale = page.stale;
+            current.staleAgeSeconds = page.staleAgeSeconds;
             current.error = false;
         } catch (error) {
             console.error(SOURCES[source].label + '刷新失败:', error);
@@ -188,8 +196,11 @@
             container.innerHTML = '<div class="news-status news-empty">暂无' + utils.escapeHtml(SOURCES[state.currentNewsSource].label) + '</div>';
             return;
         }
-        var sourceStatus = '<div class="news-actual-source' + (current.degraded ? ' degraded' : '') + '">' +
-            utils.escapeHtml(current.degraded ? '已降级至 ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource)) + '</div>';
+        var statusLabel = current.stale
+            ? dataStatus.label({ stale: true, staleAgeSeconds: current.staleAgeSeconds })
+            : (current.degraded ? '已降级至 ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource));
+        var sourceStatus = '<div class="news-actual-source' + (current.degraded || current.stale ? ' degraded' : '') + '">' +
+            utils.escapeHtml(statusLabel) + '</div>';
         var html = sourceStatus + current.items.map(renderNewsItem).join('');
         if (current.isLoading) html += '<div class="news-status news-loading">刷新中...</div>';
         else if (current.hasMore) html += '<div class="news-status news-loadmore">上拉加载更多</div>';

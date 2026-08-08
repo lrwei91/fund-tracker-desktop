@@ -3,6 +3,7 @@
   var WATCH_TABS_KEY = 'fund_tracker_watchlist_tabs'
   var LEGACY_WATCHLIST_KEY = 'fund_tracker_watchlist'
   var QUOTE_CACHE_KEY = 'fund_tracker_watch_quote_cache'
+  var QUOTE_STATUS_KEY = 'fund_tracker_watch_quote_status'
   var REMARKS_KEY = 'fund_tracker_watchlist_remarks'
   var SETTINGS_KEY = 'fund_tracker_settings'
   var CLOWN_MODE_KEY = 'fund_tracker_holding_clown_mode'
@@ -52,7 +53,7 @@
 
   function formatPct(value) {
     var number = Number(value)
-    if (!Number.isFinite(number)) number = 0
+    if (!Number.isFinite(number)) return '--'
     return (number > 0 ? '+' : '') + number.toFixed(2) + '%'
   }
 
@@ -106,11 +107,16 @@
   function getDisplayQuote(code, quote, remarks) {
     var rate = getLimitRate(code)
     var name = getDisplayName(code, quote, remarks)
+    if (window.AppStorage.getItem(QUOTE_STATUS_KEY) !== 'fresh') {
+      return { name: name, price: '--', pct: null }
+    }
     if (!clownMode) {
       return {
         name: name,
         price: quote && quote.price ? quote.price : '--',
-        pct: quote && typeof quote.changePercent === 'number' ? quote.changePercent : 0,
+        pct: quote && typeof quote.changePercent === 'number' && Number.isFinite(quote.changePercent)
+          ? quote.changePercent
+          : null,
       }
     }
 
@@ -270,7 +276,7 @@
       return
     }
 
-    if ([QUOTE_CACHE_KEY, REMARKS_KEY, SETTINGS_KEY, CLOWN_MODE_KEY].indexOf(event.key) !== -1) {
+    if ([QUOTE_CACHE_KEY, QUOTE_STATUS_KEY, REMARKS_KEY, SETTINGS_KEY, CLOWN_MODE_KEY].indexOf(event.key) !== -1) {
       if (event.key === CLOWN_MODE_KEY) clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
       var refreshResult = render({ stayOnCurrent: true })
       syncSwitchTimer(refreshResult, refreshResult && refreshResult.switched)

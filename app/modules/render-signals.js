@@ -9,6 +9,7 @@
     var state = window.AppState;
     var utils = window.AppUtils;
     var cache = window.AppCache;
+    var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
     var KEYS = state.KEYS;
 
     function toFiniteNumber(value) {
@@ -74,7 +75,7 @@
             });
             renderOpportunityRadar(json.data, true);
             if (timeEl) {
-                var prefix = json.meta && json.meta.degraded ? '部分数据源不可用 · ' : '更新 ';
+                var prefix = dataStatus.label(json.meta, json.meta && json.meta.degraded ? '部分数据源不可用' : '更新');
                 timeEl.textContent = prefix + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
             }
         } catch (e) {
@@ -97,8 +98,10 @@
         if (!container) return;
         var items = data && Array.isArray(data.items) ? data.items : [];
         if (timeEl && fresh) {
-            var prefix = data.meta && data.meta.degraded ? '部分数据源不可用 · ' : '更新 ';
+            var prefix = dataStatus.label(data.meta, data.meta && data.meta.degraded ? '部分数据源不可用' : '更新');
             timeEl.textContent = prefix + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
+        } else if (timeEl && !fresh) {
+            timeEl.textContent = '缓存数据';
         }
         if (!items.length) {
             container.innerHTML = '<div class="opportunity-radar-empty">暂无候选信号</div>';
@@ -199,7 +202,7 @@
             var result = await res.json();
             if (!result.success || !result.data || !Array.isArray(result.data.items)) throw new Error('数据异常');
             cache.writeDailyDataCache(cacheKey, todayKey, { source: source, items: result.data.items });
-            renderHotRank(result.data.items, source, true);
+            renderHotRank(result.data.items, source, true, result.meta || null);
         } catch (e) {
             console.error('市场热度获取失败:', e);
             if (cached && cached.date === todayKey && cached.data && Array.isArray(cached.data.items)) {
@@ -214,14 +217,16 @@
         }
     }
 
-    function renderHotRank(items, source, fresh) {
+    function renderHotRank(items, source, fresh, meta) {
         var listId = source === 'em' ? 'hot-rank-list-em' : 'hot-rank-list-ths';
         var listEl = document.getElementById(listId);
         var timeEl = document.getElementById('hot-rank-update-time');
         if (!listEl) return;
         if (!items.length) { listEl.innerHTML = '<li class="list-empty">暂无数据</li>'; return; }
         if (timeEl && fresh) {
-            timeEl.textContent = '更新 ' + utils.formatShanghaiTime(new Date().toISOString());
+            timeEl.textContent = dataStatus.label(meta, '更新 ') + utils.formatShanghaiTime(new Date().toISOString());
+        } else if (timeEl && !fresh) {
+            timeEl.textContent = '缓存数据';
         }
         listEl.innerHTML = items.map(function (it) {
             it = it || {};

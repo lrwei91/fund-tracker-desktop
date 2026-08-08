@@ -13,6 +13,31 @@ use std::{
 };
 use tokio::sync::{Mutex as AsyncMutex, Semaphore};
 
+use super::{
+    diagnostics::{now_iso, DiagnosticEvent, DiagnosticStore},
+    policy,
+};
+
+const MAX_RAW_CACHE_ENTRIES: usize = 256;
+const MAX_RAW_CACHE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_ENDPOINT_CACHE_ENTRIES: usize = 128;
+const MAX_ENDPOINT_CACHE_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Clone)]
+struct RawCacheEntry {
+    fetched_at: Instant,
+    expires_at: Instant,
+    value: Arc<Vec<u8>>,
+}
+
+#[derive(Clone)]
+struct EndpointCacheEntry {
+    stored_at: Instant,
+    fetched_at: String,
+    stale_until: Instant,
+    value: Value,
+}
+
 #[derive(Clone, Debug)]
 pub struct ApiError {
     pub message: String,
@@ -24,6 +49,24 @@ impl ApiError {
             message: message.into(),
             status: None,
         }
+    }
+
+    pub fn with_status(status: u16) -> Self {
+        Self {
+            message: format!("HTTP {status}"),
+            status: Some(status),
+        }
+    }
+
+    pub fn parse(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            status: None,
+        }
+    }
+
+    pub fn error_code(&self) -> (&'static str, bool) {
+        policy::error_code(&self.message, self.status)
     }
 }
 impl std::fmt::Display for ApiError {
@@ -85,16 +128,20 @@ struct Circuit {
     last_started: Option<Instant>,
 }
 type SharedRequest = Shared<BoxFuture<'static, Result<Arc<Vec<u8>>, ApiError>>>;
-type ResponseCache = Arc<Mutex<HashMap<String, (Instant, Arc<Vec<u8>>)>>>;
+type RawResponseCache = Arc<Mutex<HashMap<String, RawCacheEntry>>>;
+type EndpointResponseCache = Arc<Mutex<HashMap<String, EndpointCacheEntry>>>;
 
 pub struct Gateway {
     client: Client,
     inflight: Arc<AsyncMutex<HashMap<String, SharedRequest>>>,
-    cache: ResponseCache,
+    cache: RawResponseCache,
+    endpoint_cache: EndpointResponseCache,
     eastmoney: Arc<Semaphore>,
     tencent: Arc<Semaphore>,
     default: Arc<Semaphore>,
     circuit: Arc<AsyncMutex<Circuit>>,
+    diagnostics: Arc<DiagnosticStore>,
+    route: String,
 }
 
 impl Gateway {
@@ -106,11 +153,102 @@ impl Gateway {
                 .expect("HTTP client"),
             inflight: Arc::new(AsyncMutex::new(HashMap::new())),
             cache: Arc::new(Mutex::new(HashMap::new())),
+            endpoint_cache: Arc::new(Mutex::new(HashMap::new())),
             eastmoney: Arc::new(Semaphore::new(1)),
             tencent: Arc::new(Semaphore::new(4)),
             default: Arc::new(Semaphore::new(3)),
             circuit: Arc::new(AsyncMutex::new(Circuit::default())),
+            diagnostics: DiagnosticStore::new(DiagnosticStore::product_path()),
+            route: "unknown".into(),
         })
+    }
+
+    pub fn scoped(self: &Arc<Self>, route: &str) -> Arc<Self> {
+        Arc::new(Self {
+            client: self.client.clone(),
+            inflight: self.inflight.clone(),
+            cache: self.cache.clone(),
+            endpoint_cache: self.endpoint_cache.clone(),
+            eastmoney: self.eastmoney.clone(),
+            tencent: self.tencent.clone(),
+            default: self.default.clone(),
+            circuit: self.circuit.clone(),
+            diagnostics: self.diagnostics.clone(),
+            route: route.trim_start_matches('/').to_string(),
+        })
+    }
+
+    pub fn diagnostics(&self) -> Arc<DiagnosticStore> {
+        self.diagnostics.clone()
+    }
+
+    pub fn clear_diagnostics(&self) -> Result<(), String> {
+        self.diagnostics.clear()
+    }
+
+    pub fn endpoint_key(path: &str, query: &HashMap<String, String>) -> String {
+        let mut pairs: Vec<_> = query.iter().collect();
+        pairs.sort_by(|a, b| a.0.cmp(b.0).then_with(|| a.1.cmp(b.1)));
+        let query = pairs
+            .into_iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join("&");
+        format!("{}?{query}", path.trim_start_matches('/'))
+    }
+
+    pub fn remember_endpoint(&self, key: String, value: Value, stale_for: Duration) {
+        if stale_for.is_zero() || value.get("success") != Some(&Value::Bool(true)) {
+            return;
+        }
+        let now = Instant::now();
+        let mut cache = self.endpoint_cache.lock().expect("endpoint cache");
+        cache.insert(
+            key,
+            EndpointCacheEntry {
+                stored_at: now,
+                fetched_at: now_iso(),
+                stale_until: now + stale_for,
+                value,
+            },
+        );
+        prune_endpoint_cache(&mut cache);
+    }
+
+    pub fn stale_endpoint(&self, key: &str) -> Option<(Value, u64, String)> {
+        let now = Instant::now();
+        let mut cache = self.endpoint_cache.lock().expect("endpoint cache");
+        let entry = cache.get(key).cloned()?;
+        if entry.stale_until <= now {
+            cache.remove(key);
+            return None;
+        }
+        Some((
+            entry.value,
+            now.duration_since(entry.stored_at).as_secs(),
+            entry.fetched_at,
+        ))
+    }
+
+    pub fn record_marker(
+        &self,
+        provider: &str,
+        outcome: &str,
+        cache: &str,
+        status: Option<u16>,
+        error_code: Option<&str>,
+        duration_ms: u128,
+    ) {
+        self.diagnostics.record(DiagnosticEvent {
+            at: now_iso(),
+            route: self.route.clone(),
+            provider: provider.to_string(),
+            outcome: outcome.to_string(),
+            cache: cache.to_string(),
+            status,
+            duration_ms,
+            error_code: error_code.map(str::to_owned),
+        });
     }
 
     pub async fn bytes(self: &Arc<Self>, spec: RequestSpec) -> Result<Arc<Vec<u8>>, ApiError> {
@@ -120,15 +258,29 @@ impl Gateway {
             spec.url,
             spec.body.as_deref().unwrap_or("")
         );
-        if let Some((expires, value)) = self.cache.lock().expect("cache").get(&key).cloned() {
-            if expires > Instant::now() {
-                return Ok(value);
+        let now = Instant::now();
+        let cached = {
+            let mut cache = self.cache.lock().expect("cache");
+            if let Some(entry) = cache.get(&key).cloned() {
+                if entry.expires_at > now {
+                    Some(entry.value)
+                } else {
+                    cache.remove(&key);
+                    None
+                }
+            } else {
+                None
             }
+        };
+        if let Some(value) = cached {
+            self.record_marker("cache", "success", "hit", None, None, 0);
+            return Ok(value);
         }
         let mut inflight = self.inflight.lock().await;
         if let Some(work) = inflight.get(&key) {
             let work = work.clone();
             drop(inflight);
+            self.record_marker("coalesced", "success", "coalesced", None, None, 0);
             return work.await;
         }
         let gateway = self.clone();
@@ -164,6 +316,7 @@ impl Gateway {
             "tencent" => self.tencent.clone(),
             _ => self.default.clone(),
         };
+        let started = Instant::now();
         let _permit = semaphore
             .acquire_owned()
             .await
@@ -171,7 +324,17 @@ impl Gateway {
         if provider == "eastmoney" {
             let mut circuit = self.circuit.lock().await;
             if circuit.until.is_some_and(|until| until > Instant::now()) {
-                return Err(ApiError::new("eastmoney 数据源熔断中"));
+                let error = ApiError::new("eastmoney 数据源熔断中");
+                let (code, _) = error.error_code();
+                self.record_marker(
+                    provider,
+                    "circuit_open",
+                    "miss",
+                    None,
+                    Some(code),
+                    started.elapsed().as_millis(),
+                );
+                return Err(error);
             }
             if let Some(last) = circuit.last_started {
                 let target = Duration::from_millis(1000 + rand::rng().random_range(0..=300));
@@ -213,6 +376,7 @@ impl Gateway {
             }
             match request.send().await {
                 Ok(response) if response.status().is_success() => {
+                    let status = response.status().as_u16();
                     let body = Arc::new(
                         response
                             .bytes()
@@ -226,19 +390,33 @@ impl Gateway {
                         c.until = None;
                     }
                     if !spec.cache_ttl.is_zero() {
-                        self.cache
-                            .lock()
-                            .expect("cache")
-                            .insert(key, (Instant::now() + spec.cache_ttl, body.clone()));
+                        let mut cache = self.cache.lock().expect("cache");
+                        cache.insert(
+                            key.clone(),
+                            RawCacheEntry {
+                                fetched_at: Instant::now(),
+                                expires_at: Instant::now() + spec.cache_ttl,
+                                value: body.clone(),
+                            },
+                        );
+                        prune_raw_cache(&mut cache);
+                    }
+                    let duration_ms = started.elapsed().as_millis();
+                    if duration_ms >= 2_000 {
+                        self.record_marker(
+                            provider,
+                            "slow_success",
+                            "miss",
+                            Some(status),
+                            None,
+                            duration_ms,
+                        );
                     }
                     return Ok(body);
                 }
                 Ok(response) => {
                     let status = response.status().as_u16();
-                    last = ApiError {
-                        message: format!("HTTP {status}"),
-                        status: Some(status),
-                    };
+                    last = ApiError::with_status(status);
                     if status != 429 && status < 500 {
                         break;
                     }
@@ -269,11 +447,20 @@ impl Gateway {
                 c.until = Some(Instant::now() + Duration::from_secs(300));
             }
         }
+        let (code, _) = last.error_code();
+        self.record_marker(
+            provider,
+            "error",
+            "miss",
+            last.status,
+            Some(code),
+            started.elapsed().as_millis(),
+        );
         Err(last)
     }
 
     pub async fn json(self: &Arc<Self>, spec: RequestSpec) -> Result<Value, ApiError> {
-        serde_json::from_slice(&self.bytes(spec).await?).map_err(|e| ApiError::new(e.to_string()))
+        serde_json::from_slice(&self.bytes(spec).await?).map_err(|e| ApiError::parse(e.to_string()))
     }
     pub async fn text(self: &Arc<Self>, spec: RequestSpec) -> Result<String, ApiError> {
         String::from_utf8(self.bytes(spec).await?.as_ref().clone())
@@ -281,6 +468,43 @@ impl Gateway {
     }
     pub async fn gbk(self: &Arc<Self>, spec: RequestSpec) -> Result<String, ApiError> {
         Ok(GBK.decode(&self.bytes(spec).await?).0.into_owned())
+    }
+}
+
+fn prune_raw_cache(cache: &mut HashMap<String, RawCacheEntry>) {
+    let now = Instant::now();
+    cache.retain(|_, entry| entry.expires_at > now);
+    let mut total = cache.values().map(|entry| entry.value.len()).sum::<usize>();
+    while cache.len() > MAX_RAW_CACHE_ENTRIES || total > MAX_RAW_CACHE_BYTES {
+        let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, entry)| entry.fetched_at)
+            .map(|(key, entry)| (key.clone(), entry.value.len()))
+        else {
+            break;
+        };
+        cache.remove(&oldest.0);
+        total = total.saturating_sub(oldest.1);
+    }
+}
+
+fn prune_endpoint_cache(cache: &mut HashMap<String, EndpointCacheEntry>) {
+    let now = Instant::now();
+    cache.retain(|_, entry| entry.stale_until > now);
+    let mut total = cache
+        .values()
+        .map(|entry| entry.value.to_string().len())
+        .sum::<usize>();
+    while cache.len() > MAX_ENDPOINT_CACHE_ENTRIES || total > MAX_ENDPOINT_CACHE_BYTES {
+        let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, entry)| entry.stored_at)
+            .map(|(key, entry)| (key.clone(), entry.value.to_string().len()))
+        else {
+            break;
+        };
+        cache.remove(&oldest.0);
+        total = total.saturating_sub(oldest.1);
     }
 }
 
@@ -294,17 +518,29 @@ mod tests {
     };
 
     fn fixture_server(status: u16, body: Vec<u8>, delay: Duration) -> (String, Arc<AtomicUsize>) {
+        fixture_server_n(status, body, delay, 1)
+    }
+
+    fn fixture_server_n(
+        status: u16,
+        body: Vec<u8>,
+        delay: Duration,
+        max_requests: usize,
+    ) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let calls = Arc::new(AtomicUsize::new(0));
         let count = calls.clone();
         std::thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
+            for _ in 0..max_requests {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    break;
+                };
                 count.fetch_add(1, Ordering::SeqCst);
                 let mut request = [0_u8; 1024];
                 let _ = stream.read(&mut request);
                 std::thread::sleep(delay);
-                let reason = if status == 200 { "OK" } else { "Forbidden" };
+                let reason = if status == 200 { "OK" } else { "Fixture" };
                 let head = format!(
                     "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                     body.len()
@@ -363,5 +599,86 @@ mod tests {
         let error = gateway.bytes(RequestSpec::get(url).em()).await.unwrap_err();
         assert!(error.message.contains("熔断"));
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn classifies_rate_limit_and_server_errors() {
+        let (rate_url, _) = fixture_server_n(429, vec![], Duration::ZERO, 3);
+        let rate_error = Gateway::new()
+            .bytes(RequestSpec::get(rate_url).em())
+            .await
+            .unwrap_err();
+        assert_eq!(rate_error.error_code().0, "rate_limited");
+
+        let (server_url, _) = fixture_server_n(503, vec![], Duration::ZERO, 3);
+        let server_error = Gateway::new()
+            .bytes(RequestSpec::get(server_url).em())
+            .await
+            .unwrap_err();
+        assert_eq!(server_error.error_code().0, "upstream_5xx");
+    }
+
+    #[tokio::test]
+    async fn classifies_empty_json_fixture_as_parse_error() {
+        let (url, _) = fixture_server(200, vec![], Duration::ZERO);
+        let error = Gateway::new()
+            .json(RequestSpec::get(url))
+            .await
+            .unwrap_err();
+        assert_eq!(error.error_code().0, "parse_error");
+    }
+
+    #[test]
+    fn raw_cache_is_bounded_by_entries_and_bytes() {
+        let now = Instant::now();
+        let mut cache = HashMap::new();
+        for index in 0..(MAX_RAW_CACHE_ENTRIES + 8) {
+            cache.insert(
+                format!("fixture-{index}"),
+                RawCacheEntry {
+                    fetched_at: now + Duration::from_millis(index as u64),
+                    expires_at: now + Duration::from_secs(60),
+                    value: Arc::new(vec![0_u8; 1024]),
+                },
+            );
+        }
+        prune_raw_cache(&mut cache);
+        assert!(cache.len() <= MAX_RAW_CACHE_ENTRIES);
+        assert!(
+            cache.values().map(|entry| entry.value.len()).sum::<usize>() <= MAX_RAW_CACHE_BYTES
+        );
+    }
+
+    #[test]
+    fn endpoint_cache_is_bounded_by_entries() {
+        let gateway = Gateway::new();
+        for index in 0..(MAX_ENDPOINT_CACHE_ENTRIES + 8) {
+            gateway.remember_endpoint(
+                format!("route-{index}"),
+                serde_json::json!({"success":true,"data":{"index":index}}),
+                Duration::from_secs(60),
+            );
+        }
+        assert!(gateway.endpoint_cache.lock().unwrap().len() <= MAX_ENDPOINT_CACHE_ENTRIES);
+    }
+
+    #[test]
+    fn endpoint_cache_keeps_stale_metadata_separate_from_live_policy() {
+        let gateway = Gateway::new();
+        let key = "stock-news?code=600000".to_string();
+        let response = serde_json::json!({
+            "success": true,
+            "data": {"items": []},
+            "meta": {"degraded": false, "stale": false}
+        });
+        gateway.remember_endpoint(key.clone(), response.clone(), Duration::from_secs(30));
+        let (cached, age, fetched_at) = gateway.stale_endpoint(&key).expect("stale window");
+        assert_eq!(cached, response);
+        assert!(age < 2);
+        assert!(!fetched_at.is_empty());
+
+        let live_key = "stock?codes=600000".to_string();
+        gateway.remember_endpoint(live_key.clone(), response, Duration::ZERO);
+        assert!(gateway.stale_endpoint(&live_key).is_none());
     }
 }

@@ -1,4 +1,5 @@
 use super::http::{ApiError, Gateway, RequestSpec};
+use super::policy;
 use chrono::{Duration, Utc};
 use chrono_tz::Asia::Shanghai;
 use serde_json::{json, Value};
@@ -231,18 +232,18 @@ async fn sectors(g: &Arc<Gateway>) -> Result<Value, ApiError> {
 pub async fn handle(g: Arc<Gateway>, kind: &str) -> Value {
     match kind {
         "index" => match indexes(&g).await {
-            Ok(v) => json!({"success":true,"data":v}),
-            Err(e) => json!({"success":false,"message":"真实行情接口不可用","error":e.to_string()}),
+            Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
+            Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
         "capital" => {
             let (a, b, c) = tokio::join!(main_fund(&g), north_intraday(&g), hkex(&g));
             let degraded =
                 a["available"] != true || b["available"] != true || c["available"] != true;
-            json!({"success":true,"data":{"mainFund":a,"northHgtIntraday":b,"northboundDaily":c},"meta":{"asOf":Utc::now().to_rfc3339(),"degraded":degraded,"sources":{"marketFund":{"actual":if a["available"]==true{json!("eastmoney")}else{Value::Null},"status":if a["available"]==true{"live"}else{"unavailable"}},"northHgtIntraday":{"actual":"hexin","status":if b["available"]==true{"live"}else{"unavailable"}},"northboundDaily":{"actual":"hkex","status":if c["available"]==true{"live"}else{"unavailable"}}}}})
+            json!({"success":true,"data":{"mainFund":a,"northHgtIntraday":b,"northboundDaily":c},"meta":{"asOf":Utc::now().to_rfc3339(),"degraded":degraded,"stale":false,"sources":{"marketFund":{"actual":if a["available"]==true{json!("eastmoney")}else{Value::Null},"status":if a["available"]==true{"live"}else{"unavailable"}},"northHgtIntraday":{"actual":"hexin","status":if b["available"]==true{"live"}else{"unavailable"}},"northboundDaily":{"actual":"hkex","status":if c["available"]==true{"live"}else{"unavailable"}}}}})
         }
         "sector" => match sectors(&g).await {
-            Ok(v) => json!({"success":true,"data":v}),
-            Err(e) => json!({"success":false,"message":"真实行情接口不可用","error":e.to_string()}),
+            Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
+            Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
         "multiday-flow" => match sectors(&g).await {
             Ok(v) => {
@@ -253,10 +254,10 @@ pub async fn handle(g: Arc<Gateway>, kind: &str) -> Value {
                 let map = |key: &str, trend: &str| {
                     v[key].as_array().into_iter().flatten().map(|x|json!({"name":x["name"],"data":[x["value"].clone()],"consecutiveDays":1,"trend":trend})).collect::<Vec<_>>()
                 };
-                json!({"success":true,"data":{"dates":[day],"inflowSectors":map("inflow","up"),"outflowSectors":map("outflow","down")}})
+                json!({"success":true,"data":{"dates":[day],"inflowSectors":map("inflow","up"),"outflowSectors":map("outflow","down")},"meta":{"degraded":false,"stale":false}})
             }
-            Err(e) => json!({"success":false,"message":"真实行情接口不可用","error":e.to_string()}),
+            Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
-        _ => json!({"success":false,"message":"未知 market-data 类型"}),
+        _ => policy::failure("未知 market-data 类型", "market-data type invalid", None),
     }
 }

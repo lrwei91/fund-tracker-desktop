@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "fund-tracker"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "atomicwrites",
  "chrono",
@@ -898,6 +898,8 @@ dependencies = [
  "url",
  "urlencoding",
  "uuid",
+ "windows-sys 0.59.0",
+ "winreg",
 ]
 
 [[package]]

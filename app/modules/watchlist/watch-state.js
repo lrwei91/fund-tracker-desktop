@@ -103,7 +103,7 @@
         var map = {};
         Object.keys(state.watchQuoteCache).forEach(function (code) {
             var d = state.watchQuoteCache[code];
-            if (d && typeof d.changePercent === 'number') map[code] = d.changePercent;
+            if (state.watchQuoteFreshCodes[code] && d && typeof d.changePercent === 'number') map[code] = d.changePercent;
         });
         savePrevChangePct(map);
     }

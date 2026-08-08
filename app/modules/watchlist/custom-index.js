@@ -28,11 +28,12 @@
 
         var items = state.customIndexCodes.map(function (code) {
             var d = state.customIndexCache[code];
+            var fresh = !!state.customIndexFreshCodes[code];
             var name = d && d.name ? d.name : code + '（待刷新）';
-            var price = d && d.price != null ? d.price : '--';
-            var pct = d && typeof d.changePercent === 'number' ? d.changePercent : 0;
-            var change = d && typeof d.change === 'number' ? d.change : null;
-            return renderCustomIndexItem(code, name, price, pct, change);
+            var price = fresh && d && d.price != null ? d.price : '--';
+            var pct = fresh && d && typeof d.changePercent === 'number' ? d.changePercent : null;
+            var change = fresh && d && typeof d.change === 'number' ? d.change : null;
+            return renderCustomIndexItem(code, name, price, pct, change, fresh);
         });
 
         // 满 4 个不显示加号;未满追加 1 个加号格子
@@ -49,21 +50,25 @@
         bindCustomIndexRemove();
         bindCustomIndexAdd();
         bindCustomIndexAddForm();
-        if (updateTimeEl) updateTimeEl.textContent = state.customIndexUpdateTime || '';
+        var allFresh = state.customIndexCodes.length > 0 && state.customIndexCodes.every(function (code) {
+            return !!state.customIndexFreshCodes[code];
+        });
+        if (updateTimeEl) updateTimeEl.textContent = allFresh ? (state.customIndexUpdateTime || '') : '等待实时行情';
     }
 
-    function renderCustomIndexItem(code, name, price, changePercent, change) {
+    function renderCustomIndexItem(code, name, price, changePercent, change, quoteFresh) {
+        var fresh = quoteFresh === undefined ? true : !!quoteFresh;
         var cls = changePercent > 0 ? 'positive' : changePercent < 0 ? 'negative' : 'neutral';
         var changeStr = '--';
         if (typeof change === 'number' && Number.isFinite(change)) {
             changeStr = (change > 0 ? '+' : '') + change.toFixed(2);
         }
-        var pctStr = (typeof changePercent === 'number' && Number.isFinite(changePercent) && changePercent !== 0)
+        var pctStr = (typeof changePercent === 'number' && Number.isFinite(changePercent))
             ? (changePercent > 0 ? '+' : '') + changePercent.toFixed(2) + '%'
-            : '0.00%';
+            : '--';
         // 半小时对比箭头:跟大盘指数一致,挂在价格后面,从 custom bucket 取 prev 价格
         var cached = state.customIndexCache[code];
-        var priceValue = cached && typeof cached.priceValue === 'number' ? cached.priceValue : null;
+        var priceValue = fresh && cached && typeof cached.priceValue === 'number' ? cached.priceValue : null;
         var displayPrice = utils.formatQuotePrice(priceValue, price, code, name);
         var marketMod = window.AppMarket;
         var prevBucket = (marketMod && typeof marketMod.readIndexPrevBucket === 'function')
@@ -75,7 +80,7 @@
             : '─';
         var arrowHtml = arrow ? ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span>' : '';
         var changeTitle = changeStr + ' / ' + pctStr;
-        var sparkSvg = (marketMod && typeof marketMod.buildIndexSparklineSvg === 'function')
+        var sparkSvg = fresh && marketMod && typeof marketMod.buildIndexSparklineSvg === 'function'
             ? marketMod.buildIndexSparklineSvg(cached || {}, cls, typeof prev === 'number' ? prev : null)
             : '';
         return '<div class="index-item custom-index-data" data-code="' + utils.escapeHtml(code) + '">' +
@@ -210,10 +215,15 @@
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
+            var freshCodes = {};
             Object.keys(result.data).forEach(function (code) {
                 var d = result.data[code];
-                if (d && d.price !== '0.00') state.customIndexCache[code] = d;
+                if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
+                    state.customIndexCache[code] = d;
+                    freshCodes[code] = true;
+                }
             });
+            state.customIndexFreshCodes = freshCodes;
             if (result.time) {
                 state.customIndexUpdateTime = result.time;
                 persistCustomIndexUpdateTime(result.time);
@@ -226,7 +236,7 @@
             }
             renderCustomIndex();
         } catch (e) {
-            // 非交易时段拉取失败属正常,渲染缓存即可
+            state.customIndexFreshCodes = {};
             renderCustomIndex();
         }
     }
@@ -238,7 +248,12 @@
             var result = await res.json();
             if (!result.success || !result.data) return;
             var d = result.data[code];
-            if (d && d.price !== '0.00') state.customIndexCache[code] = d;
+            if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
+                state.customIndexCache[code] = d;
+                state.customIndexFreshCodes[code] = true;
+            } else {
+                delete state.customIndexFreshCodes[code];
+            }
             if (result.time) {
                 state.customIndexUpdateTime = result.time;
                 persistCustomIndexUpdateTime(result.time);
@@ -256,7 +271,7 @@
     // 自选指数版:复用同一个 5 分钟节流键
     function refreshStaleCustomIndex() {
         if (state.customIndexCodes.length === 0) return;
-        var stale = state.customIndexCodes.filter(function (c) { return !state.customIndexCache[c]; });
+        var stale = state.customIndexCodes.filter(function (c) { return !state.customIndexFreshCodes[c]; });
         if (stale.length === 0) return;
 
         var lastPull = 0;
@@ -267,10 +282,15 @@
             .then(function (res) { return res.ok ? res.json() : null; })
             .then(function (result) {
                 if (!result || !result.success || !result.data) return;
+                var freshCodes = {};
                 Object.keys(result.data).forEach(function (code) {
                     var d = result.data[code];
-                    if (d && d.price !== '0.00') state.customIndexCache[code] = d;
+                    if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
+                        state.customIndexCache[code] = d;
+                        freshCodes[code] = true;
+                    }
                 });
+                state.customIndexFreshCodes = freshCodes;
                 if (result.time) {
                     state.customIndexUpdateTime = result.time;
                     persistCustomIndexUpdateTime(result.time);
