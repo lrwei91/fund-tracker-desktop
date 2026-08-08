@@ -8,12 +8,12 @@
   <link rel="stylesheet" href="holding-widget.css">
 </head>
 <body>
-  <main class="widget-shell" id="widget-shell">
-    <div class="drag-region" aria-hidden="true"></div>
+  <main class="widget-shell" id="widget-shell" data-tauri-drag-region="deep">
+    <div class="drag-region" data-tauri-drag-region aria-hidden="true"></div>
     <section class="quote-slot" id="quote-slot" aria-live="polite">
       <div class="quote-empty">暂无持仓股</div>
     </section>
-    <div class="window-controls">
+    <div class="window-controls" data-tauri-drag-region="false">
       <button type="button" id="clown-mode-btn" aria-label="小丑模式" title="小丑模式" aria-pressed="false">
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
           <path d="M4 5.2C4.4 3.4 5.8 2.5 8 2.5s3.6.9 4 2.7c.5 2.2-.4 5.2-2.3 6.8-.8.7-2.6.7-3.4 0C4.4 10.4 3.5 7.4 4 5.2Z"></path>
@@ -27,6 +27,7 @@
   </main>
   <script src="../config-schema.js"></script>
   <script src="storage.js"></script>
+  <script src="../tauri-shell.js"></script>
   <script src="holding-widget.js"></script>
 </body>
 </html>

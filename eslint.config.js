@@ -1,17 +1,16 @@
 // ESLint flat config — fund-tracker
-// 区分 Node 上下文(main/preload/api) 与 浏览器上下文(modules/renderer)
+// 区分 Node 工程脚本与浏览器 renderer。
 const js = require('@eslint/js');
 const globals = require('globals');
 const prettier = require('eslint-config-prettier');
 
 module.exports = [
     {
-        ignores: ['dist/**', 'node_modules/**', 'build/**', 'test/**', 'coverage/**'],
+        ignores: ['dist/**', '.tauri-frontend/**', 'src-tauri/target/**', 'node_modules/**', 'build/**', 'test/**', 'coverage/**'],
     },
     js.configs.recommended,
     {
-        // Node / CommonJS 上下文
-        files: ['main.js', 'preload.js', 'scripts/**/*.js', 'desktop/**/*.js', 'app/api/**/*.js'],
+        files: ['scripts/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
@@ -25,7 +24,7 @@ module.exports = [
     },
     {
         // 浏览器渲染上下文(window.AppX / document / fetch)
-        files: ['app/app.js', 'app/modules/**/*.js', 'renderer/**/*.js'],
+        files: ['app/app.js', 'app/tauri-shell.js', 'app/modules/**/*.js', 'renderer/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',

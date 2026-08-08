@@ -29,15 +29,38 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
 
+  rust-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run frontend:prepare
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Rust format
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Rust Clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   package:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-14
             command: npm run build:mac:raw
+            artifact: mac
           - os: windows-latest
             command: npm run build:win:raw
+            artifact: win
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,5 +69,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
       - name: Package
         run: ${{ matrix.command }}
+      - name: Distribution size gate
+        run: npm run size:check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tauri-${{ matrix.artifact }}
+          path: dist/*.zip

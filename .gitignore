@@ -1,11 +1,13 @@
 # ===== Dependencies =====
 node_modules/
 
-# ===== Build & package output (electron-builder) =====
+# ===== Build & package output (Tauri) =====
 dist/
+.tauri-frontend/
+src-tauri/target/
+src-tauri/gen/
 out/
 release/
-.electron-builder-cache/
 
 # ===== Environment & secrets =====
 .env*

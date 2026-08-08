@@ -13,10 +13,16 @@
         var key = stableKey(path, params);
         var force = options && options.force;
         if (!force && inflight[key]) return inflight[key];
-        var url = window.AppUtils.apiUrl(path, params);
-        var work = window.fetch(url).then(function (response) {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json();
+        var work = window.__TAURI__.core.invoke('fetch_data', {
+            path: path,
+            query: Object.fromEntries(new URLSearchParams(params || {}).entries()),
+        }).then(function (data) {
+            if (!data || data.success === false) {
+                var error = new Error(data && (data.message || data.error) || '数据接口不可用');
+                error.payload = data;
+                throw error;
+            }
+            return data;
         });
         inflight[key] = work;
         return work.finally(function () {

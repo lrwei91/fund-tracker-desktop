@@ -1,25 +1,26 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "0.1.23",
-  "description": "恭喜发财本地 Electron 桌面应用",
-  "main": "main.js",
+  "version": "0.1.24",
+  "description": "恭喜发财本地 Tauri 桌面应用",
   "private": true,
   "engines": {
     "node": ">=24 <27"
   },
   "scripts": {
-    "start": "electron .",
-    "check": "node --check main.js && node --check preload.js && node --check app/config-schema.js && for f in desktop/*.js renderer/*.js app/app.js app/api/*.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done",
+    "start": "npm run frontend:prepare && tauri dev",
+    "frontend:prepare": "node scripts/prepare-tauri-frontend.js",
+    "check": "node --check app/config-schema.js && node --check app/tauri-shell.js && for f in renderer/*.js app/app.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done && cargo check --manifest-path src-tauri/Cargo.toml",
     "smoke": "node scripts/smoke-watchlist.js",
-    "smoke:data": "node scripts/smoke-data.js",
+    "smoke:data": "cargo test --manifest-path src-tauri/Cargo.toml live_data_smoke -- --nocapture",
     "version:bump": "node scripts/bump-version.js",
     "build:mac": "npm run build:mac:raw",
     "build:win": "npm run build:win:raw",
     "build:all": "npm run build:mac:raw && npm run build:win:raw",
-    "build:mac:raw": "electron-builder --mac zip --publish never",
-    "build:win:raw": "electron-builder --win portable --x64 --publish never",
+    "build:mac:raw": "npm run frontend:prepare && tauri build --bundles app && node scripts/package-tauri.js mac",
+    "build:win:raw": "npm run frontend:prepare && tauri build --no-bundle && node scripts/package-tauri.js win",
+    "size:check": "node scripts/check-artifact-size.js",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" main.js preload.js",
+    "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -28,40 +29,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
-    "electron": "^43.1.0",
-    "electron-builder": "^26.15.3",
+    "@tauri-apps/cli": "^2.8.5",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^9.1.2",
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
     "prettier": "^3.9.4",
     "vitest": "^4.1.10"
-  },
-  "build": {
-    "appId": "com.local.fundtracker",
-    "productName": "恭喜发财",
-    "directories": {
-      "output": "dist"
-    },
-    "mac": {
-      "target": "zip",
-      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
-      "category": "public.app-category.finance",
-      "icon": "build/icon.icns"
-    },
-    "win": {
-      "target": "portable",
-      "icon": "build/icon.ico"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-win-${arch}-portable.${ext}"
-    },
-    "files": [
-      "main.js",
-      "preload.js",
-      "desktop/**/*",
-      "renderer/**/*",
-      "app/**/*"
-    ]
   }
 }

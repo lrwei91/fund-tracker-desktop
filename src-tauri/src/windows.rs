@@ -1,0 +1,256 @@
+use serde::Deserialize;
+use serde_json::{json, Value};
+use tauri::{Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+#[cfg(windows)]
+use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(windows)]
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
+
+#[cfg(windows)]
+static RESTORE_HOLDING: AtomicBool = AtomicBool::new(false);
+
+const HOLDING_W: f64 = 320.0;
+const HOLDING_H: f64 = 58.0;
+const ALERT_W: f64 = 420.0;
+const ALERT_H: f64 = 116.0;
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StockAlert {
+    code: Option<String>,
+    name: Option<String>,
+    price: f64,
+    change_pct: f64,
+    open_price: Option<f64>,
+    base_price: Option<f64>,
+    base_label: Option<String>,
+    threshold: Option<f64>,
+    time: Option<String>,
+    opacity: Option<f64>,
+    sound_enabled: Option<bool>,
+}
+
+fn screen_position(
+    window: &WebviewWindow,
+    width: f64,
+    height: f64,
+    top: bool,
+) -> PhysicalPosition<i32> {
+    let monitor = window.primary_monitor().ok().flatten();
+    let (x, y) = monitor
+        .map(|m| {
+            let scale = m.scale_factor();
+            let work = m.work_area();
+            let pos = work.position;
+            let size = work.size;
+            let logical_w = size.width as f64 / scale;
+            let logical_h = size.height as f64 / scale;
+            let lx = pos.x as f64 / scale
+                + if top {
+                    (logical_w - width) / 2.0
+                } else {
+                    logical_w - width - 20.0
+                };
+            let ly = pos.y as f64 / scale + if top { 24.0 } else { logical_h - height - 20.0 };
+            ((lx * scale) as i32, (ly * scale) as i32)
+        })
+        .unwrap_or((20, 20));
+    PhysicalPosition::new(x, y)
+}
+
+pub fn create_auxiliary_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let holding = WebviewWindowBuilder::new(
+        app,
+        "holding",
+        WebviewUrl::App("renderer/holding-widget.html".into()),
+    )
+    .title("持仓库")
+    .inner_size(HOLDING_W, HOLDING_H)
+    .min_inner_size(HOLDING_W, HOLDING_H)
+    .max_inner_size(HOLDING_W, HOLDING_H)
+    .decorations(false)
+    .transparent(!cfg!(windows))
+    .shadow(cfg!(windows))
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .visible(false)
+    .build()?;
+    let _ = holding.set_background_color(Some(if cfg!(windows) {
+        tauri::webview::Color(5, 6, 8, 255)
+    } else {
+        tauri::webview::Color(0, 0, 0, 0)
+    }));
+
+    let alert = WebviewWindowBuilder::new(
+        app,
+        "alert",
+        WebviewUrl::App("renderer/alert-popup.html".into()),
+    )
+    .title("自选股涨跌提醒")
+    .inner_size(ALERT_W, ALERT_H)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .resizable(false)
+    .focused(false)
+    .visible(false)
+    .build()?;
+    alert.set_ignore_cursor_events(true)?;
+    create_windows_tray(app)?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn create_windows_tray(_app: &tauri::AppHandle) -> tauri::Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn create_windows_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
+    let clear = MenuItem::with_id(app, "clear", "清除数据并退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &clear])?;
+    let mut tray = TrayIconBuilder::with_id("main-tray")
+        .tooltip("恭喜发财")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => restore_from_tray(app),
+            "clear" => {
+                if let Err(error) = app.state::<crate::config::ConfigStore>().clear() {
+                    eprintln!("failed to clear config: {error}");
+                    return;
+                }
+                for window in app.webview_windows().values() {
+                    let _ = window.clear_all_browsing_data();
+                }
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if matches!(
+                event,
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                }
+            ) {
+                restore_from_tray(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn restore_from_tray(app: &tauri::AppHandle) {
+    let label = if RESTORE_HOLDING.swap(false, Ordering::Relaxed) {
+        "holding"
+    } else {
+        "main"
+    };
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[tauri::command]
+pub fn open_holding_window(app: tauri::AppHandle) -> Value {
+    #[cfg(windows)]
+    RESTORE_HOLDING.store(false, Ordering::Relaxed);
+    if let (Some(main), Some(holding)) = (
+        app.get_webview_window("main"),
+        app.get_webview_window("holding"),
+    ) {
+        let _ = holding.set_position(screen_position(&main, HOLDING_W, HOLDING_H, false));
+        let _ = holding.emit("holding-widget-refresh", ());
+        let _ = holding.show();
+        if !cfg!(windows) {
+            let _ = holding.set_focus();
+        }
+        let _ = main.hide();
+    }
+    json!({"ok": true})
+}
+
+#[tauri::command]
+pub fn minimize_holding_window(app: tauri::AppHandle) -> Value {
+    #[cfg(windows)]
+    RESTORE_HOLDING.store(true, Ordering::Relaxed);
+    if let Some(window) = app.get_webview_window("holding") {
+        let _ = window.hide();
+    }
+    json!({"ok": true})
+}
+
+#[tauri::command]
+pub fn maximize_holding_window(app: tauri::AppHandle) -> Value {
+    #[cfg(windows)]
+    RESTORE_HOLDING.store(false, Ordering::Relaxed);
+    if let Some(holding) = app.get_webview_window("holding") {
+        let _ = holding.hide();
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
+    }
+    json!({"ok": true})
+}
+
+#[tauri::command]
+pub fn close_holding_window(app: tauri::AppHandle) -> Value {
+    #[cfg(windows)]
+    RESTORE_HOLDING.store(false, Ordering::Relaxed);
+    if let Some(window) = app.get_webview_window("holding") {
+        let _ = window.hide();
+    }
+    json!({"ok": true})
+}
+
+#[tauri::command]
+pub async fn show_stock_alert(app: tauri::AppHandle, alert: StockAlert) -> Value {
+    if !alert.price.is_finite() || alert.price <= 0.0 || !alert.change_pct.is_finite() {
+        return json!({"ok": false, "error": "Invalid alert payload"});
+    }
+    let Some(window) = app.get_webview_window("alert") else {
+        return json!({"ok": false, "error": "Alert window unavailable"});
+    };
+    let payload = json!({
+        "code": alert.code.unwrap_or_default().chars().take(32).collect::<String>(),
+        "name": alert.name.unwrap_or_else(|| "自选股".into()).chars().take(80).collect::<String>(),
+        "price": alert.price, "changePct": alert.change_pct,
+        "openPrice": alert.open_price.filter(|n| n.is_finite() && *n > 0.0),
+        "basePrice": alert.base_price.filter(|n| n.is_finite() && *n > 0.0),
+        "baseLabel": alert.base_label.unwrap_or_else(|| "基准".into()).chars().take(16).collect::<String>(),
+        "threshold": alert.threshold.filter(|n| n.is_finite() && *n > 0.0),
+        "time": alert.time.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        "opacity": alert.opacity.unwrap_or(1.0).clamp(0.2, 1.0),
+        "soundEnabled": alert.sound_enabled.unwrap_or(true),
+    });
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = window.set_position(screen_position(&main, ALERT_W, ALERT_H, true));
+    }
+    let _ = window.emit("stock-alert", payload);
+    let _ = window.show();
+    let weak = window.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+        let _ = weak.hide();
+    });
+    json!({"ok": true})
+}

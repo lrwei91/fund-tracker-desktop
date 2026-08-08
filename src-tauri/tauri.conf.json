@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "恭喜发财",
+  "version": "0.1.24",
+  "identifier": "com.local.fundtracker",
+  "build": {
+    "frontendDist": "../.tauri-frontend"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "恭喜发财",
+        "url": "index.html",
+        "width": 592,
+        "height": 820,
+        "minWidth": 540,
+        "minHeight": 680,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 12,
+          "y": 14
+        },
+        "backgroundColor": "#050608"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: https:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "../build/icon.png",
+      "../build/icon.icns",
+      "../build/icon.ico"
+    ],
+    "category": "Finance",
+    "shortDescription": "本地行情、自选股与持仓提醒工具"
+  }
+}
