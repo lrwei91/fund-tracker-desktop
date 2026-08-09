@@ -8,17 +8,56 @@
     var state = W.state;
     var utils = W.utils;
     var KEYS = W.KEYS;
+    var persistedCustomIndexSnapshot = null;
 
     function saveCustomIndices() {
         try { window.AppStorage.setItem(KEYS.CUSTOM_INDICES_KEY, JSON.stringify(state.customIndexCodes)); } catch (e) {}
     }
 
     function persistCustomIndexCache() {
-        try { window.AppStorage.setItem(KEYS.CUSTOM_INDEX_QUOTE_CACHE_KEY, JSON.stringify(state.customIndexCache)); } catch (e) {}
+        try {
+            var snapshot = JSON.stringify(state.customIndexCache);
+            if (snapshot === persistedCustomIndexSnapshot) return;
+            persistedCustomIndexSnapshot = snapshot;
+            window.AppStorage.setItem(KEYS.CUSTOM_INDEX_QUOTE_CACHE_KEY, snapshot);
+        } catch (e) {}
     }
 
     function persistCustomIndexUpdateTime(value) {
         try { window.AppStorage.setItem(KEYS.CUSTOM_INDEX_UPDATE_TIME_KEY, value || ''); } catch (e) {}
+    }
+
+    function applyCustomIndexQuoteBatch(result, requestedCodes) {
+        var codes = W.sanitizeCodes(requestedCodes || state.customIndexCodes);
+        if (!result || result.success === false || !result.data) {
+            state.customIndexFreshCodes = {};
+            renderCustomIndex();
+            return false;
+        }
+        var freshCodes = {};
+        codes.forEach(function (code) {
+            var data = result.data[code];
+            if (data && data.price !== '0.00' && Number.isFinite(Number(data.priceValue))) {
+                state.customIndexCache[code] = data;
+                freshCodes[code] = true;
+            }
+        });
+        state.customIndexFreshCodes = freshCodes;
+        if (result.time) {
+            state.customIndexUpdateTime = result.time;
+            persistCustomIndexUpdateTime(result.time);
+        }
+        persistCustomIndexCache();
+        if (window.AppMarket && typeof window.AppMarket.persistIndexPrevIfDue === 'function'
+            && typeof window.AppMarket.snapshotIndexPrice === 'function') {
+            var snapshot = {};
+            codes.forEach(function (code) {
+                if (result.data[code]) snapshot[code] = result.data[code];
+            });
+            window.AppMarket.persistIndexPrevIfDue('custom', window.AppMarket.snapshotIndexPrice(snapshot));
+        }
+        renderCustomIndex();
+        return true;
     }
 
     function renderCustomIndex() {
@@ -214,27 +253,7 @@
             var res = await window.AppDataClient.fetch('/stock', { codes: state.customIndexCodes.join(',') });
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
-            if (!result.success || !result.data) throw new Error('数据异常');
-            var freshCodes = {};
-            Object.keys(result.data).forEach(function (code) {
-                var d = result.data[code];
-                if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
-                    state.customIndexCache[code] = d;
-                    freshCodes[code] = true;
-                }
-            });
-            state.customIndexFreshCodes = freshCodes;
-            if (result.time) {
-                state.customIndexUpdateTime = result.time;
-                persistCustomIndexUpdateTime(result.time);
-            }
-            persistCustomIndexCache();
-            // 节流落盘 prev
-            if (window.AppMarket && typeof window.AppMarket.persistIndexPrevIfDue === 'function'
-                && typeof window.AppMarket.snapshotIndexPrice === 'function') {
-                window.AppMarket.persistIndexPrevIfDue('custom', window.AppMarket.snapshotIndexPrice(result.data));
-            }
-            renderCustomIndex();
+            if (!applyCustomIndexQuoteBatch(result, state.customIndexCodes)) throw new Error('数据异常');
         } catch (e) {
             state.customIndexFreshCodes = {};
             renderCustomIndex();
@@ -315,6 +334,7 @@
     W.removeCustomIndex = removeCustomIndex;
     W.showCustomIndexStatus = showCustomIndexStatus;
     W.loadCustomIndexData = loadCustomIndexData;
+    W.applyCustomIndexQuoteBatch = applyCustomIndexQuoteBatch;
     W.loadSingleCustomIndex = loadSingleCustomIndex;
     W.refreshStaleCustomIndex = refreshStaleCustomIndex;
 })();

@@ -94,6 +94,32 @@ body {
     white-space: nowrap;
 }
 
+.refresh-status {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-family: var(--mono);
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0.78;
+}
+
+.refresh-status.is-busy {
+    color: var(--amber);
+    opacity: 1;
+}
+
+@keyframes refresh-pulse {
+    0%, 100% { opacity: 0.52; }
+    50% { opacity: 1; }
+}
+
+body.is-refreshing .index-value,
+body.is-refreshing .index-change,
+body.is-refreshing #watchlist-update-time,
+body.is-refreshing #custom-index-update-time {
+    animation: refresh-pulse 1.1s ease-in-out infinite;
+}
+
 .header-right {
     display: flex;
     align-items: center;
@@ -1917,6 +1943,25 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
+.sector-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.sector-filter-row .sector-tabs {
+    margin-bottom: 0;
+}
+
+.sector-flow-status {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 11px;
+}
+
 .sector-tab {
     flex: 0 0 auto;
     padding: 6px 12px;
@@ -2199,6 +2244,23 @@ body {
     gap: 4px;
     margin-top: 6px;
     min-height: 18px;
+}
+
+.opportunity-radar-warnings {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 8px 0 2px;
+}
+
+.opportunity-radar-warnings span {
+    padding: 3px 7px;
+    border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 700;
 }
 .opportunity-radar-tags span {
     max-width: 100%;
@@ -3178,6 +3240,12 @@ body {
     padding: 5px 8px;
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.025);
+}
+
+.electron-app .refresh-status {
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.018);
 }
 
 .electron-app .header-right {

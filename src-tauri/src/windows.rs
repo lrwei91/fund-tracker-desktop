@@ -1,5 +1,6 @@
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use tauri::{Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[cfg(windows)]
@@ -91,6 +92,62 @@ pub struct StockAlert {
     time: Option<String>,
     opacity: Option<f64>,
     sound_enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HoldingWidgetSync {
+    #[serde(default)]
+    quotes: HashMap<String, Value>,
+    status: Option<String>,
+    updated_at: Option<String>,
+}
+
+fn sanitize_holding_quote(code: &str, value: Value) -> Option<Value> {
+    if !code.chars().all(|ch| ch.is_ascii_digit()) || code.len() != 6 {
+        return None;
+    }
+    let mut object = value.as_object()?.clone();
+    let name = object
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("自选股")
+        .chars()
+        .take(80)
+        .collect::<String>();
+    let price = object
+        .get("price")
+        .and_then(Value::as_str)
+        .unwrap_or("--")
+        .chars()
+        .take(24)
+        .collect::<String>();
+    let price_value = object
+        .get("priceValue")
+        .and_then(Value::as_f64)
+        .filter(|value| value.is_finite() && *value > 0.0);
+    let change_percent = object
+        .get("changePercent")
+        .and_then(Value::as_f64)
+        .filter(|value| value.is_finite());
+    let change = object
+        .get("change")
+        .and_then(Value::as_f64)
+        .filter(|value| value.is_finite());
+    object.clear();
+    object.insert("code".into(), Value::String(code.to_string()));
+    object.insert("name".into(), Value::String(name));
+    object.insert("price".into(), Value::String(price));
+    if let Some(value) = price_value {
+        object.insert("priceValue".into(), json!(value));
+    }
+    if let Some(value) = change_percent {
+        object.insert("changePercent".into(), json!(value));
+    }
+    if let Some(value) = change {
+        object.insert("change".into(), json!(value));
+    }
+    Some(Value::Object(object))
 }
 
 fn screen_position(
@@ -282,6 +339,39 @@ pub fn close_holding_window(app: tauri::AppHandle) -> Value {
         let _ = window.hide();
     }
     json!({"ok": true})
+}
+
+#[tauri::command]
+pub fn holding_widget_sync(app: tauri::AppHandle, state: HoldingWidgetSync) -> Value {
+    let Some(window) = app.get_webview_window("holding") else {
+        return json!({"ok": false, "error": "Holding window unavailable"});
+    };
+    let mut quotes = Map::new();
+    for (code, quote) in state.quotes.into_iter().take(50) {
+        if let Some(value) = sanitize_holding_quote(&code, quote) {
+            quotes.insert(code, value);
+        }
+    }
+    let status = match state.status.as_deref() {
+        Some("fresh") | Some("stale") | Some("unavailable") => {
+            state.status.unwrap_or_else(|| "unavailable".into())
+        }
+        _ => "unavailable".into(),
+    };
+    let updated_at = state
+        .updated_at
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339())
+        .chars()
+        .take(64)
+        .collect::<String>();
+    let payload = json!({
+        "quotes": quotes,
+        "status": status,
+        "updatedAt": updated_at,
+    });
+    let count = payload["quotes"].as_object().map_or(0, Map::len);
+    let _ = window.emit("holding-widget-state", payload);
+    json!({"ok": true, "count": count})
 }
 
 #[tauri::command]

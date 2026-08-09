@@ -37,6 +37,9 @@
         isHoldingTab: W.isHoldingTab,
         // load + render
         loadWatchlistData: W.loadWatchlistData,
+        applyWatchQuoteBatch: W.applyWatchQuoteBatch,
+        applyCustomIndexQuoteBatch: W.applyCustomIndexQuoteBatch,
+        markQuoteUnavailable: W.markQuoteUnavailable,
         loadSingleWatchQuote: W.loadSingleWatchQuote,
         renderWatchlist: W.renderWatchlist,
         renderWatchItem: W.renderWatchItem,

@@ -24,6 +24,7 @@
         minimizeHoldingWindow: function () { return invoke('minimize_holding_window'); },
         maximizeHoldingWindow: function () { return invoke('maximize_holding_window'); },
         closeHoldingWindow: function () { return invoke('close_holding_window'); },
+        syncHoldingWidget: function (state) { return invoke('holding_widget_sync', { state: state || {} }); },
         showStockAlert: function (alert) { return invoke('show_stock_alert', { alert: alert }); },
         isWindows: navigator.userAgent.indexOf('Windows') >= 0,
         getConfigPath: function () { return invoke('config_storage_path'); },
@@ -33,6 +34,7 @@
             patch: function (changes) { return invoke('config_storage_patch', { changes: changes || {} }); },
         },
         onHoldingWidgetRefresh: function (callback) { return subscribe('holding-widget-refresh', callback); },
+        onHoldingWidgetState: function (callback) { return subscribe('holding-widget-state', callback); },
         onStockAlert: function (callback) { return subscribe('stock-alert', callback); },
     };
 })();

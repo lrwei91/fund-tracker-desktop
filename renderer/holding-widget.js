@@ -12,6 +12,9 @@
   var clownModeBtn = document.getElementById('clown-mode-btn')
   var index = 0
   var currentCode = null
+  var liveQuotes = {}
+  var liveStatus = 'stale'
+  var liveUpdatedAt = ''
   var timer = null
   var animationTimer = null
   var clownMode = window.AppStorage.getItem(CLOWN_MODE_KEY) === 'true'
@@ -106,21 +109,23 @@
 
   function getDisplayQuote(code, quote, remarks) {
     var rate = getLimitRate(code)
-    var name = getDisplayName(code, quote, remarks)
-    if (window.AppStorage.getItem(QUOTE_STATUS_KEY) !== 'fresh') {
+    var activeQuote = liveQuotes[code] || quote
+    var name = getDisplayName(code, activeQuote, remarks)
+    var status = liveUpdatedAt ? liveStatus : window.AppStorage.getItem(QUOTE_STATUS_KEY)
+    if (status !== 'fresh') {
       return { name: name, price: '--', pct: null }
     }
     if (!clownMode) {
       return {
         name: name,
-        price: quote && quote.price ? quote.price : '--',
-        pct: quote && typeof quote.changePercent === 'number' && Number.isFinite(quote.changePercent)
-          ? quote.changePercent
+        price: activeQuote && activeQuote.price ? activeQuote.price : '--',
+        pct: activeQuote && typeof activeQuote.changePercent === 'number' && Number.isFinite(activeQuote.changePercent)
+          ? activeQuote.changePercent
           : null,
       }
     }
 
-    var prevClose = getPreviousClose(quote)
+    var prevClose = getPreviousClose(activeQuote)
     return {
       name: name,
       price: prevClose === null ? '--' : formatPrice(prevClose * (1 + rate / 100)),
@@ -297,6 +302,17 @@
 
   if (window.shell && window.shell.onHoldingWidgetRefresh) {
     window.shell.onHoldingWidgetRefresh(function () {
+      var result = render({ stayOnCurrent: true })
+      syncSwitchTimer(result, result && result.switched)
+    })
+  }
+
+  if (window.shell && window.shell.onHoldingWidgetState) {
+    window.shell.onHoldingWidgetState(function (payload) {
+      payload = payload && typeof payload === 'object' ? payload : {}
+      liveQuotes = payload.quotes && typeof payload.quotes === 'object' ? payload.quotes : {}
+      liveStatus = payload.status === 'fresh' || payload.status === 'stale' ? payload.status : 'unavailable'
+      liveUpdatedAt = typeof payload.updatedAt === 'string' ? payload.updatedAt : ''
       var result = render({ stayOnCurrent: true })
       syncSwitchTimer(result, result && result.switched)
     })

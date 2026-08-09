@@ -12,6 +12,7 @@
     var watchSparkCache = {};
     var watchSparkPending = {};
     var WATCH_SPARK_TTL_MS = 2 * 60 * 1000;
+    var persistedQuoteSnapshot = null;
 
     async function resolveStockInput(input) {
         var value = input.trim();
@@ -123,11 +124,62 @@
     }
 
     function persistWatchQuoteCache() {
-        try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_CACHE_KEY, JSON.stringify(state.watchQuoteCache)); } catch (e) {}
+        try {
+            var snapshot = JSON.stringify(state.watchQuoteCache);
+            if (snapshot === persistedQuoteSnapshot) return;
+            persistedQuoteSnapshot = snapshot;
+            window.AppStorage.setItem(KEYS.WATCH_QUOTE_CACHE_KEY, snapshot);
+        } catch (e) {}
     }
 
     function persistWatchQuoteUpdateTime(value) {
         try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_UPDATE_TIME_KEY, value || ''); } catch (e) {}
+    }
+
+    function applyWatchQuoteBatch(result, requestedCodes) {
+        var codes = W.sanitizeCodes(requestedCodes || W.getAllWatchCodes());
+        if (!result || result.success === false || !result.data) {
+            state.watchQuoteFreshCodes = {};
+            try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (e) {}
+            renderWatchlist();
+            return false;
+        }
+        var freshCodes = {};
+        codes.forEach(function (code) {
+            var data = result.data[code];
+            if (data && data.price !== '0.00' && Number.isFinite(Number(data.priceValue))) {
+                state.watchQuoteCache[code] = data;
+                freshCodes[code] = true;
+            }
+        });
+        state.watchQuoteFreshCodes = freshCodes;
+        try {
+            window.AppStorage.setItem(
+                KEYS.WATCH_QUOTE_STATUS_KEY,
+                Object.keys(freshCodes).length === codes.length ? 'fresh' : 'stale',
+            );
+        } catch (e) {}
+        if (result.time) {
+            state.watchQuoteUpdateTime = result.time;
+            persistWatchQuoteUpdateTime(result.time);
+        }
+        persistWatchQuoteCache();
+        renderWatchlist();
+        W.persistCurrentChangePct();
+        if (window.AppAlerts && typeof window.AppAlerts.checkAlerts === 'function') {
+            window.AppAlerts.checkAlerts(result.data);
+        }
+        return true;
+    }
+
+    function markQuoteUnavailable(watchCodes, customCodes) {
+        state.watchQuoteFreshCodes = {};
+        try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (e) {}
+        if (watchCodes && watchCodes.length) renderWatchlist();
+        if (customCodes && customCodes.length) {
+            state.customIndexFreshCodes = {};
+            if (typeof W.renderCustomIndex === 'function') W.renderCustomIndex();
+        }
     }
 
     async function loadWatchlistData() {
@@ -141,28 +193,8 @@
             var res = await window.AppDataClient.fetch('/stock', { codes: codes.join(',') });
             if (!res.ok) throw new Error('请求失败 ' + res.status);
             var result = await res.json();
-            if (!result.success || !result.data) throw new Error('数据异常');
-            var freshCodes = {};
-            Object.keys(result.data).forEach(function (code) {
-                var d = result.data[code];
-                if (d && d.price !== '0.00' && Number.isFinite(Number(d.priceValue))) {
-                    state.watchQuoteCache[code] = d;
-                    freshCodes[code] = true;
-                }
-            });
-            state.watchQuoteFreshCodes = freshCodes;
-            try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, Object.keys(freshCodes).length === codes.length ? 'fresh' : 'stale'); } catch (e) {}
-            if (result.time) {
-                state.watchQuoteUpdateTime = result.time;
-                persistWatchQuoteUpdateTime(result.time);
-                if (updateTimeEl) updateTimeEl.textContent = result.time;
-            }
-            persistWatchQuoteCache();
-            renderWatchlist();
-            W.persistCurrentChangePct();
-            if (window.AppAlerts && typeof window.AppAlerts.checkAlerts === 'function') {
-                window.AppAlerts.checkAlerts(result.data);
-            }
+            if (!applyWatchQuoteBatch(result, codes)) throw new Error('数据异常');
+            if (result.time && updateTimeEl) updateTimeEl.textContent = result.time;
         } catch (e) {
             console.error('自选股失败:', e);
             state.watchQuoteFreshCodes = {};
@@ -250,29 +282,70 @@
         return '<div class="watchlist-stock-sparkline ' + cls + '" data-watch-spark="' + utils.escapeHtml(code) + '">' + svg + '</div>';
     }
 
+    var sparkQueue = [];
+    var sparkActive = 0;
+    var sparkObserver = null;
+
+    function runNextSparkline() {
+        if (sparkActive >= 2 || !sparkQueue.length) return;
+        var code = sparkQueue.shift();
+        sparkActive += 1;
+        W.loadStockMinuteData(code)
+            .then(function (data) {
+                var points = data && Array.isArray(data.points) ? data.points.filter(function (point) {
+                    return point && W.readFiniteNumber(point.price) !== null;
+                }) : [];
+                watchSparkCache[code] = { ts: Date.now(), points: points, preClose: W.readFiniteNumber(data && data.preClose) };
+                updateWatchSparklineDom(code);
+            })
+            .catch(function () {
+                watchSparkCache[code] = { ts: Date.now(), points: [], preClose: null };
+            })
+            .finally(function () {
+                delete watchSparkPending[code];
+                sparkActive -= 1;
+                runNextSparkline();
+            });
+        runNextSparkline();
+    }
+
+    function queueSparkline(code) {
+        var cached = watchSparkCache[code];
+        if (cached && Date.now() - cached.ts < WATCH_SPARK_TTL_MS) {
+            updateWatchSparklineDom(code);
+            return;
+        }
+        if (watchSparkPending[code] || sparkQueue.indexOf(code) !== -1) return;
+        watchSparkPending[code] = true;
+        sparkQueue.push(code);
+        runNextSparkline();
+    }
+
     function hydrateWatchSparklines(codes) {
-        W.sanitizeCodes(codes).forEach(function (code) {
+        var cleanCodes = W.sanitizeCodes(codes);
+        if (!cleanCodes.length) return;
+        if (typeof window.IntersectionObserver !== 'function') {
+            cleanCodes.forEach(queueSparkline);
+            return;
+        }
+        if (!sparkObserver) {
+            sparkObserver = new window.IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (!entry.isIntersecting) return;
+                    var code = entry.target.getAttribute('data-watch-spark');
+                    if (code) queueSparkline(code);
+                    sparkObserver.unobserve(entry.target);
+                });
+            }, { rootMargin: '180px' });
+        }
+        cleanCodes.forEach(function (code) {
             var cached = watchSparkCache[code];
             if (cached && Date.now() - cached.ts < WATCH_SPARK_TTL_MS) {
                 updateWatchSparklineDom(code);
                 return;
             }
-            if (watchSparkPending[code]) return;
-            watchSparkPending[code] = true;
-            W.loadStockMinuteData(code)
-                .then(function (data) {
-                    var points = data && Array.isArray(data.points) ? data.points.filter(function (point) {
-                        return point && W.readFiniteNumber(point.price) !== null;
-                    }) : [];
-                    watchSparkCache[code] = { ts: Date.now(), points: points, preClose: W.readFiniteNumber(data && data.preClose) };
-                    updateWatchSparklineDom(code);
-                })
-                .catch(function () {
-                    watchSparkCache[code] = { ts: Date.now(), points: [], preClose: null };
-                })
-                .finally(function () {
-                    delete watchSparkPending[code];
-                });
+            var cell = document.querySelector('.watchlist-stock-sparkline[data-watch-spark="' + code + '"]');
+            if (cell) sparkObserver.observe(cell);
         });
     }
 
@@ -359,11 +432,14 @@
     }
 
     function bindWatchRemove() {
-        document.querySelectorAll('.watchlist-remove-btn').forEach(function (btn) {
-            btn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                removeStockFromWatchlist(this.getAttribute('data-code'));
-            });
+        var grid = document.getElementById('watchlist-grid');
+        if (!grid || grid.dataset.removeBound === 'true') return;
+        grid.dataset.removeBound = 'true';
+        grid.addEventListener('click', function (e) {
+            var button = e.target.closest('.watchlist-remove-btn');
+            if (!button) return;
+            e.stopPropagation();
+            removeStockFromWatchlist(button.getAttribute('data-code'));
         });
     }
 
@@ -420,6 +496,8 @@
     W.persistWatchQuoteCache = persistWatchQuoteCache;
     W.persistWatchQuoteUpdateTime = persistWatchQuoteUpdateTime;
     W.loadWatchlistData = loadWatchlistData;
+    W.applyWatchQuoteBatch = applyWatchQuoteBatch;
+    W.markQuoteUnavailable = markQuoteUnavailable;
     W.loadSingleWatchQuote = loadSingleWatchQuote;
     W.renderWatchItem = renderWatchItem;
     W.renderCostCell = renderCostCell;

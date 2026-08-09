@@ -93,6 +93,7 @@
     <div class="header-left">
         <h1 id="header-title">市场行情</h1>
         <div class="header-subtitle" id="last-updated">等待更新</div>
+        <div class="refresh-status" id="refresh-status" aria-live="polite"></div>
     </div>
     <div class="header-right">
         <span class="api-status-icon" aria-label="本地 API 已连接" title="本地 API 已连接"></span>
@@ -240,6 +241,19 @@
                 <span class="collapse-icon">▼</span>
             </div>
             <div class="card-body">
+                <div class="sector-filter-row">
+                    <div class="sector-tabs" data-sector-filter="boardType" aria-label="板块类型">
+                        <button type="button" class="sector-tab active" data-value="industry">行业</button>
+                        <button type="button" class="sector-tab" data-value="concept">概念</button>
+                        <button type="button" class="sector-tab" data-value="region">地域</button>
+                    </div>
+                    <div class="sector-tabs" data-sector-filter="period" aria-label="资金周期">
+                        <button type="button" class="sector-tab active" data-value="today">今日</button>
+                        <button type="button" class="sector-tab" data-value="5d">5日</button>
+                        <button type="button" class="sector-tab" data-value="10d">10日</button>
+                    </div>
+                    <span class="sector-flow-status" id="sector-flow-status"></span>
+                </div>
                 <div class="sector-chart">
                     <div class="sector-chart-group">
                         <h4 class="sector-group-title">资金流入 TOP5</h4>
@@ -508,6 +522,7 @@
 <script src="modules/watchlist/custom-index.js"></script>
 <script src="modules/watchlist/watchlist.js"></script>
 <script src="modules/render-news.js"></script>
+<script src="modules/refresh-coordinator.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

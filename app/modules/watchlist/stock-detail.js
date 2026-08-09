@@ -85,13 +85,16 @@
         title.textContent = W.getDisplayStockName(code, cachedQuote && cachedQuote.name) + ' (' + code + ')';
         body.innerHTML = '<div class="list-empty">加载中...</div>';
 
-        var results = await Promise.allSettled([
-            loadStockMinuteData(code),
-            loadStockFundFlowData(code),
-            loadStockKlineData(code),
-            loadStockNewsData(code, cachedQuote && cachedQuote.name),
-            loadStockRiskData(code),
-        ]);
+        var loaders = [
+            function () { return loadStockMinuteData(code); },
+            function () { return loadStockFundFlowData(code); },
+            function () { return loadStockKlineData(code); },
+            function () { return loadStockNewsData(code, cachedQuote && cachedQuote.name); },
+            function () { return loadStockRiskData(code); },
+        ];
+        var results = window.AppRefreshCoordinator && typeof window.AppRefreshCoordinator.runDetail === 'function'
+            ? await window.AppRefreshCoordinator.runDetail(loaders.map(function (run) { return { run: run }; }))
+            : await Promise.allSettled(loaders.map(function (run) { return run(); }));
         var minuteData = results[0].status === 'fulfilled' ? results[0].value : null;
         var minuteError = results[0].status === 'rejected' ? results[0].reason : null;
         var fundData = results[1].status === 'fulfilled' ? results[1].value : null;

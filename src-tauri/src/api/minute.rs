@@ -1,5 +1,6 @@
 use super::http::{ApiError, Gateway, RequestSpec};
 use super::policy;
+use super::symbol;
 use serde_json::{json, Value};
 use std::{process::Stdio, sync::Arc};
 use tokio::process::Command;
@@ -20,24 +21,6 @@ fn time(v: &str) -> String {
         )
     } else {
         String::new()
-    }
-}
-fn symbol(code: &str) -> String {
-    format!(
-        "{}{}",
-        if code.starts_with(['5', '6', '9']) {
-            "sh"
-        } else {
-            "sz"
-        },
-        code
-    )
-}
-fn market(code: &str) -> i32 {
-    if code.starts_with(['5', '6', '9']) {
-        1
-    } else {
-        0
     }
 }
 async fn tdx(code: &str, count: usize) -> Result<Value, ApiError> {
@@ -99,7 +82,7 @@ async fn tdx(code: &str, count: usize) -> Result<Value, ApiError> {
     )
 }
 async fn tencent(g: &Arc<Gateway>, code: &str, count: usize) -> Result<Value, ApiError> {
-    let s = symbol(code);
+    let s = symbol::tencent_symbol(code).ok_or_else(|| ApiError::new("股票代码无效"))?;
     let v = g
         .json(
             RequestSpec::get(format!(
@@ -135,7 +118,8 @@ async fn tencent(g: &Arc<Gateway>, code: &str, count: usize) -> Result<Value, Ap
     )
 }
 async fn eastmoney(g: &Arc<Gateway>, code: &str, count: usize) -> Result<Value, ApiError> {
-    let url=format!("https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={}.{}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58&iscr=0&iscca=0&ndays=1",market(code),code);
+    let secid = symbol::eastmoney_secid(code).ok_or_else(|| ApiError::new("股票代码无效"))?;
+    let url=format!("https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid={secid}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6%2Cf7%2Cf8%2Cf9%2Cf10%2Cf11&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58&iscr=0&iscca=0&ndays=1");
     let v = g
         .json(
             RequestSpec::get(url)
@@ -153,14 +137,23 @@ async fn eastmoney(g: &Arc<Gateway>, code: &str, count: usize) -> Result<Value, 
     if points.is_empty() {
         return Err(ApiError::new("东方财富分时数据为空"));
     }
-    let last = points.last().unwrap();
+    let Some(last) = points.last() else {
+        return Err(ApiError::parse("东方财富分时数据解析失败"));
+    };
     Ok(
         json!({"source":"eastmoney","sourceLabel":"东方财富","command":"","name":data.get("name").and_then(Value::as_str).unwrap_or(""),"preClose":pre,"tradeDate":last.get("date").cloned().unwrap_or(json!("")),"latestTime":last.get("time").cloned().unwrap_or(json!("")),"points":points}),
     )
 }
 pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> Value {
-    if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
+    if !symbol::valid_code(code) {
         return policy::failure("缺少股票代码", "", None);
+    }
+    if symbol::is_legacy_beijing(code) {
+        return policy::failure(
+            "北交所旧代码已迁移",
+            "无效的北交所旧代码：43/83/87 号段不再用于实时分析，请使用 920xxx 新代码",
+            None,
+        );
     }
     if !["auto", "tdxrs", "tencent", "eastmoney"].contains(&source) {
         return policy::failure("未知分时数据源", "minute source invalid", None);
@@ -239,7 +232,14 @@ pub async fn handle(g: Arc<Gateway>, code: &str, count: usize, source: &str) -> 
                 })
                 .unwrap_or(json!(""));
             let points = data["points"].as_array().cloned().unwrap_or_default();
-            data.as_object_mut().unwrap().extend(json!({"code":code,"market":market(code),"count":points.len(),"latestTime":latest,"fallbackReason":fallback}).as_object().unwrap().clone());
+            let Some(object) = data.as_object_mut() else {
+                return policy::failure("分时数据解析失败", "响应不是对象", None);
+            };
+            object.insert("code".into(), json!(code));
+            object.insert("market".into(), json!(symbol::eastmoney_market(code)));
+            object.insert("count".into(), json!(points.len()));
+            object.insert("latestTime".into(), latest);
+            object.insert("fallbackReason".into(), json!(fallback));
             json!({"success":true,"data":data,"time":chrono::Utc::now().with_timezone(&chrono_tz::Asia::Shanghai).format("%H:%M:%S").to_string(),"meta":{"degraded":!fallback.is_empty(),"stale":false,"sources":{"minute":{"actual":data["source"],"actualLabel":data["sourceLabel"],"fallbackReason":fallback,"attempts":attempts}}}})
         }
         Err(e) => policy::failure("分时数据接口不可用", &e.to_string(), e.status),

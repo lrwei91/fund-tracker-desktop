@@ -106,11 +106,15 @@
         });
     }
 
-    async function requestPage(source, cursor) {
+    async function requestPage(source, cursor, force) {
         var config = SOURCES[source];
         var query = { limit: String(KEYS.NEWS_PAGE_SIZE[source]) };
         if (cursor) query.cursor = cursor;
-        var res = await window.AppDataClient.fetch(config.path, query, { force: !cursor });
+        var bypassFresh = !!force || !cursor;
+        var res = await window.AppDataClient.fetch(config.path, query, {
+            force: bypassFresh,
+            cacheMode: bypassFresh ? 'bypass_fresh' : 'normal',
+        });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var json = await res.json();
         if (!json.success) throw new Error(json.message || '数据异常');
@@ -134,7 +138,7 @@
         current.isLoading = true;
         renderNewsList();
         try {
-            var page = await requestPage(source, current.cursor);
+            var page = await requestPage(source, current.cursor, false);
             current.items = mergeUnique(current.items, page.rows);
             current.cursor = page.cursor;
             current.hasMore = page.hasMore;
@@ -152,14 +156,14 @@
         }
     }
 
-    async function refreshNewsData() {
+    async function refreshNewsData(force) {
         var source = state.currentNewsSource;
         var current = state.newsState[source];
         if (!current || current.isLoading) return;
         if (!current.items.length) return loadMoreNews();
         current.isLoading = true;
         try {
-            var page = await requestPage(source, null);
+            var page = await requestPage(source, null, !!force);
             current.items = mergeUnique(page.rows, current.items);
             current.actualSource = page.actualSource;
             current.degraded = page.degraded;

@@ -177,8 +177,87 @@ async fn hkex(g: &Arc<Gateway>) -> Value {
     }
     json!({"available":false,"value":"--","isPositive":null,"date":""})
 }
-async fn sectors(g: &Arc<Gateway>) -> Result<Value, ApiError> {
-    let url="https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=100&po=1&np=1&fltt=2&invt=2&fid=f62&fs=m%3A90%2Bt%3A2&fields=f3%2Cf12%2Cf14%2Cf62%2Cf104%2Cf105%2Cf136%2Cf140";
+#[derive(Clone, Copy)]
+struct BoardSpec {
+    board_type: &'static str,
+    period: &'static str,
+    fs: &'static str,
+    main: &'static str,
+    main_pct: &'static str,
+    change_pct: &'static str,
+    leader: Option<&'static str>,
+}
+
+fn board_spec(board_type: &str, period: &str) -> Result<BoardSpec, ApiError> {
+    let (board_type, fs) = match board_type {
+        "" | "industry" => ("industry", "m:90+t:2"),
+        "concept" => ("concept", "m:90+t:3"),
+        "region" => ("region", "m:90+t:1"),
+        _ => return Err(ApiError::new("无效的板块类型")),
+    };
+    let (period, main, main_pct, change_pct, leader) = match period {
+        "" | "today" => ("today", "f62", "f184", "f3", Some("f204")),
+        "5d" => ("5d", "f164", "f165", "f109", Some("f257")),
+        "10d" => ("10d", "f174", "f175", "f160", None),
+        _ => return Err(ApiError::new("无效的板块资金周期")),
+    };
+    Ok(BoardSpec {
+        board_type,
+        period,
+        fs,
+        main,
+        main_pct,
+        change_pct,
+        leader,
+    })
+}
+
+fn sector_rows(v: &Value, spec: BoardSpec, positive: bool) -> Result<Vec<Value>, ApiError> {
+    let raw = v
+        .pointer("/data/diff")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ApiError::new("板块资金流数据为空"))?;
+    let rows = raw
+        .iter()
+        .filter_map(|x| {
+            let name = x.get("f14").and_then(Value::as_str)?;
+            let fund = num(&x[spec.main])?;
+            if (positive && fund <= 0.0) || (!positive && fund >= 0.0) {
+                return None;
+            }
+            Some(json!({
+                "name":name,
+                "code":x.get("f12").and_then(Value::as_str).unwrap_or(""),
+                "value":yi(fund),
+                "mainFundYuan":fund,
+                "mainFundPct":num(&x[spec.main_pct]),
+                "changePct":num(&x[spec.change_pct]).unwrap_or(0.0),
+                "leader":spec.leader.and_then(|field|x.get(field)).and_then(Value::as_str).unwrap_or("")
+            }))
+        })
+        .take(10)
+        .collect();
+    Ok(rows)
+}
+
+async fn sector_side(
+    g: &Arc<Gateway>,
+    spec: BoardSpec,
+    positive: bool,
+) -> Result<Vec<Value>, ApiError> {
+    let order = if positive { 1 } else { 0 };
+    let mut fields = vec!["f12", "f14", spec.change_pct, spec.main, spec.main_pct];
+    if let Some(leader) = spec.leader {
+        fields.push(leader);
+    }
+    fields.sort_unstable();
+    fields.dedup();
+    let url = format!(
+        "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=20&po={order}&np=1&fltt=2&invt=2&fid={}&fs={}&fields={}",
+        spec.main,
+        urlencoding::encode(spec.fs),
+        fields.join("%2C")
+    );
     let v = g
         .json(
             RequestSpec::get(url)
@@ -190,46 +269,20 @@ async fn sectors(g: &Arc<Gateway>) -> Result<Value, ApiError> {
                 .timeout(15),
         )
         .await?;
-    let mut rows: Vec<_> = v
-        .pointer("/data/diff")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|x| {
-            let n = x.get("f14").and_then(Value::as_str)?;
-            let fund = num(&x["f62"])?;
-            if fund == 0.0 {
-                return None;
-            }
-            Some((
-                n.to_string(),
-                fund,
-                num(&x["f3"]).unwrap_or(0.0),
-                x.get("f140")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
-            ))
-        })
-        .collect();
-    let map = |x: &(String, f64, f64, String)| json!({"name":x.0,"value":yi(x.1),"mainFundYuan":x.1,"changePct":x.2,"leader":x.3});
-    rows.sort_by(|a, b| b.1.total_cmp(&a.1));
-    let inflow = rows
-        .iter()
-        .filter(|x| x.1 > 0.0)
-        .take(10)
-        .map(map)
-        .collect::<Vec<_>>();
-    rows.sort_by(|a, b| a.1.total_cmp(&b.1));
-    let outflow = rows
-        .iter()
-        .filter(|x| x.1 < 0.0)
-        .take(10)
-        .map(map)
-        .collect::<Vec<_>>();
-    Ok(json!({"inflow":inflow,"outflow":outflow}))
+    sector_rows(&v, spec, positive)
 }
-pub async fn handle(g: Arc<Gateway>, kind: &str) -> Value {
+
+async fn sectors(g: &Arc<Gateway>, board_type: &str, period: &str) -> Result<Value, ApiError> {
+    let spec = board_spec(board_type, period)?;
+    let (inflow, outflow) = tokio::join!(sector_side(g, spec, true), sector_side(g, spec, false));
+    Ok(json!({
+        "boardType":spec.board_type,
+        "period":spec.period,
+        "inflow":inflow?,
+        "outflow":outflow?
+    }))
+}
+pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str) -> Value {
     match kind {
         "index" => match indexes(&g).await {
             Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
@@ -241,23 +294,61 @@ pub async fn handle(g: Arc<Gateway>, kind: &str) -> Value {
                 a["available"] != true || b["available"] != true || c["available"] != true;
             json!({"success":true,"data":{"mainFund":a,"northHgtIntraday":b,"northboundDaily":c},"meta":{"asOf":Utc::now().to_rfc3339(),"degraded":degraded,"stale":false,"sources":{"marketFund":{"actual":if a["available"]==true{json!("eastmoney")}else{Value::Null},"status":if a["available"]==true{"live"}else{"unavailable"}},"northHgtIntraday":{"actual":"hexin","status":if b["available"]==true{"live"}else{"unavailable"}},"northboundDaily":{"actual":"hkex","status":if c["available"]==true{"live"}else{"unavailable"}}}}})
         }
-        "sector" => match sectors(&g).await {
+        "sector" => match sectors(&g, board_type, period).await {
             Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
             Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
-        "multiday-flow" => match sectors(&g).await {
-            Ok(v) => {
-                let day = Utc::now()
-                    .with_timezone(&Shanghai)
-                    .format("%-m/%-d")
-                    .to_string();
-                let map = |key: &str, trend: &str| {
-                    v[key].as_array().into_iter().flatten().map(|x|json!({"name":x["name"],"data":[x["value"].clone()],"consecutiveDays":1,"trend":trend})).collect::<Vec<_>>()
-                };
-                json!({"success":true,"data":{"dates":[day],"inflowSectors":map("inflow","up"),"outflowSectors":map("outflow","down")},"meta":{"degraded":false,"stale":false}})
-            }
+        "multiday-flow" => match sectors(
+            &g,
+            board_type,
+            if period.is_empty() { "5d" } else { period },
+        )
+        .await
+        {
+            Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
             Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
         _ => policy::failure("未知 market-data 类型", "market-data type invalid", None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sector_sides_keep_only_the_requested_sign_and_contract_fields() {
+        let fixture = json!({"data":{"diff":[
+            {"f12":"BK1","f14":"流入行业","f62":300000000.0,"f184":8.5,"f3":2.1,"f204":"领涨股"},
+            {"f12":"BK2","f14":"流出行业","f62":-200000000.0,"f184":-6.2,"f3":-1.5,"f204":"领跌股"}
+        ]}});
+        let spec = board_spec("industry", "today").unwrap();
+        let inflow = sector_rows(&fixture, spec, true).unwrap();
+        let outflow = sector_rows(&fixture, spec, false).unwrap();
+        assert_eq!(inflow.len(), 1);
+        assert_eq!(inflow[0]["name"], "流入行业");
+        assert_eq!(inflow[0]["mainFundPct"], 8.5);
+        assert_eq!(outflow.len(), 1);
+        assert_eq!(outflow[0]["name"], "流出行业");
+        assert_eq!(outflow[0]["mainFundYuan"], -200000000.0);
+    }
+
+    #[test]
+    fn missing_sector_payload_is_an_error_instead_of_a_fresh_empty_result() {
+        assert!(sector_rows(
+            &json!({"data":null}),
+            board_spec("industry", "today").unwrap(),
+            true
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn board_specs_cover_all_supported_types_and_periods() {
+        assert_eq!(board_spec("concept", "5d").unwrap().main, "f164");
+        assert_eq!(board_spec("region", "10d").unwrap().main_pct, "f175");
+        assert_eq!(board_spec("industry", "10d").unwrap().leader, None);
+        assert!(board_spec("unknown", "today").is_err());
+        assert!(board_spec("industry", "3d").is_err());
     }
 }

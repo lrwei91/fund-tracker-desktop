@@ -69,6 +69,7 @@ pub fn run() {
             windows::minimize_holding_window,
             windows::maximize_holding_window,
             windows::close_holding_window,
+            windows::holding_widget_sync,
             windows::show_stock_alert,
             api::fetch_data,
         ])

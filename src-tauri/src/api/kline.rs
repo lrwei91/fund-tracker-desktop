@@ -1,5 +1,6 @@
 use super::http::{ApiError, Gateway, RequestSpec};
 use super::policy;
+use super::symbol;
 use serde_json::{json, Value};
 use std::{cell::Cell, process::Stdio, sync::Arc};
 use tokio::process::Command;
@@ -28,25 +29,6 @@ fn rounded(v: Option<f64>, d: i32) -> Value {
         })
         .unwrap_or(Value::Null)
 }
-fn symbol(code: &str) -> String {
-    format!(
-        "{}{}",
-        if code.starts_with(['5', '6', '9']) {
-            "sh"
-        } else {
-            "sz"
-        },
-        code
-    )
-}
-fn market(code: &str) -> i32 {
-    if code.starts_with(['6', '9']) {
-        1
-    } else {
-        0
-    }
-}
-
 async fn tdx(code: &str, days: usize) -> Result<(String, String, String, Vec<Bar>), ApiError> {
     let (cmd, mut args) = if let Ok(bin) = std::env::var("TDXRS_BIN") {
         (bin, vec!["bars".into()])
@@ -120,7 +102,7 @@ async fn tencent(
     code: &str,
     days: usize,
 ) -> Result<(String, String, String, Vec<Bar>), ApiError> {
-    let s = symbol(code);
+    let s = symbol::tencent_symbol(code).ok_or_else(|| ApiError::new("股票代码无效"))?;
     let url =
         format!("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={s},day,,,{days},qfq");
     let v = g
@@ -167,7 +149,8 @@ async fn eastmoney(
     code: &str,
     days: usize,
 ) -> Result<(String, String, String, Vec<Bar>), ApiError> {
-    let url=format!("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}.{}&klt=101&fqt=1&lmt={days}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61",market(code),code);
+    let secid = symbol::eastmoney_secid(code).ok_or_else(|| ApiError::new("股票代码无效"))?;
+    let url=format!("https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}&klt=101&fqt=1&lmt={days}&fields1=f1%2Cf2%2Cf3%2Cf4%2Cf5%2Cf6&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57%2Cf58%2Cf59%2Cf60%2Cf61");
     let v = g
         .json(
             RequestSpec::get(url)
@@ -244,7 +227,8 @@ fn ema(v: &[f64], n: usize) -> Vec<f64> {
     let k = 2.0 / (n as f64 + 1.0);
     let mut out = vec![v[0]];
     for x in &v[1..] {
-        out.push(x * k + out.last().unwrap() * (1.0 - k))
+        let previous = out.last().copied().unwrap_or(v[0]);
+        out.push(x * k + previous * (1.0 - k))
     }
     out
 }
@@ -276,7 +260,9 @@ fn rsi(v: &[f64], n: usize) -> Option<f64> {
 }
 fn analysis(bars: &[Bar]) -> Value {
     let closes: Vec<_> = bars.iter().map(|b| b.close).collect();
-    let latest = bars.last().unwrap();
+    let Some(latest) = bars.last() else {
+        return Value::Null;
+    };
     let (ma20, ma50, ma200) = (sma(&closes, 20), sma(&closes, 50), sma(&closes, 200));
     let rsi14 = rsi(&closes, 14);
     let e12 = ema(&closes, 12);
@@ -420,7 +406,9 @@ fn chips(bars: &[Bar]) -> Value {
     if valid.len() < 20 {
         return Value::Null;
     }
-    let latest = bars.last().unwrap();
+    let Some(latest) = bars.last() else {
+        return Value::Null;
+    };
     let low = valid.iter().map(|b| b.low).fold(f64::INFINITY, f64::min);
     let high = valid
         .iter()
@@ -468,8 +456,15 @@ fn chips(bars: &[Bar]) -> Value {
 }
 
 pub async fn handle(g: Arc<Gateway>, code: &str, days: usize) -> Value {
-    if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
+    if !symbol::valid_code(code) {
         return policy::failure("缺少股票代码", "", None);
+    }
+    if symbol::is_legacy_beijing(code) {
+        return policy::failure(
+            "北交所旧代码已迁移",
+            "无效的北交所旧代码：43/83/87 号段不再用于实时分析，请使用 920xxx 新代码",
+            None,
+        );
     }
     let mut reason = String::new();
     let mut attempts = Vec::new();
@@ -547,5 +542,11 @@ mod tests {
             .collect();
         assert!(analysis(&bars)["score"].as_f64().unwrap() > 0.0);
         assert!(!chips(&bars).is_null())
+    }
+
+    #[test]
+    fn malformed_or_empty_bars_do_not_panic() {
+        assert!(analysis(&[]).is_null());
+        assert!(chips(&[]).is_null());
     }
 }

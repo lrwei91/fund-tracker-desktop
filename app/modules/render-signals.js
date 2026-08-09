@@ -39,6 +39,13 @@
         return !!force || (utils.isAfterCloseForDailyUpdate && utils.isAfterCloseForDailyUpdate());
     }
 
+    function requestOptions(force) {
+        return {
+            force: !!force,
+            cacheMode: force ? 'bypass_fresh' : 'normal',
+        };
+    }
+
     // ============================================================
     // 机会雷达
     // ============================================================
@@ -63,7 +70,7 @@
         }
 
         try {
-            var res = await window.AppDataClient.fetch('/opportunity-radar', { limit: 8 });
+            var res = await window.AppDataClient.fetch('/opportunity-radar', { limit: 8 }, requestOptions(force));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var json = await res.json();
             if (!json.success || !json.data || !Array.isArray(json.data.items)) throw new Error('数据异常');
@@ -123,6 +130,7 @@
         var pctCls = trendClass(item.pct);
         var scoreCls = scoreClass(item.score);
         var risk = item.risk || {};
+        var warnings = item.marketWarnings || {};
         var riskStatus = risk.status || 'watch';
         var components = item.components || {};
         var tags = [item.topic].concat(item.newsHits || []).filter(Boolean)
@@ -134,6 +142,18 @@
             var missingLabels = { topic: '题材', momentum: '动量', fund: '资金', technical: '技术', news: '新闻' };
             coverageText += ' · 缺 ' + utils.escapeHtml(item.missingSources.map(function (key) { return missingLabels[key] || key; }).join('/'));
         }
+        var warningItems = [];
+        if (warnings.monitored) {
+            warningItems.push('重点监控' + (warnings.monitorEnd ? '至 ' + warnings.monitorEnd : ''));
+        }
+        if (warnings.anomaly) {
+            warningItems.push('严重异动' + (warnings.anomalyRule ? '：' + warnings.anomalyRule : ''));
+        }
+        var warningHtml = warningItems.length
+            ? '<div class="opportunity-radar-warnings">' + warningItems.map(function (warning) {
+                return '<span>' + utils.escapeHtml(warning) + '</span>';
+            }).join('') + '</div>'
+            : '';
         return '<div class="opportunity-radar-item" data-radar-code="' + utils.escapeHtml(item.code || '') + '">' +
             '<div class="opportunity-radar-head">' +
                 '<div class="opportunity-radar-stock">' +
@@ -147,6 +167,7 @@
                 '<div class="opportunity-radar-pct ' + pctCls + '">' + utils.escapeHtml(pct) + '</div>' +
                 '<div class="opportunity-radar-risk ' + utils.escapeHtml(riskStatus) + '">' + utils.escapeHtml(risk.label || '--') + '</div>' +
             '</div>' +
+            warningHtml +
             '<div class="opportunity-radar-tags">' + (tags || '<span>题材待确认</span>') + '</div>' +
             '<div class="opportunity-radar-components">' +
                 renderRadarMetric('题材', components.topic) +
@@ -197,7 +218,7 @@
             return;
         }
         try {
-            var res = await window.AppDataClient.fetch('/hot-rank', { source: source, limit: 30 });
+            var res = await window.AppDataClient.fetch('/hot-rank', { source: source, limit: 30 }, requestOptions(force));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data || !Array.isArray(result.data.items)) throw new Error('数据异常');
@@ -400,7 +421,7 @@
             renderSummary(sumCached.data);
         } else {
             try {
-                var sumRes = await window.AppDataClient.fetch('/limit-up', { type: 'summary' });
+                var sumRes = await window.AppDataClient.fetch('/limit-up', { type: 'summary' }, requestOptions(force));
                 var sumJson = await sumRes.json();
                 if (sumJson.success) {
                     cache.writeDailyDataCache(sumKey, todayKey, sumJson.data);
@@ -427,7 +448,7 @@
         } else {
             list.innerHTML = '<div class="limit-up-empty">加载中...</div>';
             try {
-                var r = await window.AppDataClient.fetch('/limit-up', { type: activeType, limit: 100 });
+                var r = await window.AppDataClient.fetch('/limit-up', { type: activeType, limit: 100 }, requestOptions(force));
                 var j = await r.json();
                 if (j.success) {
                     cache.writeDailyDataCache(typeCacheKey, todayKey, j.data);

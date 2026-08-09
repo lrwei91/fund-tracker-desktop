@@ -1,10 +1,27 @@
-use super::{endpoints::Query, handlers, http::Gateway, policy};
+use super::{
+    endpoints::Query,
+    handlers,
+    http::{CacheMode, Gateway},
+    policy,
+};
 use serde_json::Value;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub async fn dispatch(gateway: Arc<Gateway>, path: &str, query: Query) -> Value {
+    dispatch_with_options(gateway, path, query, CacheMode::Normal, None).await
+}
+
+pub async fn dispatch_with_options(
+    gateway: Arc<Gateway>,
+    path: &str,
+    mut query: Query,
+    cache_mode: CacheMode,
+    cycle_id: Option<u64>,
+) -> Value {
     let route = path.trim_start_matches('/');
-    let scoped = gateway.scoped(route);
+    Gateway::normalize_query(&mut query);
+    let scoped = gateway.scoped(route).with_context(cache_mode, cycle_id);
     let endpoint_policy = policy::endpoint_policy(route);
     let cache_key = Gateway::endpoint_key(route, &query);
     let result = handlers::dispatch_raw(scoped.clone(), route, query).await;
@@ -75,6 +92,15 @@ mod tests {
             json!("stock-risk?code=600000&limit=8"),
             cache_key("stock-risk", &first)
         );
+    }
+
+    #[test]
+    fn cache_key_normalizes_code_order_and_duplicates() {
+        let query = HashMap::from([("codes".to_string(), "600002,600001,600002".to_string())]);
+        assert_eq!(cache_key("stock", &query), "stock?codes=600001,600002");
+        let mut normalized = query.clone();
+        Gateway::normalize_query(&mut normalized);
+        assert_eq!(normalized["codes"], "600001,600002");
     }
 
     #[test]

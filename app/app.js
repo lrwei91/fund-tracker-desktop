@@ -142,15 +142,11 @@
 
         // Load tab-specific data when switching panels.
         if (tab === 'signals') {
-            if (window.AppSignals) {
-                window.AppSignals.loadOpportunityRadarData();
-                window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource());
-                if (!isBootstrapping) {
-                    window.AppSignals.loadLimitUpData();
-                }
-            }
+            if (!isBootstrapping && window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
         }
-        if (tab === 'news' && window.AppNews) window.AppNews.loadNewsData();
+        if (tab === 'news' && !isBootstrapping && window.AppRefreshCoordinator) {
+            window.AppRefreshCoordinator.refreshTab(tab);
+        }
     }
 
     // ============================================================
@@ -203,30 +199,9 @@
     // ============================================================
 
     function initSectorTabs() {
-        var savedTarget = window.AppStorage.getItem(KEYS.SECTOR_TAB_KEY);
-        if (savedTarget) activateSectorTab(savedTarget);
-
-        var tabs = document.querySelectorAll('.sector-tab');
-        tabs.forEach(function (tab) {
-            tab.addEventListener('click', function () {
-                var target = tab.getAttribute('data-tab');
-                activateSectorTab(target);
-                try { window.AppStorage.setItem(KEYS.SECTOR_TAB_KEY, target); } catch (e) {}
-            });
-        });
-    }
-
-    function activateSectorTab(target) {
-        var tab = document.querySelector('.sector-tab[data-tab="' + target + '"]');
-        if (!tab) return;
-        var parent = tab.parentElement;
-        parent.querySelectorAll('.sector-tab').forEach(function (t) { t.classList.remove('active'); });
-        tab.classList.add('active');
-
-        var container = tab.closest('.card-body');
-        container.querySelectorAll('.sector-panel').forEach(function (p) { p.classList.remove('active'); });
-        var panel = container.querySelector('#sector-panel-' + target);
-        if (panel) panel.classList.add('active');
+        if (window.AppMarket && typeof window.AppMarket.initSectorFilters === 'function') {
+            window.AppMarket.initSectorFilters();
+        }
     }
 
     // ============================================================
@@ -298,6 +273,9 @@
             try {
                 var result = await window.shell.openHoldingWindow();
                 if (!result || !result.ok) throw new Error(result && result.error ? result.error : 'open failed');
+                if (window.AppRefreshCoordinator && typeof window.AppRefreshCoordinator.syncCurrentHoldingWidget === 'function') {
+                    await window.AppRefreshCoordinator.syncCurrentHoldingWidget();
+                }
             } catch (e) {
                 btn.textContent = '失败';
                 setTimeout(function () { btn.textContent = oldText; }, 1200);
@@ -437,94 +415,23 @@
     }
 
     function startAllAutoRefresh() {
-        startMainAutoRefresh();
-        startSignalAutoRefresh();
-        startNewsAutoRefresh();
-        startDailyRefresh();
-    }
-
-    function startRecurring(stateKey, delayMs, shouldRun, task) {
-        if (state[stateKey]) clearTimeout(state[stateKey]);
-        var run = function () {
-            var work = shouldRun() ? Promise.resolve(task()) : Promise.resolve();
-            work.catch(function (error) {
-                console.warn('[fund-tracker] refresh task failed', error && error.message ? error.message : error);
-            }).finally(function () {
-                state[stateKey] = setTimeout(run, delayMs);
-            });
-        };
-        state[stateKey] = setTimeout(run, delayMs);
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.start();
     }
 
     function stopAllAutoRefresh() {
-        stopMainAutoRefresh();
-        stopSignalAutoRefresh();
-        stopNewsAutoRefresh();
-        stopDailyRefresh();
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.stop();
     }
 
     function startMainAutoRefresh() {
-        stopMainAutoRefresh();
-        startRecurring('refreshIntervalMain', state.refreshSecondsMain * 1000, utils.isIntradayRefreshWindow, function () {
-            return Promise.all([
-                window.AppMarket ? window.AppMarket.loadIndexData() : null,
-                window.AppWatchlist ? window.AppWatchlist.loadWatchlistData() : null,
-                window.AppWatchlist ? window.AppWatchlist.loadCustomIndexData() : null,
-            ]);
-        });
-    }
-
-    function stopMainAutoRefresh() {
-        if (state.refreshIntervalMain) {
-            clearInterval(state.refreshIntervalMain);
-            state.refreshIntervalMain = null;
-        }
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.reschedule();
     }
 
     function startSignalAutoRefresh() {
-        stopSignalAutoRefresh();
-        startRecurring('refreshIntervalSignal', state.refreshSecondsSignal * 1000, utils.isIntradayRefreshWindow, function () {
-            return Promise.all([
-                state.currentTab === 'signals' && window.AppSignals ? window.AppSignals.loadOpportunityRadarData() : null,
-                window.AppMarket ? window.AppMarket.loadCapitalData() : null,
-                window.AppMarket ? window.AppMarket.loadSectorData() : null,
-            ]);
-        });
-    }
-
-    function stopSignalAutoRefresh() {
-        if (state.refreshIntervalSignal) {
-            clearInterval(state.refreshIntervalSignal);
-            state.refreshIntervalSignal = null;
-        }
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.reschedule();
     }
 
     function startNewsAutoRefresh() {
-        stopNewsAutoRefresh();
-        startRecurring('refreshIntervalNews', state.refreshSecondsNews * 1000, function () { return true; }, function () {
-            return state.currentTab === 'news' && window.AppNews ? window.AppNews.refreshNewsData() : null;
-        });
-    }
-
-    function stopNewsAutoRefresh() {
-        if (state.refreshIntervalNews) {
-            clearInterval(state.refreshIntervalNews);
-            state.refreshIntervalNews = null;
-        }
-    }
-
-    function startDailyRefresh() {
-        stopDailyRefresh();
-        startRecurring('refreshIntervalDaily', 30 * 60 * 1000, utils.isAfterCloseDailyWindow, function () {
-            return window.AppSignals ? window.AppSignals.loadLimitUpData(true) : null;
-        });
-    }
-
-    function stopDailyRefresh() {
-        if (state.refreshIntervalDaily) {
-            clearInterval(state.refreshIntervalDaily);
-            state.refreshIntervalDaily = null;
-        }
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.reschedule();
     }
 
     // ============================================================
@@ -542,12 +449,10 @@
                 state.watchQuoteFreshCodes = {};
                 window.AppWatchlist.renderWatchlist();
                 anyRendered = true;
-                window.AppWatchlist.refreshStaleWatchQuotes();
             }
             if (state.customIndexCodes.length > 0) {
                 state.customIndexFreshCodes = {};
                 anyRendered = true;
-                window.AppWatchlist.refreshStaleCustomIndex();
             }
             window.AppWatchlist.renderCustomIndex();
         }
@@ -559,23 +464,11 @@
 
     // 手动刷新:无视交易时段,重新拉一遍所有数据
     function manualRefreshAll(label, options) {
-        options = options || {};
-        if (window.AppMarket) window.AppMarket.loadIndexData(true);
-        if (window.AppWatchlist) {
-            window.AppWatchlist.loadWatchlistData();
-            window.AppWatchlist.loadCustomIndexData();
-        }
-        if (window.AppMarket) {
-            window.AppMarket.loadCapitalData(true);
-            window.AppMarket.loadSectorData(true);
-        }
-        if (window.AppSignals) {
-            if (!options.skipLimitUp) window.AppSignals.loadLimitUpData(true);
-            if (!options.skipOpportunityRadar && state.currentTab === 'signals') window.AppSignals.loadOpportunityRadarData(true);
-            window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), true);
-        }
-        if (state.currentTab === 'news' && window.AppNews) window.AppNews.refreshNewsData();
-        utils.setLastUpdated(label || '手动刷新');
+        options = Object.assign({}, options || {}, { force: true });
+        if (utils && typeof utils.setLastUpdated === 'function') utils.setLastUpdated(label || '手动刷新');
+        return window.AppRefreshCoordinator
+            ? window.AppRefreshCoordinator.refreshAll(options)
+            : Promise.resolve();
     }
 
     // ============================================================
@@ -604,10 +497,7 @@
         if (window.AppWatchlist) window.AppWatchlist.renderCustomIndex();
         // 页面初始化:先渲染本地缓存,再复用手动刷新入口请求一次最新数据。
         renderRealtimeFromCache();
-        manualRefreshAll('启动刷新', {
-            skipLimitUp: true,
-            skipOpportunityRadar: true,
-        });
+        manualRefreshAll('启动刷新');
         state.hasInitialDataLoaded = true;
         isBootstrapping = false;
     }

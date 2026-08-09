@@ -1,6 +1,6 @@
 use super::{
     http::{ApiError, Gateway, RequestSpec},
-    policy,
+    policy, symbol,
 };
 use chrono::Utc;
 use chrono_tz::Asia::Shanghai;
@@ -21,6 +21,9 @@ struct Candidate {
     dragon_reason: String,
     limit_down: bool,
     source_types: Vec<String>,
+    monitored: bool,
+    monitor_end: String,
+    anomaly_rule: String,
 }
 use serde_json::{json, Map, Value};
 use sha1::{Digest, Sha1};
@@ -83,33 +86,46 @@ fn today() -> String {
         .to_string()
 }
 
-fn tencent_symbol(code: &str) -> String {
-    format!(
-        "{}{}",
-        if code.starts_with(['5', '6', '9']) {
-            "sh"
-        } else {
-            "sz"
-        },
-        code
-    )
+fn today_iso() -> String {
+    Utc::now()
+        .with_timezone(&Shanghai)
+        .format("%Y-%m-%d")
+        .to_string()
 }
+
 fn valid_code(code: &str) -> bool {
-    code.len() == 6 && code.bytes().all(|b| b.is_ascii_digit())
+    symbol::valid_code(code)
 }
 
 pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
-    let codes: Vec<&str> = q(&query, "codes")
+    let requested: Vec<String> = q(&query, "codes")
         .split(',')
         .map(str::trim)
         .filter(|c| valid_code(c))
+        .map(str::to_owned)
+        .collect();
+    if requested.is_empty() {
+        return fail("缺少股票代码", "");
+    }
+    let rejected: Vec<_> = requested
+        .iter()
+        .filter(|code| symbol::is_legacy_beijing(code))
+        .cloned()
+        .collect();
+    let codes: Vec<_> = requested
+        .iter()
+        .filter(|code| !symbol::is_legacy_beijing(code))
+        .cloned()
         .collect();
     if codes.is_empty() {
-        return fail("缺少股票代码", "");
+        return fail(
+            "北交所旧代码已迁移",
+            "无效的北交所旧代码：43/83/87 号段可能返回迁移日前的僵尸行情，请改用 920xxx 新代码",
+        );
     }
     let symbols = codes
         .iter()
-        .map(|c| tencent_symbol(c))
+        .filter_map(|code| symbol::tencent_symbol(code))
         .collect::<Vec<_>>()
         .join(",");
     match g
@@ -119,21 +135,35 @@ pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
         Ok(text) => {
             let mut data = Map::new();
             let mut times = Vec::new();
+            let expected: HashSet<_> = codes.iter().map(String::as_str).collect();
             for line in text.split(';').map(str::trim).filter(|l| !l.is_empty()) {
                 let Some(eq) = line.find('=') else { continue };
-                let key = &line[2..eq];
-                let code = key.get(2..).unwrap_or("");
+                let Some(code) = line.get(2..eq).and_then(|value| value.get(2..)) else {
+                    continue;
+                };
                 let Some(first) = line.find('"') else {
                     continue;
                 };
                 let Some(last) = line.rfind('"') else {
                     continue;
                 };
-                let parts: Vec<&str> = line[first + 1..last].split('~').collect();
-                if !valid_code(code) || parts.len() < 33 {
+                if last <= first {
                     continue;
                 }
-                let price = parts[3].parse::<f64>().ok();
+                let Some(payload) = line.get(first + 1..last) else {
+                    continue;
+                };
+                let parts: Vec<&str> = payload.split('~').collect();
+                if !expected.contains(code) || parts.len() < 33 {
+                    continue;
+                }
+                let price = parts[3]
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|value| value.is_finite() && *value > 0.0);
+                if price.is_none() {
+                    continue;
+                }
                 let pct = parts[32].parse::<f64>().unwrap_or(0.0);
                 let change = parts[31].parse::<f64>().ok();
                 let mut open = parts
@@ -149,11 +179,11 @@ pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
                     }
                 }
                 let raw = parts.get(30).copied().unwrap_or("");
-                let display = if raw.len() == 14 {
-                    format!("{}:{}:{}", &raw[8..10], &raw[10..12], &raw[12..14])
-                } else {
-                    String::new()
-                };
+                let display = raw
+                    .get(8..14)
+                    .filter(|value| value.len() == 6)
+                    .map(|value| format!("{}:{}:{}", &value[0..2], &value[2..4], &value[4..6]))
+                    .unwrap_or_default();
                 if raw.len() == 14 {
                     times.push(raw.to_string())
                 }
@@ -164,13 +194,37 @@ pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
                 .with_timezone(&Shanghai)
                 .format("%H:%M:%S")
                 .to_string();
-            let latest = times
-                .last()
-                .filter(|s| s.len() == 14)
-                .map(|s| format!("{}:{}:{}", &s[8..10], &s[10..12], &s[12..14]));
+            let latest = times.last().and_then(|s| {
+                s.get(8..14)
+                    .filter(|value| value.len() == 6)
+                    .map(|value| format!("{}:{}:{}", &value[0..2], &value[2..4], &value[4..6]))
+            });
+            if data.is_empty() {
+                return fail("真实股票行情接口不可用", "行情数据为空或字段无效");
+            }
+            let mut received = data.keys().cloned().collect::<Vec<_>>();
+            received.sort();
+            let missing = codes
+                .iter()
+                .filter(|code| !data.contains_key(code.as_str()))
+                .cloned()
+                .collect::<Vec<_>>();
+            let degraded = !missing.is_empty() || !rejected.is_empty();
             ok_extra(
                 Value::Object(data),
-                json!({"time":latest.clone().unwrap_or(request_time),"timeSource":if latest.is_some(){"quote"}else{"request"}}),
+                json!({
+                    "time":latest.clone().unwrap_or(request_time),
+                    "timeSource":if latest.is_some(){"quote"}else{"request"},
+                    "meta":{
+                        "degraded":degraded,
+                        "stale":false,
+                        "expectedCodes":requested,
+                        "receivedCodes":received,
+                        "missingCodes":missing,
+                        "rejectedCodes":rejected.iter().map(|code|json!({"code":code,"reason":"北交所旧代码已迁移，请使用 920xxx 新代码"})).collect::<Vec<_>>(),
+                        "sources":{"quotes":{"actual":"tencent","actualLabel":"腾讯行情"}}
+                    }
+                }),
             )
         }
         Err(e) => fail_api("真实股票行情接口不可用", &e),
@@ -258,9 +312,17 @@ pub(crate) async fn hot_rank(g: Arc<Gateway>, query: Query) -> Value {
     let secids = data
         .iter()
         .filter_map(|x| x.get("sc").and_then(Value::as_str))
-        .map(|sc| format!("{}.{}", if sc.starts_with("SZ") { 0 } else { 1 }, &sc[2..]))
+        .filter_map(|sc| sc.get(2..))
+        .filter(|code| !symbol::is_legacy_beijing(code))
+        .filter_map(symbol::eastmoney_secid)
         .collect::<Vec<_>>()
         .join(",");
+    if secids.is_empty() {
+        return ok_extra(
+            json!({"source":"em","items":[]}),
+            json!({"meta":{"degraded":true,"stale":false,"emptyReason":"热榜未返回可用证券代码"}}),
+        );
+    }
     let url=format!("https://push2.eastmoney.com/api/qt/ulist.np/get?ut=f057cbcbce2a86e2866ab8877db1d059&fltt=2&invt=2&fields=f14%2Cf3%2Cf12%2Cf2&secids={}",urlencoding::encode(&secids));
     let lookup = match g.json(RequestSpec::get(url).em()).await {
         Ok(v) => v,
@@ -288,7 +350,11 @@ fn zt_time(v: &Value) -> String {
     } else {
         v.as_str().unwrap_or("").into()
     };
-    let s = format!("{:0>6}", raw);
+    let digits: String = raw.chars().filter(char::is_ascii_digit).collect();
+    if digits.is_empty() {
+        return String::new();
+    }
+    let s = format!("{:0>6}", digits);
     format!("{}:{}:{}", &s[0..2], &s[2..4], &s[4..6])
 }
 async fn pool(
@@ -314,7 +380,7 @@ async fn pool(
 fn map_pool(kind: &str, p: &Value) -> Value {
     let z = field(p, "zttj");
     let common = json!({"code":field(p,"c"),"name":field(p,"n"),"market":field(p,"m"),"price":number(field(p,"p")).unwrap_or(0.0)/1000.0,"pct":round(number(field(p,"zdp")).unwrap_or(0.0),2),"turnover":round(number(field(p,"hs")).unwrap_or(0.0),2),"industry":field(p,"hybk"),"ztStat":if !field(z,"days").is_null()&&!field(z,"ct").is_null(){format!("{}天{}板",field(z,"days"),field(z,"ct"))}else{String::new()}});
-    let mut o = common.as_object().unwrap().clone();
+    let mut o = common.as_object().cloned().unwrap_or_default();
     let extra = match kind {
         "zt" => {
             json!({"amount":field(p,"amount"),"floatCap":field(p,"ltsz"),"limitDays":field(p,"lbc"),"firstSeal":zt_time(field(p,"fbt")),"lastSeal":zt_time(field(p,"lbt")),"sealFund":field(p,"fund"),"breakTimes":field(p,"zbc")})
@@ -329,7 +395,9 @@ fn map_pool(kind: &str, p: &Value) -> Value {
             json!({"amplitude":round(number(field(p,"zf")).unwrap_or(0.0),2),"speed":round(number(field(p,"zs")).unwrap_or(0.0),2),"yFirstSeal":zt_time(field(p,"yfbt")),"yLimitDays":field(p,"ylbc")})
         }
     };
-    o.extend(extra.as_object().unwrap().clone());
+    if let Some(extra) = extra.as_object() {
+        o.extend(extra.clone());
+    }
     Value::Object(o)
 }
 pub(crate) async fn limit_up(g: Arc<Gateway>, query: Query) -> Value {
@@ -937,7 +1005,8 @@ fn sum_flow(rows: &[Value], key: &str, n: usize) -> f64 {
 async fn flow_names(g: &Arc<Gateway>, codes: &[String]) -> HashMap<String, String> {
     let symbols = codes
         .iter()
-        .map(|c| tencent_symbol(c))
+        .filter(|code| !symbol::is_legacy_beijing(code))
+        .filter_map(|code| symbol::tencent_symbol(code))
         .collect::<Vec<_>>()
         .join(",");
     let Ok(text) = g
@@ -975,11 +1044,13 @@ pub(crate) async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
     let names = flow_names(&g, &codes).await;
     let mut items = Vec::new();
     for code in &codes {
-        let secid = format!(
-            "{}.{}",
-            if code.starts_with(['6', '9']) { 1 } else { 0 },
-            code
-        );
+        if symbol::is_legacy_beijing(code) {
+            items.push(json!({"available":false,"code":code,"name":names.get(code).cloned().unwrap_or_default(),"source":null,"sourceLabel":"","fallbackReason":"北交所旧代码已迁移，请使用 920xxx 新代码","recent":[],"summary":{"main_5d":null,"main_20d":null,"main_60d":null,"today":null},"latestDate":null}));
+            continue;
+        }
+        let Some(secid) = symbol::eastmoney_secid(code) else {
+            continue;
+        };
         let url=format!("https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?secid={secid}&klt=101&lmt={days}&fields1=f1%2Cf2%2Cf3%2Cf7&fields2=f51%2Cf52%2Cf53%2Cf54%2Cf55%2Cf56%2Cf57");
         let mut source = "eastmoney";
         let mut label = "东方财富";
@@ -1009,13 +1080,7 @@ pub(crate) async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
         if rows.is_empty() {
             source = "sina";
             label = "新浪财经";
-            let symbol = if code.starts_with(['6', '9']) {
-                format!("sh{code}")
-            } else if code.starts_with(['8', '4']) {
-                format!("bj{code}")
-            } else {
-                format!("sz{code}")
-            };
+            let symbol = symbol::tencent_symbol(code).unwrap_or_default();
             let url=format!("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_qsfx_zjlrqs?page=1&num={days}&sort=opendate&asc=0&daima={symbol}");
             if let Ok(text) = g
                 .text(
@@ -1059,7 +1124,13 @@ pub(crate) async fn fund_flow(g: Arc<Gateway>, query: Query) -> Value {
 }
 
 pub(crate) async fn market_data(g: Arc<Gateway>, query: Query) -> Value {
-    super::market::handle(g, q(&query, "type")).await
+    super::market::handle(
+        g,
+        q(&query, "type"),
+        q(&query, "boardType"),
+        q(&query, "period"),
+    )
+    .await
 }
 pub(crate) async fn stock_kline(g: Arc<Gateway>, query: Query) -> Value {
     super::kline::handle(
@@ -1316,6 +1387,12 @@ fn score_candidate(c: &Candidate, fund: &Value, kline: &Value, news: &Value) -> 
     if today.unwrap_or(0.0) <= -100_000_000.0 {
         risk_items.push((6, "主力流出"))
     }
+    if c.monitored {
+        risk_items.push((18, "重点监控"))
+    }
+    if !c.anomaly_rule.is_empty() {
+        risk_items.push((12, "严重异动"))
+    }
     let risk_words = risks.as_array().cloned().unwrap_or_default();
     if !risk_words.is_empty() {
         risk_items.push(((risk_words.len() * 4).min(14) as i32, "新闻风险"))
@@ -1378,12 +1455,187 @@ fn score_candidate(c: &Candidate, fund: &Value, kline: &Value, news: &Value) -> 
             1,
         ))
     };
-    json!({"code":c.code,"name":c.name,"price":c.price,"pct":c.pct.map(|x|round(x,2)),"score":score.map(|x|round(x,0)),"coverage":(available.len()as f64/5.0*100.0).round(),"missingSources":weights.iter().filter(|(k,_)|number(&components[*k]).is_none()).map(|x|x.0).collect::<Vec<_>>(),"topic":if topic_tags.is_empty(){"--".into()}else{topic_tags.join(" / ")},"components":components,"risk":{"status":status,"label":if status=="block"{"回避"}else if status=="watch"{"观察"}else{"可跟踪"},"points":risk_points,"reasons":risk_items.iter().take(4).map(|x|x.1).collect::<Vec<_>>()},"signals":signals,"upDayRate60":up_rate,"newsHits":positive,"newsRisks":risks,"latestDate":kline.get("latestDate").cloned().unwrap_or(json!(""))})
+    json!({"code":c.code,"name":c.name,"price":c.price,"pct":c.pct.map(|x|round(x,2)),"score":score.map(|x|round(x,0)),"coverage":(available.len()as f64/5.0*100.0).round(),"missingSources":weights.iter().filter(|(k,_)|number(&components[*k]).is_none()).map(|x|x.0).collect::<Vec<_>>(),"topic":if topic_tags.is_empty(){"--".into()}else{topic_tags.join(" / ")},"components":components,"risk":{"status":status,"label":if status=="block"{"回避"}else if status=="watch"{"观察"}else{"可跟踪"},"points":risk_points,"reasons":risk_items.iter().take(4).map(|x|x.1).collect::<Vec<_>>()},"marketWarnings":{"monitored":c.monitored,"monitorEnd":c.monitor_end,"anomaly":!c.anomaly_rule.is_empty(),"anomalyRule":c.anomaly_rule},"signals":signals,"upDayRate60":up_rate,"newsHits":positive,"newsRisks":risks,"latestDate":kline.get("latestDate").cloned().unwrap_or(json!(""))})
 }
+
+fn monitor_market(raw: &str) -> String {
+    match raw.to_ascii_uppercase().as_str() {
+        "1" => "SH".into(),
+        "0" => "SZ".into(),
+        "B" => "BJ".into(),
+        value => format!("?{value}"),
+    }
+}
+
+fn parse_stock_monitor(value: &Value, date: &str) -> Result<Vec<Value>, ApiError> {
+    let rows = value
+        .as_array()
+        .ok_or_else(|| ApiError::parse("重点监控响应不是数组"))?;
+    Ok(rows
+        .iter()
+        .filter_map(|row| {
+            let code = row.get("STKCODE")?.as_str()?;
+            let start = row
+                .get("VALIDATESTARTDATE")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let end = row
+                .get("VALIDATEENDDATE")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if !valid_code(code) || start > date || end < date {
+                return None;
+            }
+            Some(json!({
+                "code":code,
+                "name":row.get("STKNAME").and_then(Value::as_str).unwrap_or(""),
+                "market":monitor_market(row.get("MARKET").and_then(Value::as_str).unwrap_or("")),
+                "start":start,
+                "end":end,
+                "link":row.get("LINK_URL").and_then(Value::as_str).unwrap_or("")
+            }))
+        })
+        .collect())
+}
+
+pub(crate) async fn stock_monitor(g: &Arc<Gateway>) -> Result<Vec<Value>, ApiError> {
+    let value = g
+        .json(
+            RequestSpec::get(
+                "https://mobappconfig.securities.eastmoney.com/emcfg/stock_monitor.json",
+            )
+            .em()
+            .independent_circuit()
+            .header("referer", "https://vipmoney.eastmoney.com/")
+            .cache(1800),
+        )
+        .await?;
+    parse_stock_monitor(&value, &today_iso())
+}
+
+fn anomaly_rule(code: i64) -> String {
+    match code {
+        1 => "主板10日内4次同向异常波动",
+        2 => "创业板10日内3次同向异常波动",
+        3 => "科创板10日内3次同向异常波动",
+        4 => "10日累计正偏离达到100%",
+        5 => "10日累计负偏离达到50%",
+        6 => "30日累计正偏离达到200%",
+        7 => "30日累计负偏离达到70%",
+        8 => "北交所10日内3次同向异常波动",
+        40 => "科创板10日累计正偏离达到150%",
+        50 => "科创板10日累计负偏离达到60%",
+        60 => "科创板30日累计正偏离达到300%",
+        70 => "科创板30日累计负偏离达到75%",
+        _ => return format!("未知异动规则 {code}"),
+    }
+    .into()
+}
+
+fn anomaly_market(code: &str, raw_market: i64, board: i64) -> &'static str {
+    if symbol::exchange(code) == Some(symbol::Exchange::Beijing) || board == 8 {
+        "BJ"
+    } else if raw_market == 1 {
+        "SH"
+    } else {
+        "SZ"
+    }
+}
+
+fn parse_price_anomaly(value: &Value) -> Result<Value, ApiError> {
+    if value.get("result").and_then(Value::as_i64) != Some(0) {
+        return Err(ApiError::new(format!(
+            "东财异动接口拒绝: result={} msg={}",
+            field(value, "result"),
+            string(value.get("msg"))
+        )));
+    }
+    let items = value
+        .get("data")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|row| {
+            let code = string(row.get("c"));
+            if !valid_code(&code) {
+                return None;
+            }
+            let board = number(field(row, "s")).unwrap_or(0.0) as i64;
+            let base_rule = number(field(row, "e")).unwrap_or(0.0) as i64;
+            let rule_code = if board == 6 && matches!(base_rule, 4..=7) {
+                base_rule * 10
+            } else {
+                base_rule
+            };
+            Some(json!({
+                "code":code,
+                "name":string(row.get("n")),
+                "market":anomaly_market(&code,number(field(row,"m")).unwrap_or(0.0)as i64,board),
+                "changePct":number(field(row,"a")),
+                "deviation":number(field(row,"x")),
+                "days":number(field(row,"d")),
+                "board":board,
+                "ruleCode":rule_code,
+                "rule":anomaly_rule(rule_code),
+                "isToday":number(field(row,"o")).unwrap_or(0.0)as i64 != 2
+            }))
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "date":value.get("date").cloned().unwrap_or(json!("")),
+        "pages":value.get("pages").cloned().unwrap_or(json!(0)),
+        "items":items
+    }))
+}
+
+pub(crate) async fn price_anomaly(g: &Arc<Gateway>) -> Result<Value, ApiError> {
+    let value = g
+        .json(
+            RequestSpec::get("https://dycalchis.eastmoney.com/price-anomaly/list?team=h5&product=EastMoney&client=WAP&version=9001&name=WAP&user=123&pageSize=200&pageNo=1")
+                .em()
+                .independent_circuit()
+                .header("referer", "https://vipmoney.eastmoney.com/")
+                .cache(300),
+        )
+        .await?;
+    parse_price_anomaly(&value)
+}
+
+fn apply_market_warnings(
+    candidates: &mut HashMap<String, Candidate>,
+    monitor: &[Value],
+    anomaly: &Value,
+) {
+    let monitors = monitor
+        .iter()
+        .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
+        .collect::<HashMap<_, _>>();
+    let anomalies = anomaly
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
+        .collect::<HashMap<_, _>>();
+    for candidate in candidates.values_mut() {
+        if let Some(item) = monitors.get(candidate.code.as_str()) {
+            candidate.monitored = true;
+            candidate.monitor_end = string(item.get("end"));
+            candidate.signals.push(json!({"label":"重点监控","points":-18.0,"detail":format!("监控至 {}",candidate.monitor_end)}));
+        }
+        if let Some(item) = anomalies.get(candidate.code.as_str()) {
+            candidate.anomaly_rule = string(item.get("rule"));
+            candidate
+                .signals
+                .push(json!({"label":"严重异动","points":-12.0,"detail":candidate.anomaly_rule}));
+        }
+    }
+}
+
 pub(crate) async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
     use futures::{stream, StreamExt};
     let limit = int(&query, "limit", 8, 1, 20) as usize;
-    let (ths, em, zt, yzt, zb, dt, dragon, sector) = tokio::join!(
+    let (ths, em, zt, yzt, zb, dt, dragon, sector, monitor, anomaly) = tokio::join!(
         hot_rank(
             g.clone(),
             HashMap::from([
@@ -1415,7 +1667,9 @@ pub(crate) async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
             HashMap::from([("type".into(), "dt".into()), ("limit".into(), "20".into())])
         ),
         dragon_tiger(g.clone(), HashMap::new()),
-        market_data(g.clone(), HashMap::from([("type".into(), "sector".into())]))
+        market_data(g.clone(), HashMap::from([("type".into(), "sector".into())])),
+        stock_monitor(&g),
+        price_anomaly(&g)
     );
     let mut map = HashMap::new();
     if ths["success"] == true {
@@ -1467,6 +1721,9 @@ pub(crate) async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
             }
         }
     }
+    let monitor_data = monitor.as_ref().map(Vec::as_slice).unwrap_or(&[]);
+    let anomaly_data = anomaly.as_ref().unwrap_or(&Value::Null);
+    apply_market_warnings(&mut map, monitor_data, anomaly_data);
     let mut pool: Vec<_> = map
         .into_values()
         .filter(|c| c.source_score > -25.0 && !c.limit_down)
@@ -1553,15 +1810,13 @@ pub(crate) async fn opportunity_radar(g: Arc<Gateway>, query: Query) -> Value {
             .total_cmp(&number(field(a, "score")).unwrap_or(-1.0))
     });
     let generated = now_iso();
-    let status = json!({"hotRank":ths["success"]==true||em["success"]==true,"limitUp":zt["success"]==true||yzt["success"]==true||zb["success"]==true,"dragonTiger":dragon["success"]==true,"sector":sector["success"]==true});
+    let status = json!({"hotRank":ths["success"]==true||em["success"]==true,"limitUp":zt["success"]==true||yzt["success"]==true||zb["success"]==true,"dragonTiger":dragon["success"]==true,"sector":sector["success"]==true,"stockMonitor":monitor.is_ok(),"priceAnomaly":anomaly.is_ok()});
     let degraded = status
         .as_object()
-        .unwrap()
-        .values()
-        .any(|x| x != &json!(true));
+        .is_some_and(|object| object.values().any(|x| x != &json!(true)));
     ok_extra(
         json!({"generatedAt":generated,"sourceStatus":status,"items":items}),
-        json!({"meta":{"generatedAt":generated,"sources":{"hotRankThs":{"status":if ths["success"]==true{"live"}else{"failed"}},"hotRankEm":{"status":if em["success"]==true{"live"}else{"failed"}},"limitUpZt":{"status":if zt["success"]==true{"live"}else{"failed"}},"limitUpYzt":{"status":if yzt["success"]==true{"live"}else{"failed"}},"limitUpZb":{"status":if zb["success"]==true{"live"}else{"failed"}},"limitUpDt":{"status":if dt["success"]==true{"live"}else{"failed"}},"dragonTiger":{"status":if dragon["success"]==true{"live"}else{"failed"}},"sector":{"status":if sector["success"]==true{"live"}else{"failed"}}},"stale":false,"degraded":degraded}}),
+        json!({"meta":{"generatedAt":generated,"sources":{"hotRankThs":{"status":if ths["success"]==true{"live"}else{"failed"}},"hotRankEm":{"status":if em["success"]==true{"live"}else{"failed"}},"limitUpZt":{"status":if zt["success"]==true{"live"}else{"failed"}},"limitUpYzt":{"status":if yzt["success"]==true{"live"}else{"failed"}},"limitUpZb":{"status":if zb["success"]==true{"live"}else{"failed"}},"limitUpDt":{"status":if dt["success"]==true{"live"}else{"failed"}},"dragonTiger":{"status":if dragon["success"]==true{"live"}else{"failed"}},"sector":{"status":if sector["success"]==true{"live"}else{"failed"}},"stockMonitor":{"status":if monitor.is_ok(){"live"}else{"failed"}},"priceAnomaly":{"status":if anomaly.is_ok(){"live"}else{"failed"}}},"stale":false,"degraded":degraded}}),
     )
 }
 
@@ -1584,5 +1839,68 @@ mod contract_tests {
         let query = HashMap::from([("limit".to_string(), "9999".to_string())]);
         assert_eq!(int(&query, "limit", 20, 1, 100), 100);
         assert_eq!(int(&HashMap::new(), "limit", 20, 1, 100), 20);
+    }
+
+    #[test]
+    fn malformed_limit_up_time_is_safe_and_short_time_is_padded() {
+        assert_eq!(zt_time(&json!(93000)), "09:30:00");
+        assert_eq!(zt_time(&json!("bad")), "");
+    }
+
+    #[tokio::test]
+    async fn legacy_beijing_quote_is_rejected_without_requesting_zombie_data() {
+        let result = stock(
+            Gateway::new(),
+            HashMap::from([("codes".to_string(), "832982".to_string())]),
+        )
+        .await;
+        assert_eq!(result["success"], false);
+        assert_eq!(result["errorCode"], "invalid_input");
+        assert_eq!(result["retryable"], false);
+    }
+
+    #[test]
+    fn monitor_and_anomaly_parsers_preserve_beijing_and_reject_api_errors() {
+        let monitor = parse_stock_monitor(
+            &json!([{
+                "MARKET":"B","STKCODE":"920575","STKNAME":"示例",
+                "VALIDATESTARTDATE":"2026-08-10","VALIDATEENDDATE":"2026-08-14"
+            }]),
+            "2026-08-10",
+        )
+        .unwrap();
+        assert_eq!(monitor[0]["market"], "BJ");
+
+        let anomaly = parse_price_anomaly(&json!({
+            "result":0,"date":20260810,"pages":1,"data":[
+                {"m":0,"c":"920575","n":"示例","s":8,"e":8,"x":40.0,"d":10,"a":12.0,"o":1},
+                {"m":1,"c":"688001","n":"科创示例","s":6,"e":4,"x":151.0,"d":10,"a":15.0,"o":2}
+            ]
+        }))
+        .unwrap();
+        assert_eq!(anomaly["items"][0]["market"], "BJ");
+        assert_eq!(anomaly["items"][0]["ruleCode"], 8);
+        assert_eq!(anomaly["items"][1]["ruleCode"], 40);
+        assert!(parse_price_anomaly(&json!({"result":1001,"msg":"unknow team"})).is_err());
+    }
+
+    #[test]
+    fn market_warnings_are_attached_without_removing_candidates() {
+        let mut candidates = HashMap::from([(
+            "920575".to_string(),
+            Candidate {
+                code: "920575".into(),
+                name: "示例".into(),
+                ..Default::default()
+            },
+        )]);
+        let monitor = vec![json!({"code":"920575","end":"2026-08-14"})];
+        let anomaly = json!({"items":[{"code":"920575","rule":"北交所严重异动"}]});
+        apply_market_warnings(&mut candidates, &monitor, &anomaly);
+        let candidate = &candidates["920575"];
+        assert!(candidate.monitored);
+        assert_eq!(candidate.monitor_end, "2026-08-14");
+        assert_eq!(candidate.anomaly_rule, "北交所严重异动");
+        assert_eq!(candidate.signals.len(), 2);
     }
 }

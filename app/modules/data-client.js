@@ -17,8 +17,22 @@
     AppDataError.prototype = Object.create(Error.prototype);
     AppDataError.prototype.constructor = AppDataError;
 
+    function normalizeParams(params) {
+        var entries = Object.entries(params || {}).map(function (entry) {
+            var key = entry[0];
+            var value = String(entry[1] == null ? '' : entry[1]).trim();
+            if (key === 'codes') {
+                value = value.split(',').map(function (code) { return code.trim(); })
+                    .filter(Boolean).sort().filter(function (code, index, list) { return index === 0 || list[index - 1] !== code; })
+                    .join(',');
+            }
+            return [key, value];
+        });
+        return Object.fromEntries(entries);
+    }
+
     function stableKey(path, params) {
-        var query = new URLSearchParams(params || {});
+        var query = new URLSearchParams(normalizeParams(params));
         return path + '?' + Array.from(query.entries()).sort(function (a, b) {
             return a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]);
         }).map(function (entry) { return entry[0] + '=' + entry[1]; }).join('&');
@@ -39,8 +53,9 @@
 
     function fetchData(path, params, options) {
         var key = stableKey(path, params);
-        var force = options && options.force;
-        if (!force && inflight[key]) return inflight[key];
+        // force 只控制 Rust gateway 是否绕过 fresh cache；同一查询已有在途请求时
+        // 仍然复用它，避免手动刷新制造第二条上游请求。
+        if (inflight[key]) return inflight[key];
         var tauri = window.__TAURI__;
         if (!tauri || !tauri.core || typeof tauri.core.invoke !== 'function') {
             return Promise.reject(new AppDataError('桌面数据通道不可用', {
@@ -50,10 +65,15 @@
             }));
         }
         var work = Promise.resolve().then(function () {
-            return tauri.core.invoke('fetch_data', {
+            var payload = {
                 path: path,
-                query: Object.fromEntries(new URLSearchParams(params || {}).entries()),
-            });
+                query: normalizeParams(params),
+            };
+            if (options && options.cacheMode) payload.options = {
+                cacheMode: options.cacheMode,
+                cycleId: options.cycleId,
+            };
+            return tauri.core.invoke('fetch_data', payload);
         }).then(function (data) {
             if (!data || data.success === false) throw normalizeFailure(path, data);
             return data;

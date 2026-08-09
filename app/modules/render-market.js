@@ -10,6 +10,48 @@
     var utils = window.AppUtils;
     var cache = window.AppCache;
     var KEYS = state.KEYS;
+    var SECTOR_BOARD_TYPES = ['industry', 'concept', 'region'];
+    var SECTOR_PERIODS = ['today', '5d', '10d'];
+    var sectorFilter = restoreSectorFilter();
+
+    function restoreSectorFilter() {
+        var stored = cache.readJson(KEYS.SECTOR_TAB_KEY, null) || {};
+        return {
+            boardType: SECTOR_BOARD_TYPES.indexOf(stored.boardType) >= 0 ? stored.boardType : 'industry',
+            period: SECTOR_PERIODS.indexOf(stored.period) >= 0 ? stored.period : 'today',
+        };
+    }
+
+    function syncSectorFilterUI() {
+        document.querySelectorAll('[data-sector-filter]').forEach(function (group) {
+            var key = group.getAttribute('data-sector-filter');
+            group.querySelectorAll('.sector-tab').forEach(function (tab) {
+                tab.classList.toggle('active', tab.getAttribute('data-value') === sectorFilter[key]);
+            });
+        });
+    }
+
+    function setSectorFilter(key, value, refresh) {
+        var allowed = key === 'boardType' ? SECTOR_BOARD_TYPES : key === 'period' ? SECTOR_PERIODS : [];
+        if (allowed.indexOf(value) < 0 || sectorFilter[key] === value) return;
+        sectorFilter[key] = value;
+        cache.writeJson(KEYS.SECTOR_TAB_KEY, sectorFilter);
+        syncSectorFilterUI();
+        if (refresh) loadSectorData(true);
+    }
+
+    function initSectorFilters() {
+        syncSectorFilterUI();
+        document.querySelectorAll('[data-sector-filter]').forEach(function (group) {
+            var key = group.getAttribute('data-sector-filter');
+            group.querySelectorAll('.sector-tab').forEach(function (tab) {
+                tab.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    setSectorFilter(key, tab.getAttribute('data-value'), true);
+                });
+            });
+        });
+    }
 
     // ============================================================
     // 大盘指数 prev 快照 helpers (半小时对比箭头基准)
@@ -207,9 +249,16 @@
     // loadIndexData / loadCapitalData / loadSectorData
     // ============================================================
 
+    function requestOptions(force) {
+        return {
+            force: !!force,
+            cacheMode: force ? 'bypass_fresh' : 'normal',
+        };
+    }
+
     async function loadIndexData(force) {
         try {
-            var res = await window.AppDataClient.fetch('/market-data', { type: 'index' });
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'index' }, requestOptions(force));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
@@ -230,7 +279,7 @@
         var newData = null;
 
         try {
-            var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' });
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' }, requestOptions(force));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (result.success && result.data && result.data.mainFund && result.data.mainFund.value !== undefined) {
@@ -246,22 +295,34 @@
     }
 
     async function loadSectorData(force) {
-        var newData = null;
+        var cached = cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.sector, KEYS.SHORT_CACHE_TTL.sector);
+        var matches = function (value) {
+            return value && value.boardType === sectorFilter.boardType && value.period === sectorFilter.period;
+        };
+        var newData = matches(state.liveSectorData) ? state.liveSectorData : matches(cached) ? cached : null;
+        var statusEl = document.getElementById('sector-flow-status');
+        var statusText = '';
 
         try {
-            var res = await window.AppDataClient.fetch('/market-data', { type: 'sector' });
+            var res = await window.AppDataClient.fetch('/market-data', {
+                type: 'sector',
+                boardType: sectorFilter.boardType,
+                period: sectorFilter.period,
+            }, requestOptions(force));
             if (!res.ok) throw new Error('HTTP ' + res.status);
             var result = await res.json();
             if (result.success && result.data && result.data.inflow) {
                 newData = result.data;
                 cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.sector, result.data);
+                statusText = result.meta && result.meta.stale ? '缓存数据' : '实时数据';
             }
         } catch (e) {
-            newData = null;
+            statusText = newData ? '接口不可用 · 显示缓存' : '接口暂不可用';
         }
 
         state.liveSectorData = newData;
         renderSectorUI(state.liveSectorData || {});
+        if (statusEl && statusText) statusEl.textContent = statusText;
     }
 
     // ============================================================
@@ -297,6 +358,12 @@
 
         var inflowList = (sectors.inflow || []).slice(0, 5);
         var outflowList = (sectors.outflow || []).slice(0, 5);
+        var boardLabels = { industry: '行业', concept: '概念', region: '地域' };
+        var periodLabels = { today: '今日', '5d': '5日', '10d': '10日' };
+        var statusEl = document.getElementById('sector-flow-status');
+        if (statusEl && sectors.boardType && sectors.period && !statusEl.textContent) {
+            statusEl.textContent = boardLabels[sectors.boardType] + ' · ' + periodLabels[sectors.period];
+        }
         var maxAbs = 1;
         inflowList.forEach(function (s) { if (s.mainFundYuan > maxAbs) maxAbs = s.mainFundYuan; });
         outflowList.forEach(function (s) { if (Math.abs(s.mainFundYuan) > maxAbs) maxAbs = Math.abs(s.mainFundYuan); });
@@ -357,6 +424,8 @@
         // 资金 / 板块
         loadCapitalData: loadCapitalData,
         loadSectorData: loadSectorData,
+        initSectorFilters: initSectorFilters,
+        setSectorFilter: setSectorFilter,
         renderCapitalUI: renderCapitalUI,
         renderSectorUI: renderSectorUI,
     };

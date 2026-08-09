@@ -26,6 +26,8 @@ jobs:
         run: npm test
       - name: Watchlist split smoke test
         run: npm run smoke
+      - name: Refresh coordinator 50-code fixture smoke
+        run: npm run smoke:refresh
       - name: Dependency audit
         run: npm audit --audit-level=high
 

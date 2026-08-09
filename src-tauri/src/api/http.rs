@@ -22,6 +22,14 @@ const MAX_RAW_CACHE_ENTRIES: usize = 256;
 const MAX_RAW_CACHE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ENDPOINT_CACHE_ENTRIES: usize = 128;
 const MAX_ENDPOINT_CACHE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CacheMode {
+    #[default]
+    Normal,
+    BypassFresh,
+}
 
 #[derive(Clone)]
 struct RawCacheEntry {
@@ -84,6 +92,8 @@ pub struct RequestSpec {
     pub timeout: Duration,
     pub cache_ttl: Duration,
     pub eastmoney: bool,
+    pub shared_circuit: bool,
+    pub cache_mode: CacheMode,
 }
 impl RequestSpec {
     pub fn get(url: impl Into<String>) -> Self {
@@ -95,6 +105,8 @@ impl RequestSpec {
             timeout: Duration::from_secs(10),
             cache_ttl: Duration::from_secs(5),
             eastmoney: false,
+            shared_circuit: true,
+            cache_mode: CacheMode::Normal,
         }
     }
     pub fn header(mut self, key: &str, value: impl Into<String>) -> Self {
@@ -117,6 +129,10 @@ impl RequestSpec {
     pub fn em(mut self) -> Self {
         self.eastmoney = true;
         self.cache_ttl = Duration::from_secs(10);
+        self
+    }
+    pub fn independent_circuit(mut self) -> Self {
+        self.shared_circuit = false;
         self
     }
 }
@@ -142,6 +158,8 @@ pub struct Gateway {
     circuit: Arc<AsyncMutex<Circuit>>,
     diagnostics: Arc<DiagnosticStore>,
     route: String,
+    cache_mode: CacheMode,
+    cycle_id: Option<u64>,
 }
 
 impl Gateway {
@@ -160,6 +178,8 @@ impl Gateway {
             circuit: Arc::new(AsyncMutex::new(Circuit::default())),
             diagnostics: DiagnosticStore::new(DiagnosticStore::product_path()),
             route: "unknown".into(),
+            cache_mode: CacheMode::Normal,
+            cycle_id: None,
         })
     }
 
@@ -175,6 +195,29 @@ impl Gateway {
             circuit: self.circuit.clone(),
             diagnostics: self.diagnostics.clone(),
             route: route.trim_start_matches('/').to_string(),
+            cache_mode: self.cache_mode,
+            cycle_id: self.cycle_id,
+        })
+    }
+
+    pub fn with_context(
+        self: &Arc<Self>,
+        cache_mode: CacheMode,
+        cycle_id: Option<u64>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            client: self.client.clone(),
+            inflight: self.inflight.clone(),
+            cache: self.cache.clone(),
+            endpoint_cache: self.endpoint_cache.clone(),
+            eastmoney: self.eastmoney.clone(),
+            tencent: self.tencent.clone(),
+            default: self.default.clone(),
+            circuit: self.circuit.clone(),
+            diagnostics: self.diagnostics.clone(),
+            route: self.route.clone(),
+            cache_mode,
+            cycle_id,
         })
     }
 
@@ -191,10 +234,16 @@ impl Gateway {
         pairs.sort_by(|a, b| a.0.cmp(b.0).then_with(|| a.1.cmp(b.1)));
         let query = pairs
             .into_iter()
-            .map(|(key, value)| format!("{key}={value}"))
+            .map(|(key, value)| format!("{key}={}", normalize_query_value(key, value)))
             .collect::<Vec<_>>()
             .join("&");
         format!("{}?{query}", path.trim_start_matches('/'))
+    }
+
+    pub fn normalize_query(query: &mut HashMap<String, String>) {
+        for (key, value) in query.iter_mut() {
+            *value = normalize_query_value(key, value);
+        }
     }
 
     pub fn remember_endpoint(&self, key: String, value: Value, stale_for: Duration) {
@@ -239,6 +288,28 @@ impl Gateway {
         error_code: Option<&str>,
         duration_ms: u128,
     ) {
+        self.record_marker_with_queue(
+            provider,
+            outcome,
+            cache,
+            status,
+            error_code,
+            duration_ms,
+            None,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record_marker_with_queue(
+        &self,
+        provider: &str,
+        outcome: &str,
+        cache: &str,
+        status: Option<u16>,
+        error_code: Option<&str>,
+        duration_ms: u128,
+        queue_ms: Option<u128>,
+    ) {
         self.diagnostics.record(DiagnosticEvent {
             at: now_iso(),
             route: self.route.clone(),
@@ -248,6 +319,8 @@ impl Gateway {
             status,
             duration_ms,
             error_code: error_code.map(str::to_owned),
+            cycle_id: self.cycle_id,
+            queue_ms,
         });
     }
 
@@ -261,11 +334,17 @@ impl Gateway {
         let now = Instant::now();
         let cached = {
             let mut cache = self.cache.lock().expect("cache");
-            if let Some(entry) = cache.get(&key).cloned() {
-                if entry.expires_at > now {
-                    Some(entry.value)
+            if self.cache_mode != CacheMode::BypassFresh
+                && spec.cache_mode != CacheMode::BypassFresh
+            {
+                if let Some(entry) = cache.get(&key).cloned() {
+                    if entry.expires_at > now {
+                        Some(entry.value)
+                    } else {
+                        cache.remove(&key);
+                        None
+                    }
                 } else {
-                    cache.remove(&key);
                     None
                 }
             } else {
@@ -311,6 +390,7 @@ impl Gateway {
         } else {
             "default"
         };
+        let use_eastmoney_circuit = provider == "eastmoney" && spec.shared_circuit;
         let semaphore = match provider {
             "eastmoney" => self.eastmoney.clone(),
             "tencent" => self.tencent.clone(),
@@ -321,18 +401,20 @@ impl Gateway {
             .acquire_owned()
             .await
             .map_err(|e| ApiError::new(e.to_string()))?;
+        let queue_ms = Some(started.elapsed().as_millis());
         if provider == "eastmoney" {
             let mut circuit = self.circuit.lock().await;
-            if circuit.until.is_some_and(|until| until > Instant::now()) {
+            if use_eastmoney_circuit && circuit.until.is_some_and(|until| until > Instant::now()) {
                 let error = ApiError::new("eastmoney 数据源熔断中");
                 let (code, _) = error.error_code();
-                self.record_marker(
+                self.record_marker_with_queue(
                     provider,
                     "circuit_open",
                     "miss",
                     None,
                     Some(code),
                     started.elapsed().as_millis(),
+                    queue_ms,
                 );
                 return Err(error);
             }
@@ -377,14 +459,23 @@ impl Gateway {
             match request.send().await {
                 Ok(response) if response.status().is_success() => {
                     let status = response.status().as_u16();
-                    let body = Arc::new(
-                        response
-                            .bytes()
-                            .await
-                            .map_err(|e| ApiError::new(e.to_string()))?
-                            .to_vec(),
-                    );
-                    if provider == "eastmoney" {
+                    if response
+                        .content_length()
+                        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+                    {
+                        last = ApiError::new("响应体超过大小限制");
+                        break;
+                    }
+                    let body = response
+                        .bytes()
+                        .await
+                        .map_err(|e| ApiError::new(e.to_string()))?;
+                    if body.len() > MAX_RESPONSE_BYTES {
+                        last = ApiError::new("响应体超过大小限制");
+                        break;
+                    }
+                    let body = Arc::new(body.to_vec());
+                    if use_eastmoney_circuit {
                         let mut c = self.circuit.lock().await;
                         c.failures = 0;
                         c.until = None;
@@ -403,13 +494,14 @@ impl Gateway {
                     }
                     let duration_ms = started.elapsed().as_millis();
                     if duration_ms >= 2_000 {
-                        self.record_marker(
+                        self.record_marker_with_queue(
                             provider,
                             "slow_success",
                             "miss",
                             Some(status),
                             None,
                             duration_ms,
+                            queue_ms,
                         );
                     }
                     return Ok(body);
@@ -431,7 +523,7 @@ impl Gateway {
                 .await;
             }
         }
-        if provider == "eastmoney" {
+        if use_eastmoney_circuit {
             let mut c = self.circuit.lock().await;
             if last.status == Some(403) {
                 c.failures = 3;
@@ -448,13 +540,14 @@ impl Gateway {
             }
         }
         let (code, _) = last.error_code();
-        self.record_marker(
+        self.record_marker_with_queue(
             provider,
             "error",
             "miss",
             last.status,
             Some(code),
             started.elapsed().as_millis(),
+            queue_ms,
         );
         Err(last)
     }
@@ -469,6 +562,21 @@ impl Gateway {
     pub async fn gbk(self: &Arc<Self>, spec: RequestSpec) -> Result<String, ApiError> {
         Ok(GBK.decode(&self.bytes(spec).await?).0.into_owned())
     }
+}
+
+fn normalize_query_value(key: &str, value: &str) -> String {
+    if key != "codes" {
+        return value.trim().to_string();
+    }
+    let mut codes = value
+        .split(',')
+        .map(str::trim)
+        .filter(|code| !code.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    codes.sort();
+    codes.dedup();
+    codes.join(",")
 }
 
 fn prune_raw_cache(cache: &mut HashMap<String, RawCacheEntry>) {
@@ -566,6 +674,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn bypass_fresh_reuses_inflight_but_skips_short_cache() {
+        let (url, calls) = fixture_server_n(200, br#"{"value":1}"#.to_vec(), Duration::ZERO, 2);
+        let gateway = Gateway::new();
+        let spec = RequestSpec::get(&url).cache(30);
+        assert_eq!(gateway.json(spec.clone()).await.unwrap()["value"], 1);
+        let bypass = gateway.with_context(CacheMode::BypassFresh, Some(7));
+        assert_eq!(bypass.json(spec).await.unwrap()["value"], 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn rejects_oversized_response_body() {
+        let (url, _) = fixture_server(200, vec![b'x'; MAX_RESPONSE_BYTES + 1], Duration::ZERO);
+        let error = Gateway::new()
+            .bytes(RequestSpec::get(url))
+            .await
+            .unwrap_err();
+        assert_eq!(error.error_code().0, "upstream_error");
+        assert!(error.message.contains("大小限制"));
+    }
+
+    #[tokio::test]
     async fn decodes_gbk_fixture() {
         let encoded = GBK.encode("行情正常").0.into_owned();
         let (url, _) = fixture_server(200, encoded, Duration::ZERO);
@@ -598,6 +728,24 @@ mod tests {
         );
         let error = gateway.bytes(RequestSpec::get(url).em()).await.unwrap_err();
         assert!(error.message.contains("熔断"));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn independent_eastmoney_source_bypasses_shared_circuit() {
+        let (blocked_url, _) = fixture_server(403, vec![], Duration::ZERO);
+        let gateway = Gateway::new();
+        gateway
+            .bytes(RequestSpec::get(blocked_url).em())
+            .await
+            .unwrap_err();
+
+        let (healthy_url, calls) = fixture_server(200, b"ok".to_vec(), Duration::ZERO);
+        let body = gateway
+            .bytes(RequestSpec::get(healthy_url).em().independent_circuit())
+            .await
+            .unwrap();
+        assert_eq!(body.as_slice(), b"ok");
         assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 

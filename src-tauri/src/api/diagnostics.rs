@@ -24,6 +24,10 @@ pub struct DiagnosticEvent {
     pub duration_ms: u128,
     #[serde(rename = "errorCode", skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
+    #[serde(rename = "cycleId", skip_serializing_if = "Option::is_none")]
+    pub cycle_id: Option<u64>,
+    #[serde(rename = "queueMs", skip_serializing_if = "Option::is_none")]
+    pub queue_ms: Option<u128>,
 }
 
 #[derive(Clone)]
@@ -147,6 +151,8 @@ mod tests {
             status: Some(503),
             duration_ms: 12,
             error_code: Some("upstream_5xx".into()),
+            cycle_id: Some(1),
+            queue_ms: Some(4),
         });
         assert_eq!(store.snapshot().len(), 1);
         assert!(path.exists());
