@@ -23,6 +23,7 @@ const MAX_RAW_CACHE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_ENDPOINT_CACHE_ENTRIES: usize = 128;
 const MAX_ENDPOINT_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CacheMode {
@@ -155,7 +156,7 @@ pub struct Gateway {
     eastmoney: Arc<Semaphore>,
     tencent: Arc<Semaphore>,
     default: Arc<Semaphore>,
-    circuit: Arc<AsyncMutex<Circuit>>,
+    circuits: Arc<AsyncMutex<HashMap<String, Circuit>>>,
     diagnostics: Arc<DiagnosticStore>,
     route: String,
     cache_mode: CacheMode,
@@ -166,7 +167,7 @@ impl Gateway {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             client: Client::builder()
-                .user_agent("Mozilla/5.0 fund-tracker/1.0")
+                .user_agent(BROWSER_USER_AGENT)
                 .build()
                 .expect("HTTP client"),
             inflight: Arc::new(AsyncMutex::new(HashMap::new())),
@@ -175,7 +176,7 @@ impl Gateway {
             eastmoney: Arc::new(Semaphore::new(1)),
             tencent: Arc::new(Semaphore::new(4)),
             default: Arc::new(Semaphore::new(3)),
-            circuit: Arc::new(AsyncMutex::new(Circuit::default())),
+            circuits: Arc::new(AsyncMutex::new(HashMap::new())),
             diagnostics: DiagnosticStore::new(DiagnosticStore::product_path()),
             route: "unknown".into(),
             cache_mode: CacheMode::Normal,
@@ -192,7 +193,7 @@ impl Gateway {
             eastmoney: self.eastmoney.clone(),
             tencent: self.tencent.clone(),
             default: self.default.clone(),
-            circuit: self.circuit.clone(),
+            circuits: self.circuits.clone(),
             diagnostics: self.diagnostics.clone(),
             route: route.trim_start_matches('/').to_string(),
             cache_mode: self.cache_mode,
@@ -213,7 +214,7 @@ impl Gateway {
             eastmoney: self.eastmoney.clone(),
             tencent: self.tencent.clone(),
             default: self.default.clone(),
-            circuit: self.circuit.clone(),
+            circuits: self.circuits.clone(),
             diagnostics: self.diagnostics.clone(),
             route: self.route.clone(),
             cache_mode,
@@ -403,7 +404,8 @@ impl Gateway {
             .map_err(|e| ApiError::new(e.to_string()))?;
         let queue_ms = Some(started.elapsed().as_millis());
         if provider == "eastmoney" {
-            let mut circuit = self.circuit.lock().await;
+            let mut circuits = self.circuits.lock().await;
+            let circuit = circuits.entry(host.clone()).or_default();
             if use_eastmoney_circuit && circuit.until.is_some_and(|until| until > Instant::now()) {
                 let error = ApiError::new("eastmoney 数据源熔断中");
                 let (code, _) = error.error_code();
@@ -421,21 +423,18 @@ impl Gateway {
             if let Some(last) = circuit.last_started {
                 let target = Duration::from_millis(1000 + rand::rng().random_range(0..=300));
                 if let Some(wait) = target.checked_sub(last.elapsed()) {
-                    drop(circuit);
+                    drop(circuits);
                     tokio::time::sleep(wait).await;
-                    circuit = self.circuit.lock().await;
+                    circuits = self.circuits.lock().await;
                 }
             }
-            circuit.last_started = Some(Instant::now());
+            circuits.entry(host.clone()).or_default().last_started = Some(Instant::now());
         }
         let attempts = if provider == "eastmoney" { 3 } else { 1 };
         let mut last = ApiError::new("请求失败");
         for attempt in 0..attempts {
             let mut headers = HeaderMap::new();
-            headers.insert(
-                "user-agent",
-                HeaderValue::from_static("Mozilla/5.0 fund-tracker/1.0"),
-            );
+            headers.insert("user-agent", HeaderValue::from_static(BROWSER_USER_AGENT));
             headers.insert(
                 "referer",
                 HeaderValue::from_static("https://finance.eastmoney.com/"),
@@ -476,7 +475,8 @@ impl Gateway {
                     }
                     let body = Arc::new(body.to_vec());
                     if use_eastmoney_circuit {
-                        let mut c = self.circuit.lock().await;
+                        let mut circuits = self.circuits.lock().await;
+                        let c = circuits.entry(host.clone()).or_default();
                         c.failures = 0;
                         c.until = None;
                     }
@@ -524,7 +524,8 @@ impl Gateway {
             }
         }
         if use_eastmoney_circuit {
-            let mut c = self.circuit.lock().await;
+            let mut circuits = self.circuits.lock().await;
+            let c = circuits.entry(host).or_default();
             if last.status == Some(403) {
                 c.failures = 3;
             } else if last.status.is_none()
@@ -743,6 +744,25 @@ mod tests {
         let (healthy_url, calls) = fixture_server(200, b"ok".to_vec(), Duration::ZERO);
         let body = gateway
             .bytes(RequestSpec::get(healthy_url).em().independent_circuit())
+            .await
+            .unwrap();
+        assert_eq!(body.as_slice(), b"ok");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn eastmoney_circuit_is_isolated_by_host() {
+        let (blocked_url, _) = fixture_server(403, vec![], Duration::ZERO);
+        let gateway = Gateway::new();
+        gateway
+            .bytes(RequestSpec::get(blocked_url).em())
+            .await
+            .unwrap_err();
+
+        let (healthy_url, calls) = fixture_server(200, b"ok".to_vec(), Duration::ZERO);
+        let healthy_url = healthy_url.replacen("127.0.0.1", "localhost", 1);
+        let body = gateway
+            .bytes(RequestSpec::get(healthy_url).em())
             .await
             .unwrap();
         assert_eq!(body.as_slice(), b"ok");

@@ -14,7 +14,7 @@
             var ageText = Number.isFinite(age) && age > 0 ? ' · ' + Math.max(1, Math.round(age / 60)) + '分钟前' : '';
             return '缓存数据' + ageText;
         }
-        if (meta.degraded) return '已降级 · ' + (freshLabel || '备用来源');
+        if (meta.degraded) return '备用来源 · ' + (freshLabel || '数据可用');
         return freshLabel || '实时数据';
     }
 

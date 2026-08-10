@@ -846,7 +846,7 @@
             : '';
         var hitPoints = valid.map(function (point, index) {
             var pctText = formatPercentValue(point.pct);
-            return '<circle class="stock-minute-hit-point" cx="' + xScale(index).toFixed(2) + '" cy="' + yScale(point.price).toFixed(2) + '" r="5">' +
+            return '<circle class="stock-minute-hit-point" cx="' + xScale(index).toFixed(2) + '" cy="' + yScale(point.price).toFixed(2) + '" r="5" fill="transparent" pointer-events="all">' +
                 '<title>' + utils.escapeHtml(point.time + ' 价格 ' + formatPriceValue(point.price) + ' 涨幅 ' + pctText) + '</title>' +
             '</circle>';
         }).join('');
@@ -859,8 +859,8 @@
             '<line class="stock-minute-grid-line" x1="' + padX + '" y1="' + (height - padY) + '" x2="' + (width - padRight) + '" y2="' + (height - padY) + '"></line>' +
             baseline +
             scaleLabels +
-            '<path class="stock-minute-avg-line" d="' + avgPath + '"></path>' +
-            '<path class="stock-minute-price-line" d="' + pricePath + '"></path>' +
+            '<path class="stock-minute-avg-line" vector-effect="non-scaling-stroke" d="' + avgPath + '"></path>' +
+            '<path class="stock-minute-price-line" vector-effect="non-scaling-stroke" d="' + pricePath + '"></path>' +
             latestLabel +
             hitPoints +
         '</svg>';
@@ -874,4 +874,5 @@
     W.loadStockKlineData = loadStockKlineData;
     W.loadStockNewsData = loadStockNewsData;
     W.loadStockRiskData = loadStockRiskData;
+    W.renderStockMinuteChart = renderStockMinuteChart;
 })();

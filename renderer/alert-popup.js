@@ -12,9 +12,10 @@
         if (!alert || typeof alert.changePct !== 'number') return;
         var rising = alert.changePct >= 0;
         var sign = alert.changePct > 0 ? '+' : '';
-        mascot.textContent = rising ? '🐂' : '🐻';
+        mascot.textContent = rising ? '↑' : '↓';
+        alertElement.dataset.direction = rising ? 'up' : 'down';
         title.textContent = String(alert.name || alert.code || '自选股') + (rising ? ' 上涨提醒' : ' 下跌提醒');
-        detail.textContent = sign + alert.changePct.toFixed(2) + '%  ·  现价 ' + price(alert.price);
+        detail.textContent = sign + alert.changePct.toFixed(2) + '%  /  现价 ' + price(alert.price);
         alertElement.style.opacity = String(alert.opacity);
         alertElement.style.animation = 'none';
         void alertElement.offsetWidth;

@@ -83,7 +83,7 @@
             renderOpportunityRadar(json.data, true);
             if (timeEl) {
                 var prefix = dataStatus.label(json.meta, json.meta && json.meta.degraded ? '部分数据源不可用' : '更新');
-                timeEl.textContent = prefix + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
+                timeEl.textContent = prefix + ' · ' + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
             }
         } catch (e) {
             console.error('机会雷达获取失败:', e);
@@ -106,7 +106,7 @@
         var items = data && Array.isArray(data.items) ? data.items : [];
         if (timeEl && fresh) {
             var prefix = dataStatus.label(data.meta, data.meta && data.meta.degraded ? '部分数据源不可用' : '更新');
-            timeEl.textContent = prefix + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
+            timeEl.textContent = prefix + ' · ' + utils.formatShanghaiTime(data.generatedAt || new Date().toISOString());
         } else if (timeEl && !fresh) {
             timeEl.textContent = '缓存数据';
         }
@@ -331,6 +331,20 @@
         try { window.AppStorage.setItem(KEYS.LIMIT_UP_TAB_KEY, t); } catch (e) {}
     }
 
+    function updateLimitUpColumnLabels(type) {
+        var stat = document.getElementById('limit-up-col-stat');
+        var extra = document.getElementById('limit-up-col-extra');
+        var labels = {
+            zt: ['连板', '封单'],
+            zb: ['开板', '振幅'],
+            dt: ['连续', '封单'],
+            yzt: ['昨日连板', '涨速'],
+        };
+        var pair = labels[type] || labels.zt;
+        if (stat) stat.textContent = pair[0];
+        if (extra) extra.textContent = pair[1];
+    }
+
     async function loadLimitUpData(force) {
         var list = document.getElementById('limit-up-list');
         var summary = document.getElementById('limit-up-summary');
@@ -483,6 +497,7 @@
     function activateLimitUpTab(type) {
         var tab = document.querySelector('.limit-up-tab[data-type="' + type + '"]');
         if (!tab) return;
+        updateLimitUpColumnLabels(type);
         var parent = tab.parentElement;
         parent.querySelectorAll('.limit-up-tab').forEach(function (t) { t.classList.remove('active'); });
         tab.classList.add('active');

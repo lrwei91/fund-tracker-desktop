@@ -332,16 +332,18 @@
     // 6 格子: 资金 4 档 + 沪股通盘中参考 + HKEX 北向官方日成交额
     function renderCapitalUI(cap) {
         var cells = [
-            { id: 'main-fund-value', data: cap.mainFund },
-            { id: 'large-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.large },
-            { id: 'medium-value',    data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.medium },
-            { id: 'small-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.small },
-            { id: 'north-hgt-value', data: cap.northHgtIntraday, note: cap.northHgtIntraday && cap.northHgtIntraday.time },
-            { id: 'north-daily-value', data: cap.northboundDaily, note: cap.northboundDaily && cap.northboundDaily.date },
+            { id: 'main-fund-value', data: cap.mainFund, label: '主力' },
+            { id: 'large-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.large, label: '大单' },
+            { id: 'medium-value',    data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.medium, label: '中单' },
+            { id: 'small-value',     data: cap.mainFund && cap.mainFund.breakdown && cap.mainFund.breakdown.small, label: '小单' },
+            { id: 'north-hgt-value', data: cap.northHgtIntraday, note: cap.northHgtIntraday && cap.northHgtIntraday.time, label: '沪股通盘中' },
+            { id: 'north-daily-value', data: cap.northboundDaily, note: cap.northboundDaily && cap.northboundDaily.date, label: '北向成交额' },
         ];
         cells.forEach(function (cell) {
             var el = document.getElementById(cell.id);
             if (!el) return;
+            var label = el.parentElement && el.parentElement.querySelector('.capital-label');
+            if (label) label.textContent = cell.data && cell.data.label ? cell.data.label : cell.label;
             el.textContent = cell.data && cell.data.value ? cell.data.value : '--';
             el.title = cell.note || (cell.data && cell.data.note) || '';
             el.className = 'capital-value';

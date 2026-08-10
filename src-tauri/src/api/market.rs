@@ -89,24 +89,90 @@ async fn indexes(g: &Arc<Gateway>) -> Result<Value, ApiError> {
     Ok(Value::Object(out))
 }
 fn unavailable_main() -> Value {
-    json!({"available":false,"source":null,"value":"--","isPositive":null,"note":"暂无数据","breakdown":{"superLarge":{"value":"--","isPositive":null},"large":{"value":"--","isPositive":null},"medium":{"value":"--","isPositive":null},"small":{"value":"--","isPositive":null}}})
+    json!({"available":false,"source":null,"sourceLabel":"","label":"主力","value":"--","isPositive":null,"note":"暂无数据","degraded":false,"breakdown":{"superLarge":{"label":"超大单","value":"--","isPositive":null},"large":{"label":"大单","value":"--","isPositive":null},"medium":{"label":"中单","value":"--","isPositive":null},"small":{"label":"小单","value":"--","isPositive":null}}})
 }
-async fn main_fund(g: &Arc<Gateway>) -> Value {
+fn flow_value(label: &str, value: f64) -> Value {
+    json!({"available":true,"label":label,"value":yi(value),"isPositive":value>=0.0})
+}
+async fn eastmoney_main_fund(g: &Arc<Gateway>) -> Result<Value, ApiError> {
     let url="https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=6000&po=1&np=1&fltt=2&invt=2&fs=m%3A0%2Bt%3A6%2Cm%3A0%2Bt%3A80%2Cm%3A1%2Bt%3A2%2Cm%3A1%2Bt%3A23%2Cm%3A0%2Bt%3A81%2Bs%3A2048&fields=f12%2Cf14%2Cf62%2Cf66%2Cf72%2Cf78%2Cf84";
-    let Ok(v) = g.json(RequestSpec::get(url).em().timeout(15)).await else {
-        return unavailable_main();
-    };
+    let v = g.json(RequestSpec::get(url).em().timeout(15)).await?;
     let rows = v
         .pointer("/data/diff")
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
     if rows.is_empty() {
-        return unavailable_main();
+        return Err(ApiError::new("东财全市场资金流为空"));
     }
     let sum = |k: &str| rows.iter().filter_map(|x| num(&x[k])).sum::<f64>();
     let (a, b, c, d, e) = (sum("f62"), sum("f66"), sum("f72"), sum("f78"), sum("f84"));
-    json!({"available":true,"source":"eastmoney","value":yi(a),"isPositive":a>=0.0,"breakdown":{"superLarge":{"value":yi(b),"isPositive":b>=0.0},"large":{"value":yi(c),"isPositive":c>=0.0},"medium":{"value":yi(d),"isPositive":d>=0.0},"small":{"value":yi(e),"isPositive":e>=0.0}}})
+    Ok(
+        json!({"available":true,"source":"eastmoney","sourceLabel":"东方财富","label":"主力","value":yi(a),"isPositive":a>=0.0,"note":"东方财富全市场主力净流入","degraded":false,"breakdown":{"superLarge":flow_value("超大单",b),"large":flow_value("大单",c),"medium":flow_value("中单",d),"small":flow_value("小单",e)}}),
+    )
+}
+fn sina_main_fund_rows(rows: &[Value]) -> Result<Value, ApiError> {
+    if rows.len() < 100 {
+        return Err(ApiError::new("新浪沪深A股资金流数据不完整"));
+    }
+    let sum = |key: &str| rows.iter().filter_map(|row| num(&row[key])).sum::<f64>();
+    let main_net = sum("r0_net");
+    let main_in = sum("r0_in");
+    let main_out = sum("r0_out");
+    let retail_net = sum("r3_net");
+    if ![main_net, main_in, main_out, retail_net]
+        .iter()
+        .all(|value| value.is_finite())
+    {
+        return Err(ApiError::new("新浪沪深A股资金流字段无效"));
+    }
+    Ok(json!({
+        "available":true,
+        "source":"sina",
+        "sourceLabel":"新浪财经",
+        "label":"主力",
+        "value":yi(main_net),
+        "isPositive":main_net>=0.0,
+        "note":"新浪口径：主力为单笔成交额不低于100万元",
+        "degraded":true,
+        "breakdown":{
+            "superLarge":{"available":false,"label":"特大单","value":"--","isPositive":null},
+            "large":flow_value("主力流入",main_in),
+            "medium":flow_value("主力流出",-main_out),
+            "small":flow_value("散户",retail_net)
+        }
+    }))
+}
+async fn sina_main_fund(g: &Arc<Gateway>) -> Result<Value, ApiError> {
+    let url="https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_bkzj_ssggzj?page=1&num=7000&sort=symbol&asc=1&bankuai=hs_a&shichang=";
+    let value = g
+        .json(
+            RequestSpec::get(url)
+                .header("referer", "https://finance.sina.com.cn/")
+                .cache(60)
+                .timeout(20),
+        )
+        .await?;
+    let rows = value
+        .as_array()
+        .ok_or_else(|| ApiError::new("新浪沪深A股资金流返回格式异常"))?;
+    sina_main_fund_rows(rows)
+}
+async fn main_fund(g: &Arc<Gateway>) -> Value {
+    match eastmoney_main_fund(g).await {
+        Ok(value) => value,
+        Err(primary) => match sina_main_fund(g).await {
+            Ok(mut value) => {
+                value["fallbackReason"] = json!(format!("东方财富: {primary}"));
+                value
+            }
+            Err(fallback) => {
+                let mut value = unavailable_main();
+                value["note"] = json!(format!("东方财富: {primary}; 新浪财经: {fallback}"));
+                value
+            }
+        },
+    }
 }
 async fn north_intraday(g: &Arc<Gateway>) -> Value {
     let Ok(v) = g
@@ -240,6 +306,83 @@ fn sector_rows(v: &Value, spec: BoardSpec, positive: bool) -> Result<Vec<Value>,
     Ok(rows)
 }
 
+fn sina_fenlei(board_type: &str) -> Result<&'static str, ApiError> {
+    match board_type {
+        "industry" => Ok("9"),
+        "concept" => Ok("1"),
+        "region" => Ok("8"),
+        _ => Err(ApiError::new("无效的板块类型")),
+    }
+}
+
+fn sina_sector_rows(
+    value: &Value,
+    spec: BoardSpec,
+    positive: bool,
+) -> Result<Vec<Value>, ApiError> {
+    let raw = value
+        .as_array()
+        .ok_or_else(|| ApiError::new("新浪板块资金流返回格式异常"))?;
+    if raw.is_empty() {
+        return Err(ApiError::new("新浪板块资金流数据为空"));
+    }
+    let (fund_key, pct_key, change_key) = match spec.period {
+        "today" => (
+            "netamount".to_string(),
+            "ratioamount".to_string(),
+            "avg_changeratio".to_string(),
+        ),
+        period => (
+            format!("netamount_{}", period.trim_end_matches('d')),
+            format!("ratioamount_{}", period.trim_end_matches('d')),
+            format!("avg_changeratio_{}", period.trim_end_matches('d')),
+        ),
+    };
+    Ok(raw
+        .iter()
+        .filter_map(|row| {
+            let fund = num(&row[&fund_key])?;
+            if (positive && fund <= 0.0) || (!positive && fund >= 0.0) {
+                return None;
+            }
+            Some(json!({
+                "name":row.get("name").and_then(Value::as_str).unwrap_or(""),
+                "code":row.get("category").and_then(Value::as_str).unwrap_or(""),
+                "value":yi(fund),
+                "mainFundYuan":fund,
+                "mainFundPct":num(&row[&pct_key]).map(|value|value*100.0),
+                "changePct":num(&row[&change_key]).map(|value|value*100.0).unwrap_or(0.0),
+                "leader":if spec.period == "today" {row.get("ts_name").and_then(Value::as_str).unwrap_or("")} else {""}
+            }))
+        })
+        .take(10)
+        .collect())
+}
+
+async fn sina_sector_side(
+    g: &Arc<Gateway>,
+    spec: BoardSpec,
+    positive: bool,
+) -> Result<Vec<Value>, ApiError> {
+    let fenlei = sina_fenlei(spec.board_type)?;
+    let asc = if positive { 0 } else { 1 };
+    let url = if spec.period == "today" {
+        format!("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_bkzj_bk?page=1&num=20&sort=netamount&asc={asc}&fenlei={fenlei}")
+    } else {
+        let days = spec.period.trim_end_matches('d');
+        format!("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/MoneyFlow.ssl_bkzjlxt?page=1&num=20&sort=netamount_{days}&asc={asc}&fenlei={fenlei}")
+    };
+    let value = g
+        .json(
+            RequestSpec::get(url)
+                .header("referer", "https://finance.sina.com.cn/")
+                .cache(60)
+                .timeout(15),
+        )
+        .await?;
+    sina_sector_rows(&value, spec, positive)
+}
+
 async fn sector_side(
     g: &Arc<Gateway>,
     spec: BoardSpec,
@@ -272,7 +415,11 @@ async fn sector_side(
     sector_rows(&v, spec, positive)
 }
 
-async fn sectors(g: &Arc<Gateway>, board_type: &str, period: &str) -> Result<Value, ApiError> {
+async fn eastmoney_sectors(
+    g: &Arc<Gateway>,
+    board_type: &str,
+    period: &str,
+) -> Result<Value, ApiError> {
     let spec = board_spec(board_type, period)?;
     let (inflow, outflow) = tokio::join!(sector_side(g, spec, true), sector_side(g, spec, false));
     Ok(json!({
@@ -282,6 +429,38 @@ async fn sectors(g: &Arc<Gateway>, board_type: &str, period: &str) -> Result<Val
         "outflow":outflow?
     }))
 }
+
+async fn sina_sectors(g: &Arc<Gateway>, board_type: &str, period: &str) -> Result<Value, ApiError> {
+    let spec = board_spec(board_type, period)?;
+    let (inflow, outflow) = tokio::join!(
+        sina_sector_side(g, spec, true),
+        sina_sector_side(g, spec, false)
+    );
+    Ok(json!({
+        "boardType":spec.board_type,
+        "period":spec.period,
+        "inflow":inflow?,
+        "outflow":outflow?
+    }))
+}
+
+async fn sector_response(g: &Arc<Gateway>, board_type: &str, period: &str) -> Value {
+    match eastmoney_sectors(g, board_type, period).await {
+        Ok(value) => {
+            json!({"success":true,"data":value,"meta":{"degraded":false,"stale":false,"sources":{"sector":{"actual":"eastmoney","actualLabel":"东方财富"}}}})
+        }
+        Err(primary) => match sina_sectors(g, board_type, period).await {
+            Ok(value) => {
+                json!({"success":true,"data":value,"meta":{"degraded":true,"stale":false,"fallbackReason":format!("东方财富: {primary}"),"sources":{"sector":{"actual":"sina","actualLabel":"新浪财经","requested":"eastmoney","degraded":true,"fallbackReason":primary.to_string(),"attempts":[{"source":"eastmoney","status":"failed","reason":primary.to_string()},{"source":"sina","status":200,"reason":"备用源成功"}]}}}})
+            }
+            Err(fallback) => policy::failure(
+                "真实行情接口不可用",
+                &format!("东方财富: {primary}; 新浪财经: {fallback}"),
+                fallback.status.or(primary.status),
+            ),
+        },
+    }
+}
 pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str) -> Value {
     match kind {
         "index" => match indexes(&g).await {
@@ -290,24 +469,21 @@ pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str)
         },
         "capital" => {
             let (a, b, c) = tokio::join!(main_fund(&g), north_intraday(&g), hkex(&g));
-            let degraded =
-                a["available"] != true || b["available"] != true || c["available"] != true;
-            json!({"success":true,"data":{"mainFund":a,"northHgtIntraday":b,"northboundDaily":c},"meta":{"asOf":Utc::now().to_rfc3339(),"degraded":degraded,"stale":false,"sources":{"marketFund":{"actual":if a["available"]==true{json!("eastmoney")}else{Value::Null},"status":if a["available"]==true{"live"}else{"unavailable"}},"northHgtIntraday":{"actual":"hexin","status":if b["available"]==true{"live"}else{"unavailable"}},"northboundDaily":{"actual":"hkex","status":if c["available"]==true{"live"}else{"unavailable"}}}}})
+            let degraded = a["available"] != true
+                || a["degraded"] == true
+                || b["available"] != true
+                || c["available"] != true;
+            json!({"success":true,"data":{"mainFund":a,"northHgtIntraday":b,"northboundDaily":c},"meta":{"asOf":Utc::now().to_rfc3339(),"degraded":degraded,"stale":false,"sources":{"marketFund":{"actual":a["source"],"actualLabel":a["sourceLabel"],"status":if a["available"]!=true{"unavailable"}else if a["degraded"]==true{"fallback"}else{"live"},"fallbackReason":a["fallbackReason"]},"northHgtIntraday":{"actual":"hexin","status":if b["available"]==true{"live"}else{"unavailable"}},"northboundDaily":{"actual":"hkex","status":if c["available"]==true{"live"}else{"unavailable"}}}}})
         }
-        "sector" => match sectors(&g, board_type, period).await {
-            Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
-            Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
-        },
-        "multiday-flow" => match sectors(
-            &g,
-            board_type,
-            if period.is_empty() { "5d" } else { period },
-        )
-        .await
-        {
-            Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
-            Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
-        },
+        "sector" => sector_response(&g, board_type, period).await,
+        "multiday-flow" => {
+            sector_response(
+                &g,
+                board_type,
+                if period.is_empty() { "5d" } else { period },
+            )
+            .await
+        }
         _ => policy::failure("未知 market-data 类型", "market-data type invalid", None),
     }
 }
@@ -350,5 +526,44 @@ mod tests {
         assert_eq!(board_spec("industry", "10d").unwrap().leader, None);
         assert!(board_spec("unknown", "today").is_err());
         assert!(board_spec("industry", "3d").is_err());
+    }
+
+    #[test]
+    fn sina_sector_rows_convert_ratio_fields_to_percent() {
+        let fixture = json!([
+            {"category":"sw2_1","name":"流入行业","netamount":"300000000","ratioamount":"0.085","avg_changeratio":"0.021","ts_name":"领涨股"},
+            {"category":"sw2_2","name":"流出行业","netamount":"-200000000","ratioamount":"-0.062","avg_changeratio":"-0.015","ts_name":"领跌股"}
+        ]);
+        let spec = board_spec("industry", "today").unwrap();
+        let inflow = sina_sector_rows(&fixture, spec, true).unwrap();
+        let outflow = sina_sector_rows(&fixture, spec, false).unwrap();
+        assert_eq!(inflow[0]["mainFundPct"], 8.5);
+        assert_eq!(inflow[0]["changePct"], 2.1);
+        assert_eq!(inflow[0]["leader"], "领涨股");
+        assert_eq!(outflow[0]["mainFundYuan"], -200000000.0);
+    }
+
+    #[test]
+    fn sina_multiday_sector_rows_use_requested_period() {
+        let fixture = json!([
+            {"category":"diyu_1","name":"五日流入","netamount_5":"500000000","ratioamount_5":"0.04","avg_changeratio_5":"0.06","netamount_10":"-1"}
+        ]);
+        let rows = sina_sector_rows(&fixture, board_spec("region", "5d").unwrap(), true).unwrap();
+        assert_eq!(rows[0]["mainFundYuan"], 500000000.0);
+        assert_eq!(rows[0]["mainFundPct"], 4.0);
+        assert_eq!(rows[0]["changePct"], 6.0);
+        assert_eq!(rows[0]["leader"], "");
+    }
+
+    #[test]
+    fn sina_market_flow_keeps_source_specific_labels() {
+        let rows = (0..100)
+            .map(|_| json!({"r0_net":"-100","r0_in":"300","r0_out":"400","r3_net":"25"}))
+            .collect::<Vec<_>>();
+        let value = sina_main_fund_rows(&rows).unwrap();
+        assert_eq!(value["source"], "sina");
+        assert_eq!(value["breakdown"]["large"]["label"], "主力流入");
+        assert_eq!(value["breakdown"]["medium"]["label"], "主力流出");
+        assert_eq!(value["breakdown"]["small"]["label"], "散户");
     }
 }

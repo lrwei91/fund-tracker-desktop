@@ -29,9 +29,9 @@ describe('桌面提醒卡片', () => {
         await import('../renderer/alert-popup.js');
     });
 
-    it('按 StockPet 的牛卡样式展示并播放牛叫', () => {
+    it('按上涨方向样式展示并播放上涨提示音', () => {
         receiveAlert({ name: '浦发银行', code: '600000', price: 10.5, changePct: 2.3, opacity: 0.8, soundEnabled: true });
-        expect(document.getElementById('mascot').textContent).toBe('🐂');
+        expect(document.getElementById('mascot').textContent).toBe('↑');
         expect(document.getElementById('alert-title').textContent).toBe('浦发银行 上涨提醒');
         expect(document.getElementById('alert-detail').textContent).toContain('+2.30%');
         expect(document.getElementById('alert').style.opacity).toBe('0.8');
@@ -39,10 +39,10 @@ describe('桌面提醒卡片', () => {
         expect(play).toHaveBeenCalledOnce();
     });
 
-    it('按 StockPet 的熊卡样式展示且可关闭声音', () => {
+    it('按下跌方向样式展示且可关闭声音', () => {
         play.mockClear();
         receiveAlert({ name: '测试股', code: '000001', price: 9.8, changePct: -2, opacity: 1, soundEnabled: false });
-        expect(document.getElementById('mascot').textContent).toBe('🐻');
+        expect(document.getElementById('mascot').textContent).toBe('↓');
         expect(document.getElementById('alert-title').textContent).toBe('测试股 下跌提醒');
         expect(document.getElementById('alert-detail').textContent).toContain('-2.00%');
         expect(play).not.toHaveBeenCalled();

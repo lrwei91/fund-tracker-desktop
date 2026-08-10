@@ -95,4 +95,25 @@ describe('板块资金流筛选', () => {
         expect(document.getElementById('sector-bars-inflow').textContent).toContain('地域缓存');
         expect(document.getElementById('sector-flow-status').textContent).toBe('接口不可用 · 显示缓存');
     });
+
+    it('按备用资金源返回的真实口径更新格子标签', () => {
+        document.body.innerHTML = ['main-fund-value', 'large-value', 'medium-value', 'small-value', 'north-hgt-value', 'north-daily-value']
+            .map((id) => '<div class="capital-item"><div class="capital-label"></div><div id="' + id + '"></div></div>')
+            .join('');
+
+        window.AppMarket.renderCapitalUI({
+            mainFund: {
+                label: '主力', value: '-41.62亿', isPositive: false,
+                breakdown: {
+                    large: { label: '主力流入', value: '+6260.88亿', isPositive: true },
+                    medium: { label: '主力流出', value: '-6302.51亿', isPositive: false },
+                    small: { label: '散户', value: '-33.09亿', isPositive: false },
+                },
+            },
+        });
+
+        expect(document.getElementById('large-value').previousElementSibling.textContent).toBe('主力流入');
+        expect(document.getElementById('medium-value').textContent).toBe('-6302.51亿');
+        expect(document.getElementById('small-value').previousElementSibling.textContent).toBe('散户');
+    });
 });

@@ -502,7 +502,28 @@ async fn load_em_news(
                 .cache(30),
         )
         .await?;
-    Ok(v.pointer("/data/fastNewsList").and_then(Value::as_array).into_iter().flatten().filter_map(|x|{let title=string(x.get("title"));let summary=string(x.get("summary"));if title.is_empty()&&summary.is_empty(){None}else{Some(json!({"id":x.get("seq").or_else(||x.get("id")).or_else(||x.get("url")).cloned().unwrap_or(json!("")),"title":title,"summary":summary,"time":x.get("showTime").or_else(||x.get("createTime")).cloned().unwrap_or(json!("")),"url":x.get("url").cloned().unwrap_or(json!("https://kuaixun.eastmoney.com/"))}))}}).collect())
+    Ok(v.pointer("/data/fastNewsList")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(map_em_news_row)
+        .collect())
+}
+
+fn map_em_news_row(x: &Value) -> Option<Value> {
+    let title = string(x.get("title"));
+    let summary = string(x.get("summary"));
+    if title.is_empty() && summary.is_empty() {
+        return None;
+    }
+    Some(json!({
+        "id":x.get("seq").or_else(||x.get("id")).or_else(||x.get("code")).or_else(||x.get("realSort")).or_else(||x.get("url")).cloned().unwrap_or(json!("")),
+        "cursor":x.get("realSort").or_else(||x.get("sortEnd")).cloned().unwrap_or(json!("")),
+        "title":title,
+        "summary":summary,
+        "time":x.get("showTime").or_else(||x.get("createTime")).cloned().unwrap_or(json!("")),
+        "url":x.get("url").cloned().unwrap_or(json!("https://kuaixun.eastmoney.com/"))
+    }))
 }
 fn source_meta(
     key: &str,
@@ -600,7 +621,7 @@ pub(crate) async fn global_news(g: Arc<Gateway>, query: Query) -> Value {
     let next = if actual == "eastmoney" {
         sliced
             .last()
-            .and_then(|x| x.get("time"))
+            .and_then(|x| x.get("cursor"))
             .and_then(Value::as_str)
             .filter(|x| !x.is_empty())
             .map(str::to_owned)
@@ -1839,6 +1860,21 @@ mod contract_tests {
         let query = HashMap::from([("limit".to_string(), "9999".to_string())]);
         assert_eq!(int(&query, "limit", 20, 1, 100), 100);
         assert_eq!(int(&HashMap::new(), "limit", 20, 1, 100), 20);
+    }
+
+    #[test]
+    fn eastmoney_fast_news_uses_current_identity_and_cursor_fields() {
+        let row = map_em_news_row(&json!({
+            "code":"202608103836936514",
+            "realSort":"1786370909036514",
+            "showTime":"2026-08-10 22:08:29",
+            "title":"美股存储股短线拉升",
+            "summary":"测试摘要"
+        }))
+        .unwrap();
+        assert_eq!(row["id"], "202608103836936514");
+        assert_eq!(row["cursor"], "1786370909036514");
+        assert_eq!(row["url"], "https://kuaixun.eastmoney.com/");
     }
 
     #[test]

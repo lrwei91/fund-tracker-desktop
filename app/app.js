@@ -204,6 +204,62 @@
         }
     }
 
+    function initSignalWorkspace() {
+        var tabs = document.querySelectorAll('[data-signal-view]');
+        var panels = document.querySelectorAll('[data-signal-panel]');
+        if (!tabs.length || !panels.length) return;
+
+        function selectSignalView(view) {
+            tabs.forEach(function (tab) {
+                var active = tab.getAttribute('data-signal-view') === view;
+                tab.classList.toggle('active', active);
+                tab.setAttribute('aria-selected', active ? 'true' : 'false');
+                tab.tabIndex = active ? 0 : -1;
+            });
+            panels.forEach(function (panel) {
+                var active = panel.getAttribute('data-signal-panel') === view;
+                panel.classList.toggle('active', active);
+                panel.hidden = !active;
+            });
+            try { window.AppStorage.setItem('fund_tracker_signal_view', view); } catch (e) {}
+        }
+
+        var savedView = 'radar';
+        try { savedView = window.AppStorage.getItem('fund_tracker_signal_view') || savedView; } catch (e) {}
+        if (!Array.from(tabs).some(function (tab) { return tab.getAttribute('data-signal-view') === savedView; })) {
+            savedView = 'radar';
+        }
+        selectSignalView(savedView);
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                selectSignalView(tab.getAttribute('data-signal-view'));
+            });
+        });
+    }
+
+    function initSettingsViews() {
+        var tabs = document.querySelectorAll('[data-settings-view]');
+        var panels = document.querySelectorAll('[data-settings-panel]');
+        if (!tabs.length || !panels.length) return;
+
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var view = tab.getAttribute('data-settings-view');
+                tabs.forEach(function (item) {
+                    var active = item === tab;
+                    item.classList.toggle('active', active);
+                    item.setAttribute('aria-selected', active ? 'true' : 'false');
+                    item.tabIndex = active ? 0 : -1;
+                });
+                panels.forEach(function (panel) {
+                    var active = panel.getAttribute('data-settings-panel') === view;
+                    panel.classList.toggle('active', active);
+                    panel.hidden = !active;
+                });
+            });
+        });
+    }
+
     // ============================================================
     // 设置面板 + 数据面板
     // ============================================================
@@ -217,16 +273,24 @@
         function openSettings() {
             overlay.classList.add('open');
             panel.classList.add('open');
+            openBtn.setAttribute('aria-expanded', 'true');
+            closeBtn.focus();
         }
 
         function closeSettings() {
             overlay.classList.remove('open');
             panel.classList.remove('open');
+            openBtn.setAttribute('aria-expanded', 'false');
+            openBtn.focus();
         }
 
+        openBtn.setAttribute('aria-expanded', 'false');
         openBtn.addEventListener('click', openSettings);
         closeBtn.addEventListener('click', closeSettings);
         overlay.addEventListener('click', closeSettings);
+        panel.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closeSettings();
+        });
     }
 
     function initDataPanel() {
@@ -241,13 +305,18 @@
         function openPanel() {
             overlay.classList.add('open');
             panel.classList.add('open');
+            openBtn.setAttribute('aria-expanded', 'true');
+            closeBtn.focus();
         }
 
         function closePanel() {
             overlay.classList.remove('open');
             panel.classList.remove('open');
+            openBtn.setAttribute('aria-expanded', 'false');
+            openBtn.focus();
         }
 
+        openBtn.setAttribute('aria-expanded', 'false');
         openBtn.addEventListener('click', openPanel);
         closeBtn.addEventListener('click', closePanel);
         overlay.addEventListener('click', closePanel);
@@ -257,6 +326,9 @@
         importBtn.addEventListener('click', function () { fileInput.click(); });
         fileInput.addEventListener('change', function (e) {
             if (window.AppWatchlist) window.AppWatchlist.importWatchlistData(e);
+        });
+        panel.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closePanel();
         });
     }
 
@@ -480,6 +552,8 @@
         initTabs();
         initCollapsible();
         initSectorTabs();
+        initSignalWorkspace();
+        initSettingsViews();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
         if (window.AppWatchlist) window.AppWatchlist.initWatchlistTabs();
         if (window.AppNews) {

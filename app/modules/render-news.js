@@ -53,24 +53,28 @@
         state.newsState[source] = emptyNewsState(source);
     }
 
-    var newsScrollHandler = null;
+    var newsLoadObserver = null;
     function initNewsScroll() {
-        if (newsScrollHandler) return;
-        var ticking = false;
-        newsScrollHandler = function () {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(function () { ticking = false; maybeLoadMoreNews(); });
-        };
-        window.addEventListener('scroll', newsScrollHandler, { passive: true });
-        window.addEventListener('resize', newsScrollHandler, { passive: true });
+        if (newsLoadObserver || typeof window.IntersectionObserver !== 'function') return;
+        var root = document.getElementById('main-content');
+        newsLoadObserver = new window.IntersectionObserver(function (entries) {
+            if (entries.some(function (entry) { return entry.isIntersecting; })) maybeLoadMoreNews();
+        }, { root: root || null, rootMargin: '320px 0px' });
+        observeLoadSentinel();
+    }
+
+    function observeLoadSentinel() {
+        if (!newsLoadObserver) return;
+        newsLoadObserver.disconnect();
+        var sentinel = document.querySelector('[data-news-load-more]');
+        if (sentinel) newsLoadObserver.observe(sentinel);
     }
 
     function maybeLoadMoreNews() {
         if (state.currentTab !== 'news') return;
         var current = state.newsState[state.currentNewsSource];
         if (!current || current.isLoading || !current.hasMore) return;
-        if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 400) loadMoreNews();
+        loadMoreNews();
     }
 
     function normalizeRow(source, item) {
@@ -202,23 +206,45 @@
         }
         var statusLabel = current.stale
             ? dataStatus.label({ stale: true, staleAgeSeconds: current.staleAgeSeconds })
-            : (current.degraded ? '已降级至 ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource));
+            : (current.degraded ? '备用来源 · ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource));
         var sourceStatus = '<div class="news-actual-source' + (current.degraded || current.stale ? ' degraded' : '') + '">' +
             utils.escapeHtml(statusLabel) + '</div>';
         var html = sourceStatus + current.items.map(renderNewsItem).join('');
         if (current.isLoading) html += '<div class="news-status news-loading">刷新中...</div>';
-        else if (current.hasMore) html += '<div class="news-status news-loadmore">上拉加载更多</div>';
+        else if (current.hasMore) html += '<button type="button" class="news-status news-loadmore" data-news-load-more="1">加载更多</button>';
         else html += '<div class="news-status news-loadend">已经到底了</div>';
         container.innerHTML = html;
+        bindNewsItems(container);
+        var loadMoreButton = container.querySelector('[data-news-load-more]');
+        if (loadMoreButton) loadMoreButton.addEventListener('click', loadMoreNews);
+        observeLoadSentinel();
     }
 
     function renderNewsItem(item) {
         if (!item.title && !item.summary) return '';
-        return '<div class="news-item">' +
+        return '<article class="news-item" tabindex="0" aria-expanded="false">' +
             '<div class="news-header"><span class="news-time">' + utils.escapeHtml(formatNewsTime(item.time)) + '</span></div>' +
             (item.title ? '<div class="news-title">' + utils.escapeHtml(item.title) + '</div>' : '') +
             (item.summary ? '<div class="news-summary">' + utils.escapeHtml(item.summary) + '</div>' : '') +
-            '</div>';
+            '<span class="news-expand-hint" aria-hidden="true">展开</span>' +
+            '</article>';
+    }
+
+    function bindNewsItems(container) {
+        container.querySelectorAll('.news-item').forEach(function (item) {
+            function toggleItem() {
+                var expanded = item.classList.toggle('expanded');
+                item.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                var hint = item.querySelector('.news-expand-hint');
+                if (hint) hint.textContent = expanded ? '收起' : '展开';
+            }
+            item.addEventListener('click', toggleItem);
+            item.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                toggleItem();
+            });
+        });
     }
 
     window.AppNews = {

@@ -1,11 +1,20 @@
 :root {
   color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  --bg: rgba(34, 47, 58, 0.98);
+  --text: #f4f6f7;
+  --muted: #9ba9b4;
+  --red: #ff7180;
+  --green: #43d39e;
+  --border: #536675;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   margin: 0;
@@ -23,29 +32,52 @@ body {
   position: fixed;
   top: 8px;
   left: 50%;
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 11px;
+  width: min(360px, calc(100% - 16px));
   min-width: 300px;
-  max-width: calc(100% - 16px);
-  padding: 13px 18px 13px 12px;
+  padding: 11px 14px 11px 10px;
   transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 22px;
-  background: rgba(15, 18, 26, 0.92);
-  color: #fff;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.38);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 18px 46px rgba(7, 12, 17, 0.42);
   pointer-events: none;
-  animation: mascot-pop 450ms cubic-bezier(0.18, 0.9, 0.25, 1.15);
+  animation: alert-enter 220ms ease-out;
+}
+
+#alert[data-direction="up"] {
+  border-left-color: var(--red);
+}
+
+#alert[data-direction="down"] {
+  border-left-color: var(--green);
 }
 
 #mascot {
-  width: 54px;
-  flex: 0 0 54px;
-  font-size: 44px;
+  display: grid;
+  place-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--muted);
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 22px;
+  font-weight: 700;
   line-height: 1;
-  text-align: center;
-  animation: mascot-bounce 700ms ease-in-out infinite alternate;
+}
+
+#alert[data-direction="up"] #mascot {
+  color: var(--red);
+}
+
+#alert[data-direction="down"] #mascot {
+  color: var(--green);
 }
 
 #alert strong,
@@ -54,29 +86,34 @@ body {
 }
 
 #alert-title {
-  margin-bottom: 4px;
+  margin-bottom: 5px;
   overflow: hidden;
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 720;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 #alert-detail {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
+  color: var(--muted);
+  font-family: "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 12px;
 }
 
-@keyframes mascot-pop {
+@keyframes alert-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -24px) scale(0.7);
+    transform: translate(-50%, -10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
   }
 }
 
-@keyframes mascot-bounce {
-  to { transform: translateY(-4px) rotate(3deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  #alert, #mascot { animation: none; }
+  #alert {
+    animation: none;
+  }
 }

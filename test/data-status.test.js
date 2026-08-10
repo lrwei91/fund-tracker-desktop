@@ -13,6 +13,6 @@ describe('数据来源状态展示', () => {
     });
 
     it('degraded 数据显示备用来源提示', () => {
-        expect(window.AppDataStatus.label({ degraded: true }, '东方财富')).toBe('已降级 · 东方财富');
+        expect(window.AppDataStatus.label({ degraded: true }, '新浪财经')).toBe('备用来源 · 新浪财经');
     });
 });

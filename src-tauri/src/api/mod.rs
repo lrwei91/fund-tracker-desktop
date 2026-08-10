@@ -99,35 +99,117 @@ mod tests {
             .expect("price anomaly live data");
         assert!(anomaly["items"].is_array());
         eprintln!("OK: price-anomaly");
-        let targets = [
-            ("stock", [("codes", "600519,000858,920982")].as_slice()),
-            ("cls-news", [("limit", "3")].as_slice()),
-            ("dragon-tiger", [].as_slice()),
+        let targets = vec![
+            ("stock", vec![("codes", "600519,000858,920982")]),
+            ("stock-search", vec![("q", "茅台")]),
+            ("hot-rank", vec![("source", "ths"), ("limit", "5")]),
+            ("limit-up", vec![("type", "zt"), ("limit", "5")]),
+            ("cls-news", vec![("limit", "3")]),
+            ("global-news", vec![("limit", "3")]),
+            ("news", vec![("limit", "3")]),
             (
-                "fund-flow-120d",
-                [("codes", "600519"), ("days", "60")].as_slice(),
+                "stock-news",
+                vec![("code", "600519"), ("name", "贵州茅台"), ("limit", "3")],
             ),
-            ("market-data", [("type", "index")].as_slice()),
-            ("market-data", [("type", "sector")].as_slice()),
+            ("stock-risk", vec![("code", "000858"), ("limit", "3")]),
+            ("dragon-tiger", vec![]),
+            ("fund-flow-120d", vec![("codes", "600519"), ("days", "60")]),
+            ("market-data", vec![("type", "index")]),
+            ("market-data", vec![("type", "capital")]),
             (
-                "stock-risk",
-                [("code", "000858"), ("limit", "3")].as_slice(),
+                "market-data",
+                vec![
+                    ("type", "sector"),
+                    ("boardType", "industry"),
+                    ("period", "today"),
+                ],
             ),
+            (
+                "market-data",
+                vec![
+                    ("type", "sector"),
+                    ("boardType", "concept"),
+                    ("period", "5d"),
+                ],
+            ),
+            (
+                "market-data",
+                vec![
+                    ("type", "sector"),
+                    ("boardType", "region"),
+                    ("period", "10d"),
+                ],
+            ),
+            ("stock-kline", vec![("code", "600519"), ("days", "120")]),
+            ("stock-minute", vec![("code", "600519"), ("count", "30")]),
+            ("opportunity-radar", vec![("limit", "3")]),
         ];
+        let mut failures = Vec::new();
         for (path, pairs) in targets {
             let query = pairs
                 .iter()
                 .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
                 .collect();
             let result = routes::dispatch(gateway.clone(), path, query).await;
-            assert_eq!(result["success"], true, "{path}: {result}");
+            if result["success"] != true {
+                failures.push(format!("{path}: {result}"));
+                eprintln!("FAIL: {path}");
+                continue;
+            }
             if path == "stock" {
                 assert!(result["data"]["600519"]["priceValue"].is_number());
                 assert!(result["data"]["000858"]["priceValue"].is_number());
                 assert!(result["data"]["920982"]["priceValue"].is_number());
                 assert_eq!(result["meta"]["missingCodes"], json!([]));
             }
+            let valid = match path {
+                "stock-search" => result["data"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()),
+                "global-news" => {
+                    result["data"]["data"]
+                        .as_array()
+                        .is_some_and(|rows| rows.len() >= 3)
+                        && result["data"]["nextCursor"].is_string()
+                }
+                "stock-news" => result["data"]["items"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()),
+                "stock-risk" => result["data"]["announcements"]["available"] == true,
+                "fund-flow-120d" => result["data"]["items"][0]["available"] == true,
+                "stock-kline" => result["data"]["bars"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()),
+                "opportunity-radar" => result["data"]["items"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()),
+                "market-data" if pairs.iter().any(|pair| pair == &("type", "capital")) => {
+                    result["data"]["mainFund"]["available"] == true
+                }
+                "market-data" if pairs.iter().any(|pair| pair == &("type", "sector")) => {
+                    result["data"]["inflow"]
+                        .as_array()
+                        .is_some_and(|rows| !rows.is_empty())
+                        || result["data"]["outflow"]
+                            .as_array()
+                            .is_some_and(|rows| !rows.is_empty())
+                }
+                _ => true,
+            };
+            if !valid {
+                failures.push(format!(
+                    "{path}: success response has incomplete data: {result}"
+                ));
+                eprintln!("FAIL: {path} incomplete data");
+                continue;
+            }
             eprintln!("OK: {path}");
         }
+        assert!(
+            failures.is_empty(),
+            "{} live data checks failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
     }
 }

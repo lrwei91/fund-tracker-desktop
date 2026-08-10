@@ -30,7 +30,7 @@
             </span>
             <span class="desktop-nav-copy">
                 <span class="desktop-nav-label">行情</span>
-                <span class="desktop-nav-meta">指数 · 自选 · 资金流</span>
+                <span class="desktop-nav-meta">指数 / 自选 / 资金流</span>
             </span>
         </button>
         <button class="desktop-nav-btn tab-btn" data-tab="signals" type="button">
@@ -43,7 +43,7 @@
             </span>
             <span class="desktop-nav-copy">
                 <span class="desktop-nav-label">信号</span>
-                <span class="desktop-nav-meta">机会 · 热度 · 打板</span>
+                <span class="desktop-nav-meta">机会 / 热度 / 打板</span>
             </span>
         </button>
         <button class="desktop-nav-btn tab-btn" data-tab="news" type="button">
@@ -55,7 +55,7 @@
             </span>
             <span class="desktop-nav-copy">
                 <span class="desktop-nav-label">快讯</span>
-                <span class="desktop-nav-meta">金十 · 东财资讯</span>
+                <span class="desktop-nav-meta">金十 / 财联社 / 东财</span>
             </span>
         </button>
     </nav>
@@ -92,11 +92,13 @@
 <header class="header" id="header">
     <div class="header-left">
         <h1 id="header-title">市场行情</h1>
-        <div class="header-subtitle" id="last-updated">等待更新</div>
-        <div class="refresh-status" id="refresh-status" aria-live="polite"></div>
+        <div class="header-meta">
+            <div class="header-subtitle" id="last-updated">等待更新</div>
+            <div class="refresh-status" id="refresh-status" aria-live="polite"></div>
+        </div>
     </div>
     <div class="header-right">
-        <span class="api-status-icon" aria-label="本地 API 已连接" title="本地 API 已连接"></span>
+        <span class="api-status" aria-label="本地 API 已连接" title="本地 API 已连接"><span class="api-status-icon"></span><span>API</span></span>
         <button class="header-btn electron-only" id="holding-window-btn" aria-label="打开持仓浮窗" title="持仓浮窗" hidden>浮窗</button>
         <button class="header-btn" id="refresh-btn" aria-label="刷新" title="刷新全部数据">刷新</button>
     </div>
@@ -185,7 +187,7 @@
                     <span class="watchlist-header-name">股票名</span>
                     <span class="watchlist-header-spark">走势</span>
                     <span class="watchlist-header-cost">成本价</span>
-                    <span class="watchlist-header-price">股价</span>
+                    <span class="watchlist-header-price">股价 / 涨跌</span>
                     <span class="watchlist-header-change">涨跌幅</span>
                     <span class="watchlist-header-action"></span>
                 </div>
@@ -273,12 +275,17 @@
     <!-- ==================== 市场信号 Tab ==================== -->
     <div class="tab-panel" id="tab-signals">
 
+        <div class="signal-workspace-tabs" role="tablist" aria-label="市场信号分类">
+            <button class="signal-workspace-tab active" type="button" role="tab" aria-selected="true" data-signal-view="radar">机会雷达</button>
+            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="heat">市场热度</button>
+            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="limit">打板情绪</button>
+        </div>
+
         <!-- 1. 机会雷达 -->
-        <section class="card opportunity-radar-section" data-collapsible="true">
-            <div class="card-header" role="button" tabindex="0">
+        <section class="card opportunity-radar-section signal-workspace-panel active" data-signal-panel="radar">
+            <div class="card-header">
                 <h2>机会雷达</h2>
                 <span class="opportunity-radar-header-time" id="opportunity-radar-update-time"></span>
-                <span class="collapse-icon">▼</span>
             </div>
             <div class="card-body">
                 <div class="opportunity-radar-list" id="opportunity-radar-list">
@@ -288,11 +295,10 @@
         </section>
 
         <!-- 2. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
-        <section class="card hot-rank-section" data-collapsible="true" data-collapsed="true">
-            <div class="card-header" role="button" tabindex="0">
+        <section class="card hot-rank-section signal-workspace-panel" data-signal-panel="heat" hidden>
+            <div class="card-header">
                 <h2>市场热度</h2>
                 <span class="hot-rank-header-time" id="hot-rank-update-time"></span>
-                <span class="collapse-icon">▼</span>
             </div>
             <div class="card-body">
                 <div class="hot-rank-tabs">
@@ -300,11 +306,25 @@
                     <button class="hot-rank-tab" data-source="em">东财人气榜</button>
                 </div>
                 <div class="hot-rank-panel active" id="hot-rank-panel-ths">
+                    <div class="hot-rank-table-head" role="row">
+                        <span role="columnheader">排名</span>
+                        <span role="columnheader">股票</span>
+                        <span role="columnheader">涨跌幅</span>
+                        <span role="columnheader">热度</span>
+                        <span role="columnheader">变化</span>
+                    </div>
                     <ul class="hot-rank-list" id="hot-rank-list-ths">
                         <li class="list-empty">加载中...</li>
                     </ul>
                 </div>
                 <div class="hot-rank-panel" id="hot-rank-panel-em">
+                    <div class="hot-rank-table-head" role="row">
+                        <span role="columnheader">排名</span>
+                        <span role="columnheader">股票</span>
+                        <span role="columnheader">价格</span>
+                        <span role="columnheader">涨跌幅</span>
+                        <span role="columnheader">变化</span>
+                    </div>
                     <ul class="hot-rank-list" id="hot-rank-list-em">
                         <li class="list-empty">加载中...</li>
                     </ul>
@@ -313,10 +333,9 @@
         </section>
 
         <!-- 3. 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停 + 情绪摘要) -->
-        <section class="card limit-up-section" data-collapsible="true" data-collapsed="true">
-            <div class="card-header" role="button" tabindex="0">
+        <section class="card limit-up-section signal-workspace-panel" data-signal-panel="limit" hidden>
+            <div class="card-header">
                 <h2>打板情绪</h2>
-                <span class="collapse-icon">▼</span>
             </div>
             <div class="card-body">
                 <div class="limit-up-summary" id="limit-up-summary"></div>
@@ -325,6 +344,13 @@
                     <button class="limit-up-tab" data-type="zb">炸板</button>
                     <button class="limit-up-tab" data-type="dt">跌停</button>
                     <button class="limit-up-tab" data-type="yzt">昨涨停</button>
+                </div>
+                <div class="limit-up-table-head" role="row">
+                    <span role="columnheader">股票</span>
+                    <span role="columnheader">涨跌幅</span>
+                    <span role="columnheader" id="limit-up-col-stat">连板</span>
+                    <span role="columnheader" id="limit-up-col-extra">封单</span>
+                    <span role="columnheader">行业</span>
                 </div>
                 <div class="limit-up-list" id="limit-up-list">
                     <div class="limit-up-empty">加载中...</div>
@@ -368,9 +394,19 @@
 <div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-panel-title">
     <div class="settings-header">
         <h3 id="settings-panel-title">设置</h3>
-        <button class="settings-close" id="settings-close">✕</button>
+        <button class="settings-close" id="settings-close" aria-label="关闭设置">✕</button>
     </div>
     <div class="settings-body">
+        <div class="settings-nav" role="tablist" aria-label="设置分类">
+            <button class="settings-nav-btn active" type="button" role="tab" aria-selected="true" data-settings-view="refresh">刷新</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
+        </div>
+        <section class="settings-view active" data-settings-panel="refresh">
+        <div class="settings-group-intro">
+            <strong>数据刷新</strong>
+            <span>分别控制行情、信号和快讯的更新节奏。</span>
+        </div>
         <div class="settings-row">
             <label>自动刷新</label>
             <label class="toggle">
@@ -378,7 +414,7 @@
                 <span class="toggle-track"></span>
             </label>
         </div>
-        <div class="settings-section-label">盘中行情 · 指数 / 自选股</div>
+        <div class="settings-section-label">盘中行情 / 指数与自选股</div>
         <div class="settings-row">
             <label>交易时段间隔</label>
             <select id="refresh-interval-main">
@@ -387,7 +423,7 @@
                 <option value="60">1分钟</option>
             </select>
         </div>
-        <div class="settings-section-label">信号数据 · 资金流 / 板块</div>
+        <div class="settings-section-label">信号数据 / 资金流与板块</div>
         <div class="settings-row">
             <label>有效时段间隔</label>
             <select id="refresh-interval-signal">
@@ -397,7 +433,7 @@
                 <option value="7200">2小时</option>
             </select>
         </div>
-        <div class="settings-section-label">财经新闻 · 全天刷新</div>
+        <div class="settings-section-label">财经新闻 / 全天刷新</div>
         <div class="settings-row">
             <label>刷新间隔</label>
             <select id="refresh-interval-news">
@@ -406,7 +442,12 @@
                 <option value="1800">30分钟</option>
             </select>
         </div>
-        <div class="settings-section-label">持仓股涨跌幅告警</div>
+        </section>
+        <section class="settings-view" data-settings-panel="alerts" hidden>
+        <div class="settings-group-intro">
+            <strong>持仓告警</strong>
+            <span>触发后显示桌面弹窗，可分别控制上涨和下跌提示音。</span>
+        </div>
         <div class="settings-row">
             <label>桌面弹窗提醒</label>
             <label class="toggle">
@@ -426,14 +467,14 @@
             <input type="range" id="alert-opacity-input" min="20" max="100" step="5" value="92" class="settings-range-input">
         </div>
         <div class="settings-row">
-            <label>🐂 小牛提示音</label>
+            <label>上涨提示音</label>
             <label class="toggle">
                 <input type="checkbox" id="bull-sound-toggle" checked>
                 <span class="toggle-track"></span>
             </label>
         </div>
         <div class="settings-row">
-            <label>🐻 小熊提示音</label>
+            <label>下跌提示音</label>
             <label class="toggle">
                 <input type="checkbox" id="bear-sound-toggle" checked>
                 <span class="toggle-track"></span>
@@ -443,7 +484,12 @@
             <button type="button" class="data-action-btn secondary" id="preview-bull-alert">测试上涨提醒</button>
             <button type="button" class="data-action-btn secondary" id="preview-bear-alert">测试下跌提醒</button>
         </div>
-        <div class="settings-section-label">桌面浮窗</div>
+        </section>
+        <section class="settings-view" data-settings-panel="widget" hidden>
+        <div class="settings-group-intro">
+            <strong>桌面浮窗</strong>
+            <span>控制持仓浮窗的价格配色和整体透明度。</span>
+        </div>
         <div class="settings-row">
             <label>价格颜色</label>
             <select id="holding-color-mode">
@@ -458,6 +504,7 @@
             </div>
             <input type="range" id="holding-opacity-input" min="0" max="100" step="1" value="100" class="settings-range-input">
         </div>
+        </section>
     </div>
 </div>
 
