@@ -12,6 +12,7 @@ const media = {
     addEventListener: vi.fn((_event, listener) => mediaListeners.add(listener)),
     removeEventListener: vi.fn((_event, listener) => mediaListeners.delete(listener)),
 };
+const emptyStorage = { getItem: () => null };
 
 describe('AppTheme', () => {
     beforeAll(() => {
@@ -20,9 +21,8 @@ describe('AppTheme', () => {
     });
 
     beforeEach(() => {
-        window.localStorage.clear();
         media.matches = false;
-        window.AppTheme.setMode('light', { prefersDark: false });
+        window.AppTheme.start({ storage: emptyStorage, window, media, document });
     });
 
     it('规范化主题模式，旧配置和非法值回退浅色', () => {
