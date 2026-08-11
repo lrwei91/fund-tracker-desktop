@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "description": "恭喜发财本地 Tauri 桌面应用",
   "private": true,
   "engines": {
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "npm run frontend:prepare && tauri dev",
     "frontend:prepare": "node scripts/prepare-tauri-frontend.js",
-    "check": "node --check app/config-schema.js && node --check app/tauri-shell.js && for f in renderer/*.js app/app.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done && cargo check --manifest-path src-tauri/Cargo.toml",
+    "check": "node --check app/config-schema.js && node --check app/theme.js && node --check app/tauri-shell.js && for f in renderer/*.js app/app.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done && cargo check --manifest-path src-tauri/Cargo.toml",
     "smoke": "node scripts/smoke-watchlist.js",
     "smoke:refresh": "vitest run test/refresh-coordinator.test.js",
     "smoke:data": "cargo test --manifest-path src-tauri/Cargo.toml live_data_smoke -- --nocapture",

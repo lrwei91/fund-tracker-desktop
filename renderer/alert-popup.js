@@ -1,4 +1,5 @@
 (function () {
+    var SETTINGS_KEY = 'fund_tracker_settings';
     var alertElement = document.getElementById('alert');
     var mascot = document.getElementById('mascot');
     var title = document.getElementById('alert-title');
@@ -10,6 +11,7 @@
 
     function showAlert(alert) {
         if (!alert || typeof alert.changePct !== 'number') return;
+        if (window.AppTheme) window.AppTheme.syncFromSettings(window.localStorage.getItem(SETTINGS_KEY));
         var rising = alert.changePct >= 0;
         var sign = alert.changePct > 0 ? '+' : '';
         mascot.textContent = rising ? '↑' : '↓';
@@ -32,5 +34,10 @@
 
     if (window.shell && typeof window.shell.onStockAlert === 'function') {
         window.shell.onStockAlert(showAlert);
+    }
+    if (window.AppStorage && typeof window.AppStorage.hydrate === 'function') {
+        window.AppStorage.hydrate().then(function () {
+            if (window.AppTheme) window.AppTheme.syncFromSettings(window.AppStorage.getItem(SETTINGS_KEY));
+        });
     }
 })();

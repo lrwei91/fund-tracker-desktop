@@ -24,7 +24,7 @@ module.exports = [
     },
     {
         // 浏览器渲染上下文(window.AppX / document / fetch)
-        files: ['app/app.js', 'app/tauri-shell.js', 'app/modules/**/*.js', 'renderer/**/*.js'],
+        files: ['app/app.js', 'app/theme.js', 'app/tauri-shell.js', 'app/modules/**/*.js', 'renderer/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script',

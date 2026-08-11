@@ -1,14 +1,35 @@
 :root {
-  --bg: #222f3a;
-  --surface: #31404d;
-  --text: #f4f6f7;
-  --muted: #9ba9b4;
-  --red: #ff7180;
-  --green: #43d39e;
-  --amber: #ffc069;
-  --border: #536675;
+  color-scheme: light;
+  --canvas: #ffffff;
+  --surface: #f7f7f3;
+  --text: #1a1a1a;
+  --muted: #73736c;
+  --red: #c73549;
+  --red-bg: #fbedef;
+  --green: #137a55;
+  --accent: #ffe28a;
+  --accent-soft: #fff4ca;
+  --accent-ink: #685100;
+  --focus: #315efb;
+  --border: #a7a79f;
   --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --mono: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #20201f;
+  --surface: #30302d;
+  --text: #f7f7f2;
+  --muted: #9b9b94;
+  --red: #ff7c8b;
+  --red-bg: #3b2427;
+  --green: #4cd6a0;
+  --accent: #ffe28a;
+  --accent-soft: #3c3623;
+  --accent-ink: #ffe28a;
+  --focus: #8ba8ff;
+  --border: #66665f;
 }
 
 * {
@@ -28,7 +49,7 @@ body {
 }
 
 button:focus-visible {
-  outline: 2px solid var(--amber);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -39,8 +60,8 @@ button:focus-visible {
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: linear-gradient(145deg, #2b3946, var(--bg));
-  box-shadow: 0 16px 40px rgba(7, 12, 17, 0.38);
+  background: var(--canvas);
+  box-shadow: none;
   opacity: var(--holding-opacity, 1);
   -webkit-app-region: drag;
 }
@@ -209,12 +230,12 @@ button:focus-visible {
 }
 
 #clown-mode-btn.active {
-  background: rgba(255, 192, 105, 0.17);
-  color: var(--amber);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
 }
 
 #close-btn:hover {
-  background: rgba(255, 113, 128, 0.14);
+  background: var(--red-bg);
   color: var(--red);
 }
 

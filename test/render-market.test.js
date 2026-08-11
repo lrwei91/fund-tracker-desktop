@@ -116,4 +116,23 @@ describe('板块资金流筛选', () => {
         expect(document.getElementById('medium-value').textContent).toBe('-6302.51亿');
         expect(document.getElementById('small-value').previousElementSibling.textContent).toBe('散户');
     });
+
+    it('刷新失败时保留本次会话已显示的指数并明确标记陈旧', async () => {
+        document.body.innerHTML = `
+            <section class="index-section">
+                <div class="card-header"><h2>大盘指数</h2></div>
+                <div data-index="shangzhi">
+                    <span id="shangzhi-value">3210.88</span>
+                    <span id="shangzhi-change">+0.52%</span>
+                </div>
+            </section>`;
+        window.AppState.liveIndexData = { shangzhi: { value: '3210.88', changePercent: 0.52 } };
+        window.AppDataClient.fetch = vi.fn().mockRejectedValue(new Error('offline'));
+
+        await window.AppMarket.loadIndexData(true);
+
+        expect(document.getElementById('shangzhi-value').textContent).toBe('3210.88');
+        expect(document.querySelector('.index-section').classList.contains('is-stale')).toBe(true);
+        expect(window.AppUtils.setLastUpdated).toHaveBeenCalledWith('行情更新失败 · 显示上次结果');
+    });
 });

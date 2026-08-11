@@ -2,6 +2,9 @@
 (function () {
     var state = window.AppState;
     var utils = window.AppUtils;
+    var uiState = window.AppUiState || {
+        render: function (_kind, options) { return '<div class="news-status">' + utils.escapeHtml(options.title) + '</div>'; },
+    };
     var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
     var KEYS = state.KEYS;
     var SOURCES = {
@@ -193,15 +196,25 @@
         var current = state.newsState[state.currentNewsSource];
         if (!current) return;
         if (current.isLoading && !current.items.length) {
-            container.innerHTML = '<div class="news-status news-loading">加载中...</div>';
+            container.innerHTML = uiState.render('loading', {
+                title: '正在加载快讯',
+                detail: '最新消息返回后会在这里更新。',
+            });
             return;
         }
         if (current.error && !current.items.length) {
-            container.innerHTML = '<div class="news-status news-error">' + utils.escapeHtml(SOURCES[state.currentNewsSource].label + '加载失败') + '</div>';
+            container.innerHTML = uiState.render('error', {
+                title: SOURCES[state.currentNewsSource].label + '暂不可用',
+                detail: '请检查网络或稍后重试。',
+                retryScope: 'news',
+            });
             return;
         }
         if (!current.items.length) {
-            container.innerHTML = '<div class="news-status news-empty">暂无' + utils.escapeHtml(SOURCES[state.currentNewsSource].label) + '</div>';
+            container.innerHTML = uiState.render('empty', {
+                title: '暂无' + SOURCES[state.currentNewsSource].label,
+                detail: '当前来源没有返回可显示的快讯。',
+            });
             return;
         }
         var statusLabel = current.stale
@@ -211,6 +224,11 @@
             utils.escapeHtml(statusLabel) + '</div>';
         var html = sourceStatus + current.items.map(renderNewsItem).join('');
         if (current.isLoading) html += '<div class="news-status news-loading">刷新中...</div>';
+        else if (current.error) html += uiState.render('error', {
+            title: '刷新失败，正在显示已有快讯',
+            detail: '旧内容已保留，可重新加载最新数据。',
+            retryScope: 'news',
+        });
         else if (current.hasMore) html += '<button type="button" class="news-status news-loadmore" data-news-load-more="1">加载更多</button>';
         else html += '<div class="news-status news-loadend">已经到底了</div>';
         container.innerHTML = html;

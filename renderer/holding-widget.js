@@ -148,11 +148,13 @@
     return {
       colorMode: settings.holdingColorMode === 'white' ? 'white' : 'market',
       opacity: Math.max(0, Math.min(100, Math.round(opacity))),
+      raw: settings,
     }
   }
 
   function applySettings() {
     var settings = readSettings()
+    if (window.AppTheme) window.AppTheme.syncFromSettings(settings.raw)
     shell.classList.toggle('white-mode', settings.colorMode === 'white')
     shell.style.setProperty('--holding-opacity', String(settings.opacity / 100))
   }

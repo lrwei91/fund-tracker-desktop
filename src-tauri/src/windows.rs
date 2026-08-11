@@ -197,7 +197,7 @@ pub fn create_auxiliary_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
     .visible(false)
     .build()?;
     let _ = holding.set_background_color(Some(if cfg!(windows) {
-        tauri::webview::Color(5, 6, 8, 255)
+        tauri::webview::Color(255, 255, 255, 255)
     } else {
         tauri::webview::Color(0, 0, 0, 0)
     }));

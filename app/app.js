@@ -34,6 +34,7 @@
 
     function getSettingsControls() {
         return {
+            colorMode: document.getElementById('color-mode-select'),
             autoRefresh: document.getElementById('auto-refresh-toggle'),
             mainInterval: document.getElementById('refresh-interval-main'),
             signalInterval: document.getElementById('refresh-interval-signal'),
@@ -60,6 +61,10 @@
 
     function loadSettings() {
         var saved = readSettings();
+        state.colorMode = window.AppTheme
+            ? window.AppTheme.normalizeMode(saved.colorMode)
+            : normalizeOptionValue(saved.colorMode, ['light', 'dark', 'system'], 'light');
+        if (window.AppTheme) window.AppTheme.setMode(state.colorMode);
         state.isAutoRefresh = typeof saved.autoRefresh === 'boolean' ? saved.autoRefresh : state.isAutoRefresh;
         state.refreshSecondsMain = parseInt(normalizeOptionValue(saved.mainInterval, ['10', '30', '60'], state.refreshSecondsMain), 10);
         state.refreshSecondsSignal = parseInt(normalizeOptionValue(saved.signalInterval, ['900', '1800', '3600', '7200'], state.refreshSecondsSignal), 10);
@@ -71,6 +76,7 @@
     function saveSettings() {
         try {
             window.AppStorage.setItem(KEYS.SETTINGS_KEY, JSON.stringify({
+                colorMode: state.colorMode,
                 autoRefresh: state.isAutoRefresh,
                 mainInterval: state.refreshSecondsMain,
                 signalInterval: state.refreshSecondsSignal,
@@ -83,6 +89,7 @@
 
     function syncSettingsControls() {
         var controls = getSettingsControls();
+        if (controls.colorMode) controls.colorMode.value = state.colorMode;
         if (controls.autoRefresh) controls.autoRefresh.checked = state.isAutoRefresh;
         if (controls.mainInterval) controls.mainInterval.value = String(state.refreshSecondsMain);
         if (controls.signalInterval) controls.signalInterval.value = String(state.refreshSecondsSignal);
@@ -271,26 +278,40 @@
         var closeBtn = document.getElementById('settings-close');
 
         function openSettings() {
-            overlay.classList.add('open');
-            panel.classList.add('open');
             openBtn.setAttribute('aria-expanded', 'true');
-            closeBtn.focus();
+            if (window.AppDialog) {
+                window.AppDialog.open(panel, overlay, {
+                    trigger: openBtn,
+                    openClass: 'open',
+                    hideOnClose: true,
+                    focusTarget: closeBtn,
+                    onClose: function () { openBtn.setAttribute('aria-expanded', 'false'); },
+                });
+            } else {
+                overlay.hidden = false;
+                panel.hidden = false;
+                overlay.classList.add('open');
+                panel.classList.add('open');
+                closeBtn.focus();
+            }
         }
 
         function closeSettings() {
-            overlay.classList.remove('open');
-            panel.classList.remove('open');
-            openBtn.setAttribute('aria-expanded', 'false');
-            openBtn.focus();
+            if (window.AppDialog) window.AppDialog.close(panel);
+            else {
+                overlay.classList.remove('open');
+                panel.classList.remove('open');
+                overlay.hidden = true;
+                panel.hidden = true;
+                openBtn.setAttribute('aria-expanded', 'false');
+                openBtn.focus();
+            }
         }
 
         openBtn.setAttribute('aria-expanded', 'false');
         openBtn.addEventListener('click', openSettings);
         closeBtn.addEventListener('click', closeSettings);
         overlay.addEventListener('click', closeSettings);
-        panel.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') closeSettings();
-        });
     }
 
     function initDataPanel() {
@@ -303,17 +324,34 @@
         var fileInput = document.getElementById('import-watchlist-file');
 
         function openPanel() {
-            overlay.classList.add('open');
-            panel.classList.add('open');
             openBtn.setAttribute('aria-expanded', 'true');
-            closeBtn.focus();
+            if (window.AppDialog) {
+                window.AppDialog.open(panel, overlay, {
+                    trigger: openBtn,
+                    openClass: 'open',
+                    hideOnClose: true,
+                    focusTarget: closeBtn,
+                    onClose: function () { openBtn.setAttribute('aria-expanded', 'false'); },
+                });
+            } else {
+                overlay.hidden = false;
+                panel.hidden = false;
+                overlay.classList.add('open');
+                panel.classList.add('open');
+                closeBtn.focus();
+            }
         }
 
         function closePanel() {
-            overlay.classList.remove('open');
-            panel.classList.remove('open');
-            openBtn.setAttribute('aria-expanded', 'false');
-            openBtn.focus();
+            if (window.AppDialog) window.AppDialog.close(panel);
+            else {
+                overlay.classList.remove('open');
+                panel.classList.remove('open');
+                overlay.hidden = true;
+                panel.hidden = true;
+                openBtn.setAttribute('aria-expanded', 'false');
+                openBtn.focus();
+            }
         }
 
         openBtn.setAttribute('aria-expanded', 'false');
@@ -326,9 +364,6 @@
         importBtn.addEventListener('click', function () { fileInput.click(); });
         fileInput.addEventListener('change', function (e) {
             if (window.AppWatchlist) window.AppWatchlist.importWatchlistData(e);
-        });
-        panel.addEventListener('keydown', function (event) {
-            if (event.key === 'Escape') closePanel();
         });
     }
 
@@ -363,6 +398,18 @@
     // ============================================================
 
     function bindEvents() {
+        var colorModeSelect = document.getElementById('color-mode-select');
+        if (colorModeSelect) {
+            colorModeSelect.addEventListener('change', function (e) {
+                state.colorMode = window.AppTheme
+                    ? window.AppTheme.normalizeMode(e.target.value)
+                    : normalizeOptionValue(e.target.value, ['light', 'dark', 'system'], 'light');
+                e.target.value = state.colorMode;
+                if (window.AppTheme) window.AppTheme.setMode(state.colorMode);
+                saveSettings();
+            });
+        }
+
         document.getElementById('auto-refresh-toggle').addEventListener('change', function (e) {
             state.isAutoRefresh = e.target.checked;
             saveSettings();
@@ -543,6 +590,29 @@
             : Promise.resolve();
     }
 
+    function initUiStateRetries() {
+        if (!window.AppUiState) return;
+        window.AppUiState.bindRetries(document, function (scope, button) {
+            var coordinator = window.AppRefreshCoordinator;
+            if (!coordinator || !button || button.disabled) return;
+            var refresh = {
+                all: coordinator.refreshAll,
+                main: coordinator.refreshMain,
+                news: coordinator.refreshNews,
+                signals: coordinator.refreshSignals,
+            }[scope];
+            if (typeof refresh !== 'function') return;
+            var originalText = button.textContent;
+            button.disabled = true;
+            button.textContent = '加载中';
+            Promise.resolve(refresh.call(coordinator, { force: true })).finally(function () {
+                if (!button.isConnected) return;
+                button.disabled = false;
+                button.textContent = originalText;
+            });
+        });
+    }
+
     // ============================================================
     // DOMContentLoaded — 启动入口
     // ============================================================
@@ -565,6 +635,7 @@
         initDataPanel();
         initHoldingWindowButton();
         bindEvents();
+        initUiStateRetries();
         if (window.AppWatchlist) window.AppWatchlist.initStockFundFlowModal();
         if (window.AppSignals) window.AppSignals.initLimitUpTabs();
         initAutoRefresh();

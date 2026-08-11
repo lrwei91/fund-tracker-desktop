@@ -9,6 +9,9 @@
     var state = window.AppState;
     var utils = window.AppUtils;
     var cache = window.AppCache;
+    var uiState = window.AppUiState || {
+        render: function (_kind, options) { return '<div class="list-empty">' + utils.escapeHtml(options.title) + '</div>'; },
+    };
     var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
     var KEYS = state.KEYS;
 
@@ -66,7 +69,10 @@
             return;
         }
         if (!cached || !cached.data || !Array.isArray(cached.data.items)) {
-            container.innerHTML = '<div class="opportunity-radar-empty">扫描中...</div>';
+            container.innerHTML = uiState.render('loading', {
+                title: '正在扫描机会',
+                detail: '候选信号返回后会在这里更新。',
+            });
         }
 
         try {
@@ -93,9 +99,6 @@
                 return;
             }
             renderOpportunityRadarError();
-            if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
-                window.AppAlerts.showStatusToast('机会雷达接口暂不可用', 'error');
-            }
         }
     }
 
@@ -111,7 +114,10 @@
             timeEl.textContent = '缓存数据';
         }
         if (!items.length) {
-            container.innerHTML = '<div class="opportunity-radar-empty">暂无候选信号</div>';
+            container.innerHTML = uiState.render('empty', {
+                title: '暂无候选信号',
+                detail: '当前筛选条件下没有满足要求的机会。',
+            });
             return;
         }
         container.innerHTML = items.map(renderOpportunityRadarItem).join('');
@@ -194,7 +200,11 @@
 
     function renderOpportunityRadarError() {
         var container = document.getElementById('opportunity-radar-list');
-        if (container) container.innerHTML = '<div class="opportunity-radar-empty">机会雷达加载失败</div>';
+        if (container) container.innerHTML = uiState.render('error', {
+            title: '机会雷达暂不可用',
+            detail: '请稍后重试，缓存内容不会被覆盖。',
+            retryScope: 'signals',
+        });
     }
 
     // ============================================================
@@ -231,10 +241,6 @@
                 return;
             }
             renderHotRankError(source);
-            // 关键 fetch 失败 → toast 提示
-            if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
-                window.AppAlerts.showStatusToast('市场热度接口暂不可用', 'error');
-            }
         }
     }
 
@@ -243,7 +249,13 @@
         var listEl = document.getElementById(listId);
         var timeEl = document.getElementById('hot-rank-update-time');
         if (!listEl) return;
-        if (!items.length) { listEl.innerHTML = '<li class="list-empty">暂无数据</li>'; return; }
+        if (!items.length) {
+            listEl.innerHTML = '<li class="ui-state-host">' + uiState.render('empty', {
+                title: '暂无热榜数据',
+                detail: '当前来源没有返回有效排名。',
+            }) + '</li>';
+            return;
+        }
         if (timeEl && fresh) {
             timeEl.textContent = dataStatus.label(meta, '更新 ') + utils.formatShanghaiTime(new Date().toISOString());
         } else if (timeEl && !fresh) {
@@ -285,7 +297,11 @@
     function renderHotRankError(source) {
         var listId = source === 'em' ? 'hot-rank-list-em' : 'hot-rank-list-ths';
         var listEl = document.getElementById(listId);
-        if (listEl) listEl.innerHTML = '<li class="list-empty">市场热度接口暂不可用</li>';
+        if (listEl) listEl.innerHTML = '<li class="ui-state-host">' + uiState.render('error', {
+            title: '市场热度暂不可用',
+            detail: '请稍后重新加载当前榜单。',
+            retryScope: 'signals',
+        }) + '</li>';
     }
 
     function initHotRankTabs() {
@@ -403,10 +419,21 @@
 
         function renderItems(type, data) {
             if (!data || !Array.isArray(data.items) || data.items.length === 0) {
-                list.innerHTML = '<div class="limit-up-empty">暂无' + KEYS.LIMIT_UP_TAB_LABELS[type] + '数据 (非交易日或接口暂不可用)</div>';
+                list.innerHTML = uiState.render('empty', {
+                    title: '暂无' + KEYS.LIMIT_UP_TAB_LABELS[type] + '数据',
+                    detail: '当前交易日没有返回可显示的股票。',
+                });
                 return;
             }
             list.innerHTML = data.items.map(function (it) { return renderRow(type, it); }).join('');
+        }
+
+        function renderError(type) {
+            list.innerHTML = uiState.render('error', {
+                title: KEYS.LIMIT_UP_TAB_LABELS[type] + '数据暂不可用',
+                detail: '请稍后重试，缓存可用时仍会优先显示缓存。',
+                retryScope: 'signals',
+            });
         }
 
         function renderSummary(s) {
@@ -460,7 +487,10 @@
         if (!bypassCache && typeCached && typeCached.date === todayKey && typeCached.data) {
             renderItems(activeType, typeCached.data);
         } else {
-            list.innerHTML = '<div class="limit-up-empty">加载中...</div>';
+            list.innerHTML = uiState.render('loading', {
+                title: '正在加载' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '数据',
+                detail: '最新列表返回后会在这里更新。',
+            });
             try {
                 var r = await window.AppDataClient.fetch('/limit-up', { type: activeType, limit: 100 }, requestOptions(force));
                 var j = await r.json();
@@ -470,24 +500,14 @@
                 } else if (typeCached && typeCached.date === todayKey && typeCached.data) {
                     renderItems(activeType, typeCached.data);
                 } else {
-                    renderItems(activeType, null);
-                    // 关键 fetch 失败 → toast 提示
-                    if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
-                        window.AppAlerts.showStatusToast(
-                            '打板情绪' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
-                    }
+                    renderError(activeType);
                 }
             } catch (e) {
                 console.error('打板情绪' + activeType + '获取失败:', e);
                 if (typeCached && typeCached.date === todayKey && typeCached.data) {
                     renderItems(activeType, typeCached.data);
                 } else {
-                    renderItems(activeType, null);
-                    // 关键 fetch 失败 → toast 提示
-                    if (window.AppAlerts && typeof window.AppAlerts.showStatusToast === 'function') {
-                        window.AppAlerts.showStatusToast(
-                            '打板情绪' + KEYS.LIMIT_UP_TAB_LABELS[activeType] + '接口暂不可用', 'error');
-                    }
+                    renderError(activeType);
                 }
             }
         }

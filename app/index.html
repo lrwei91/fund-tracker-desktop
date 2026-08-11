@@ -1,9 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-color-mode="light" data-theme="light">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
     <title>恭喜发财</title>
+    <script src="theme.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body class="electron-app">
@@ -11,7 +13,7 @@
 <!-- 涨跌幅告警弹窗容器(固定在屏幕最顶部) -->
 <div class="alert-toast-container" id="alert-toast-container" aria-live="polite"></div>
 
-<div class="app-shell">
+<div class="app-shell" id="app-shell">
 <aside class="desktop-sidebar" aria-label="桌面导航">
     <div class="desktop-brand">
         <div class="desktop-brand-mark">G</div>
@@ -21,7 +23,7 @@
         </div>
     </div>
     <nav class="desktop-nav">
-        <button class="desktop-nav-btn tab-btn active" data-tab="dashboard" type="button">
+        <button class="desktop-nav-btn tab-btn active" data-tab="dashboard" type="button" aria-label="行情">
             <span class="desktop-nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                     <path d="M4 17.5h16M6 14l3.5-3.5 3 3L18 7" />
@@ -33,7 +35,7 @@
                 <span class="desktop-nav-meta">指数 / 自选 / 资金流</span>
             </span>
         </button>
-        <button class="desktop-nav-btn tab-btn" data-tab="signals" type="button">
+        <button class="desktop-nav-btn tab-btn" data-tab="signals" type="button" aria-label="信号">
             <span class="desktop-nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                     <path d="M5 18h14" />
@@ -46,7 +48,7 @@
                 <span class="desktop-nav-meta">机会 / 热度 / 打板</span>
             </span>
         </button>
-        <button class="desktop-nav-btn tab-btn" data-tab="news" type="button">
+        <button class="desktop-nav-btn tab-btn" data-tab="news" type="button" aria-label="快讯">
             <span class="desktop-nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
                     <path d="M6 5.5h12v13H6z" />
@@ -192,7 +194,7 @@
                     <span class="watchlist-header-action"></span>
                 </div>
                 <div class="watchlist-grid" id="watchlist-grid">
-                    <div class="watchlist-empty">暂无自选股</div>
+                    <div class="ui-state ui-state--empty" data-ui-state="empty" role="status"><strong class="ui-state-title">暂无自选股</strong><span class="ui-state-detail">通过上方输入框添加代码或股票名称。</span></div>
                 </div>
             </div>
         </section>
@@ -289,7 +291,11 @@
             </div>
             <div class="card-body">
                 <div class="opportunity-radar-list" id="opportunity-radar-list">
-                    <div class="opportunity-radar-empty">加载中...</div>
+                    <div class="ui-state ui-state--loading" data-ui-state="loading" role="status">
+                        <strong class="ui-state-title">正在扫描机会</strong>
+                        <span class="ui-state-detail">候选信号返回后会在这里更新。</span>
+                        <div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -314,7 +320,7 @@
                         <span role="columnheader">变化</span>
                     </div>
                     <ul class="hot-rank-list" id="hot-rank-list-ths">
-                        <li class="list-empty">加载中...</li>
+                        <li class="ui-state ui-state--loading" data-ui-state="loading" role="status"><strong class="ui-state-title">正在加载热榜</strong><span class="ui-state-detail">保留当前结构，等待最新排名。</span><div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></li>
                     </ul>
                 </div>
                 <div class="hot-rank-panel" id="hot-rank-panel-em">
@@ -326,7 +332,7 @@
                         <span role="columnheader">变化</span>
                     </div>
                     <ul class="hot-rank-list" id="hot-rank-list-em">
-                        <li class="list-empty">加载中...</li>
+                        <li class="ui-state ui-state--loading" data-ui-state="loading" role="status"><strong class="ui-state-title">正在加载热榜</strong><span class="ui-state-detail">保留当前结构，等待最新排名。</span><div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></li>
                     </ul>
                 </div>
             </div>
@@ -353,7 +359,7 @@
                     <span role="columnheader">行业</span>
                 </div>
                 <div class="limit-up-list" id="limit-up-list">
-                    <div class="limit-up-empty">加载中...</div>
+                    <div class="ui-state ui-state--loading" data-ui-state="loading" role="status"><strong class="ui-state-title">正在加载打板数据</strong><span class="ui-state-detail">列表返回后会在这里更新。</span><div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
                 </div>
             </div>
         </section>
@@ -373,7 +379,11 @@
                     <button class="news-source-tab" data-source="eastmoney">东财资讯</button>
                 </div>
                 <div class="news-list" id="news-list">
-                    <div class="news-empty">加载中...</div>
+                    <div class="ui-state ui-state--loading" data-ui-state="loading" role="status">
+                        <strong class="ui-state-title">正在加载快讯</strong>
+                        <span class="ui-state-detail">最新消息返回后会在这里更新。</span>
+                        <div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -390,19 +400,37 @@
 </div>
 
 <!-- 设置面板 -->
-<div class="settings-overlay" id="settings-overlay"></div>
-<div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-panel-title">
+<div class="settings-overlay" id="settings-overlay" hidden></div>
+<div class="settings-panel" id="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-panel-title" hidden>
     <div class="settings-header">
         <h3 id="settings-panel-title">设置</h3>
         <button class="settings-close" id="settings-close" aria-label="关闭设置">✕</button>
     </div>
     <div class="settings-body">
         <div class="settings-nav" role="tablist" aria-label="设置分类">
-            <button class="settings-nav-btn active" type="button" role="tab" aria-selected="true" data-settings-view="refresh">刷新</button>
+            <button class="settings-nav-btn active" type="button" role="tab" aria-selected="true" data-settings-view="appearance">外观</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="refresh">刷新</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
         </div>
-        <section class="settings-view active" data-settings-panel="refresh">
+        <section class="settings-view active" data-settings-panel="appearance">
+        <div class="settings-group-intro">
+            <strong>应用外观</strong>
+            <span>主窗口、持仓浮窗和桌面告警使用同一套显示模式。</span>
+        </div>
+        <div class="settings-row">
+            <label for="color-mode-select">显示模式</label>
+            <select id="color-mode-select">
+                <option value="light" selected>浅色</option>
+                <option value="dark">深色</option>
+                <option value="system">跟随系统</option>
+            </select>
+        </div>
+        <div class="settings-appearance-preview" aria-hidden="true">
+            <span></span><span></span><span></span>
+        </div>
+        </section>
+        <section class="settings-view" data-settings-panel="refresh" hidden>
         <div class="settings-group-intro">
             <strong>数据刷新</strong>
             <span>分别控制行情、信号和快讯的更新节奏。</span>
@@ -494,7 +522,7 @@
             <label>价格颜色</label>
             <select id="holding-color-mode">
                 <option value="market" selected>红绿显示</option>
-                <option value="white">全部白色</option>
+                <option value="white">单色显示</option>
             </select>
         </div>
         <div class="settings-row settings-row-stacked">
@@ -509,8 +537,8 @@
 </div>
 
 <!-- 自选数据面板 -->
-<div class="data-overlay" id="data-overlay"></div>
-<div class="data-panel" id="data-panel" role="dialog" aria-modal="true" aria-labelledby="data-panel-title">
+<div class="data-overlay" id="data-overlay" hidden></div>
+<div class="data-panel" id="data-panel" role="dialog" aria-modal="true" aria-labelledby="data-panel-title" hidden>
     <div class="settings-header">
         <h3 id="data-panel-title">自选数据</h3>
         <button class="settings-close" id="data-close" aria-label="关闭">✕</button>
@@ -543,7 +571,7 @@
         <button class="modal-close" id="stock-fund-close" aria-label="关闭">✕</button>
     </div>
     <div class="modal-body" id="stock-fund-body">
-        <div class="list-empty">加载中...</div>
+        <div class="ui-state ui-state--loading" data-ui-state="loading" role="status"><strong class="ui-state-title">正在加载个股详情</strong><span class="ui-state-detail">行情、技术面和资金数据返回后会在这里更新。</span><div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
     </div>
 </div>
 
@@ -552,6 +580,8 @@
 <script src="config-schema.js"></script>
 <script src="modules/storage.js"></script>
 <script src="modules/utils.js"></script>
+<script src="modules/ui-state.js"></script>
+<script src="modules/dialog.js"></script>
 <script src="modules/state.js"></script>
 <script src="modules/cache.js"></script>
 <script src="modules/data-client.js"></script>

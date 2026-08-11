@@ -7,6 +7,9 @@
     var W = window.__watch;
     var state = W.state;
     var utils = W.utils;
+    var uiState = window.AppUiState || {
+        render: function (_kind, options) { return '<div class="list-empty">' + utils.escapeHtml(options.title) + '</div>'; },
+    };
     var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
 
     async function loadStockMinuteData(code) {
@@ -73,17 +76,31 @@
         return json.data;
     }
 
-    async function showStockFundFlow(code) {
+    async function showStockFundFlow(code, trigger) {
         var panel = document.getElementById('stock-fund-panel');
         var overlay = document.getElementById('stock-fund-overlay');
         var body = document.getElementById('stock-fund-body');
         var title = document.getElementById('stock-fund-title');
         if (!panel || !overlay || !body || !title) return;
-        if (overlay.hidden) overlay.hidden = false;
-        if (panel.hidden) panel.hidden = false;
+        if (window.AppDialog) {
+            window.AppDialog.open(panel, overlay, {
+                trigger: trigger || document.activeElement,
+                restoreFocus: function () {
+                    return document.querySelector('.watchlist-item[data-code="' + code + '"] .watchlist-detail-trigger');
+                },
+                hideOnClose: true,
+                focusTarget: document.getElementById('stock-fund-close'),
+            });
+        } else {
+            overlay.hidden = false;
+            panel.hidden = false;
+        }
         var cachedQuote = state.watchQuoteCache[code];
         title.textContent = W.getDisplayStockName(code, cachedQuote && cachedQuote.name) + ' (' + code + ')';
-        body.innerHTML = '<div class="list-empty">加载中...</div>';
+        body.innerHTML = uiState.render('loading', {
+            title: '正在加载个股详情',
+            detail: '行情、技术面和资金数据返回后会在这里更新。',
+        });
 
         var loaders = [
             function () { return loadStockMinuteData(code); },

@@ -100,6 +100,10 @@
     function closeStockFundFlow() {
         var panel = document.getElementById('stock-fund-panel');
         var overlay = document.getElementById('stock-fund-overlay');
+        if (panel && window.AppDialog) {
+            window.AppDialog.close(panel);
+            return;
+        }
         if (panel) panel.hidden = true;
         if (overlay) overlay.hidden = true;
     }
@@ -118,12 +122,6 @@
                 W.saveStockCostFromForm(form);
             });
         }
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                var panel = document.getElementById('stock-fund-panel');
-                if (panel && !panel.hidden) closeStockFundFlow();
-            }
-        });
     }
 
     W.renderStockFundFlowBody = renderStockFundFlowBody;

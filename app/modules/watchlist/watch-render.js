@@ -7,6 +7,9 @@
     var W = window.__watch;
     var state = W.state;
     var utils = W.utils;
+    var uiState = window.AppUiState || {
+        render: function (_kind, options) { return '<div class="watchlist-empty">' + utils.escapeHtml(options.title) + '</div>'; },
+    };
     var KEYS = W.KEYS;
 
     var watchSparkCache = {};
@@ -89,7 +92,10 @@
         var activeTab = W.getActiveWatchTab();
         var showCost = W.isHoldingTab();
         if (codes.length === 0) {
-            grid.innerHTML = '<div class="watchlist-empty">“' + utils.escapeHtml(activeTab.name) + '”暂无股票</div>';
+            grid.innerHTML = uiState.render('empty', {
+                title: '“' + activeTab.name + '”暂无股票',
+                detail: '通过上方输入框添加代码或股票名称。',
+            });
             if (updateTimeEl) updateTimeEl.textContent = '';
             return;
         }
@@ -139,9 +145,17 @@
     function applyWatchQuoteBatch(result, requestedCodes) {
         var codes = W.sanitizeCodes(requestedCodes || W.getAllWatchCodes());
         if (!result || result.success === false || !result.data) {
+            var hadDisplayedQuotes = Object.keys(state.watchQuoteFreshCodes || {}).length > 0;
             state.watchQuoteFreshCodes = {};
             try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (e) {}
-            renderWatchlist();
+            if (hadDisplayedQuotes) {
+                var section = document.querySelector('.watchlist-section');
+                if (section) section.classList.add('is-stale');
+                var updateTime = document.getElementById('watchlist-update-time');
+                if (updateTime) updateTime.textContent = '更新失败 · 显示上次行情';
+            } else {
+                renderWatchlist();
+            }
             return false;
         }
         var freshCodes = {};
@@ -153,6 +167,8 @@
             }
         });
         state.watchQuoteFreshCodes = freshCodes;
+        var activeSection = document.querySelector('.watchlist-section');
+        if (activeSection) activeSection.classList.remove('is-stale');
         try {
             window.AppStorage.setItem(
                 KEYS.WATCH_QUOTE_STATUS_KEY,
@@ -173,9 +189,19 @@
     }
 
     function markQuoteUnavailable(watchCodes, customCodes) {
+        var hadDisplayedQuotes = Object.keys(state.watchQuoteFreshCodes || {}).length > 0;
         state.watchQuoteFreshCodes = {};
         try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (e) {}
-        if (watchCodes && watchCodes.length) renderWatchlist();
+        if (watchCodes && watchCodes.length) {
+            if (hadDisplayedQuotes) {
+                var section = document.querySelector('.watchlist-section');
+                if (section) section.classList.add('is-stale');
+                var updateTime = document.getElementById('watchlist-update-time');
+                if (updateTime) updateTime.textContent = '更新失败 · 显示上次行情';
+            } else {
+                renderWatchlist();
+            }
+        }
         if (customCodes && customCodes.length) {
             state.customIndexFreshCodes = {};
             if (typeof W.renderCustomIndex === 'function') W.renderCustomIndex();
@@ -261,6 +287,7 @@
         var costCell = showCost ? renderCostCell(code, priceValue) : '';
         var spark = renderWatchSparklineCell(code, cls, fresh);
         return '<div class="watchlist-item clickable" data-code="' + utils.escapeHtml(code) + '" data-pct="' + utils.escapeHtml(changePercent) + '">' +
+            '<button class="watchlist-detail-trigger" type="button" aria-label="查看 ' + utils.escapeHtml(name) + ' ' + utils.escapeHtml(code) + ' 详情"></button>' +
             '<div class="watchlist-item-main">' +
             '<div class="watchlist-stock-name">' + utils.escapeHtml(name) + '</div>' +
             '<div class="watchlist-stock-code">' + utils.escapeHtml(code) + '</div></div>' +
@@ -448,11 +475,12 @@
         if (!grid || grid.dataset.clickBound === 'true') return;
         grid.dataset.clickBound = 'true';
         grid.addEventListener('click', function (e) {
-            if (e.target.closest('.watchlist-remove-btn')) return;
-            var item = e.target.closest('.watchlist-item');
+            var trigger = e.target.closest('.watchlist-detail-trigger');
+            if (!trigger) return;
+            var item = trigger.closest('.watchlist-item');
             if (!item) return;
             var code = item.getAttribute('data-code');
-            if (code) W.showStockFundFlow(code);
+            if (code) W.showStockFundFlow(code, trigger);
         });
     }
 

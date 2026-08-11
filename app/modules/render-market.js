@@ -9,6 +9,9 @@
     var state = window.AppState;
     var utils = window.AppUtils;
     var cache = window.AppCache;
+    var uiState = window.AppUiState || {
+        render: function (_kind, options) { return '<div class="list-empty">' + utils.escapeHtml(options.title) + '</div>'; },
+    };
     var KEYS = state.KEYS;
     var SECTOR_BOARD_TYPES = ['industry', 'concept', 'region'];
     var SECTOR_PERIODS = ['today', '5d', '10d'];
@@ -256,6 +259,11 @@
         };
     }
 
+    function setSectionStale(selector, stale) {
+        var section = document.querySelector(selector);
+        if (section) section.classList.toggle('is-stale', !!stale);
+    }
+
     async function loadIndexData(force) {
         try {
             var res = await window.AppDataClient.fetch('/market-data', { type: 'index' }, requestOptions(force));
@@ -263,20 +271,26 @@
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
             state.liveIndexData = result.data;
+            setSectionStale('.index-section', false);
             cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.index, result.data);
             Object.keys(result.data).forEach(function (id) { updateIndexUI(id, result.data[id]); });
             // 节流落盘:刷新节奏不变,只决定 prev 落盘的节奏
             persistIndexPrevIfDue('market', snapshotIndexPrice(result.data));
             utils.setLastUpdated('行情已更新');
         } catch (e) {
-            state.liveIndexData = null;
-            clearIndexUI();
-            utils.setLastUpdated('行情获取失败');
+            if (state.liveIndexData) {
+                setSectionStale('.index-section', true);
+                utils.setLastUpdated('行情更新失败 · 显示上次结果');
+            } else {
+                clearIndexUI();
+                utils.setLastUpdated('行情获取失败');
+            }
         }
     }
 
     async function loadCapitalData(force) {
-        var newData = null;
+        var newData = state.liveCapitalData;
+        var updated = false;
 
         try {
             var res = await window.AppDataClient.fetch('/market-data', { type: 'capital' }, requestOptions(force));
@@ -284,13 +298,13 @@
             var result = await res.json();
             if (result.success && result.data && result.data.mainFund && result.data.mainFund.value !== undefined) {
                 newData = result.data;
+                updated = true;
                 cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.capital, result.data);
             }
-        } catch (e) {
-            newData = null;
-        }
+        } catch (e) {}
 
         state.liveCapitalData = newData;
+        setSectionStale('.capital-section', !updated && !!newData);
         renderCapitalUI(state.liveCapitalData || {});
     }
 
@@ -380,7 +394,10 @@
         }
 
         function renderBars(items, sign) {
-            if (!items.length) return '<div class="list-empty">暂无' + (sign > 0 ? '流入' : '流出') + '数据</div>';
+            if (!items.length) return uiState.render('empty', {
+                title: '暂无' + (sign > 0 ? '流入' : '流出') + '数据',
+                detail: '当前板块类型和周期没有返回有效排名。',
+            });
             return items.map(function (s) {
                 var w = pctOf(s);
                 var cls = pctClass(s.changePct);
