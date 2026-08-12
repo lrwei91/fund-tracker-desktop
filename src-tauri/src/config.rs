@@ -19,6 +19,7 @@ const KEYS: &[&str] = &[
     "fund_tracker_hot_rank_source",
     "fund_tracker_limit_up_tab",
     "fund_tracker_holding_clown_mode",
+    "fund_tracker_fund_watchlist",
 ];
 const JSON_KEYS: &[&str] = &[
     "fund_tracker_settings",
@@ -30,6 +31,7 @@ const JSON_KEYS: &[&str] = &[
     "fund_tracker_watchlist_remarks",
     "fund_tracker_watchlist",
     "fund_tracker_watchlist_tabs",
+    "fund_tracker_fund_watchlist",
 ];
 
 pub struct ConfigStore {

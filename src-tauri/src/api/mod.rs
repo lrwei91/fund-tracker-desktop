@@ -103,6 +103,8 @@ mod tests {
         let targets = vec![
             ("stock", vec![("codes", "600519,000858,920982")]),
             ("stock-search", vec![("q", "茅台")]),
+            ("fund-search", vec![("q", "易方达消费")]),
+            ("fund-quotes", vec![("codes", "110022,000001")]),
             ("hot-rank", vec![("source", "ths"), ("limit", "5")]),
             ("limit-up", vec![("type", "zt"), ("limit", "5")]),
             ("cls-news", vec![("limit", "3")]),
@@ -169,6 +171,13 @@ mod tests {
                 "stock-search" => result["data"]
                     .as_array()
                     .is_some_and(|rows| !rows.is_empty()),
+                "fund-search" => result["data"]
+                    .as_array()
+                    .is_some_and(|rows| !rows.is_empty()),
+                "fund-quotes" => {
+                    result["data"]["110022"]["unitNav"].is_number()
+                        && result["data"]["110022"]["dayChangePercent"].is_number()
+                }
                 "global-news" => {
                     result["data"]["data"]
                         .as_array()

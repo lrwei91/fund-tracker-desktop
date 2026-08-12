@@ -19,6 +19,17 @@
     "data": [{"code": "600000", "name": "浦发银行"}],
     "meta": {"degraded": false, "stale": false}
   },
+  "fund-search": {
+    "success": true,
+    "data": [{"code": "110022", "name": "易方达消费行业股票", "type": "股票型", "company": "易方达基金", "nav": 2.95, "navDate": "2026-08-12"}],
+    "meta": {"degraded": false, "stale": false, "sources": {"search": {"actual": "eastmoney-fund"}}}
+  },
+  "fund-quotes": {
+    "success": true,
+    "data": {"110022": {"code": "110022", "name": "易方达消费行业股票", "unitNav": 2.95, "cumulativeNav": 2.95, "previousNav": 2.953, "navChange": -0.003, "dayChangePercent": -0.1, "navDate": "2026-08-12"}},
+    "time": "2026-08-12",
+    "meta": {"degraded": false, "stale": false, "missingCodes": [], "sources": {"quotes": {"actual": "sina-fund"}}}
+  },
   "hot-rank": {
     "success": true,
     "data": {"source": "ths", "items": []},

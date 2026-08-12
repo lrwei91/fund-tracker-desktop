@@ -29,8 +29,8 @@ async function bootstrapApp(options = {}) {
             ACTIVE_TAB_KEY: 'fund_tracker_active_main_tab',
             SETTINGS_KEY: 'fund_tracker_settings',
             COLLAPSE_STATE_KEY: 'fund_tracker_collapse_state',
-            VALID_TABS: ['dashboard', 'signals', 'news'],
-            TAB_TITLES: { dashboard: '市场行情', signals: '市场信号', news: '财经快讯' },
+            VALID_TABS: ['dashboard', 'signals', 'funds', 'news'],
+            TAB_TITLES: { dashboard: '市场行情', signals: '市场信号', funds: '自选基金', news: '财经快讯' },
         },
         colorMode: 'light',
         isAutoRefresh: false,
@@ -74,7 +74,7 @@ describe('主界面信息架构', () => {
             .map((button) => button.getAttribute('data-settings-view'));
 
         expect(navigationButtons.map((button) => button.getAttribute('aria-label')))
-            .toEqual(['行情', '信号', '快讯', '设置']);
+            .toEqual(['行情', '信号', '基金', '快讯', '设置']);
         expect(doc.querySelector('.desktop-sidebar-footer')).toBeNull();
         expect(doc.getElementById('watchlist-data-btn')).toBeNull();
         expect(doc.getElementById('data-panel')).toBeNull();
@@ -151,14 +151,32 @@ describe('主界面信息架构', () => {
         }
     });
 
-    it('四个入口位于同一导航组并共享尺寸规则', () => {
+    it('五个入口位于同一导航组并共享尺寸规则', () => {
         const doc = parseIndex();
-        expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(4);
+        expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(5);
         expect(doc.querySelector('[data-tab="dashboard"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('market');
         expect(doc.querySelector('[data-tab="signals"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('radar');
+        expect(doc.querySelector('[data-tab="funds"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('fund');
         expect(styles).toMatch(/\.desktop-nav-btn\s*\{[\s\S]*?flex:\s*1;/);
         expect(styles).toMatch(/@media \(min-width: 1280px\)[\s\S]*?\.desktop-nav-btn\s*\{[\s\S]*?height:\s*58px;/);
         expect(styles).not.toMatch(/\.desktop-sidebar-footer\s*\{/);
+    });
+
+    it('基金 Tab 紧跟信号，并提供独立自选基金表格', () => {
+        const doc = parseIndex();
+        const desktopTabs = Array.from(doc.querySelectorAll('.desktop-nav > .tab-btn'))
+            .map((button) => button.dataset.tab);
+        expect(desktopTabs).toEqual(['dashboard', 'signals', 'funds', 'news']);
+        const panel = doc.getElementById('tab-funds');
+        expect(panel.querySelector('#fund-input')).not.toBeNull();
+        expect(panel.querySelector('#add-fund-btn').textContent).toBe('添加基金');
+        expect(panel.querySelectorAll('.fund-watch-table-head [role="columnheader"]')).toHaveLength(6);
+        expect(panel.textContent).toContain('单位净值');
+        expect(panel.textContent).toContain('日涨跌');
+        expect(styles).toMatch(/\.fund-watch-section > \.card-body\s*\{[\s\S]*?padding:\s*0;/);
+        expect(styles).toMatch(/\.fund-watch-add input\s*\{[\s\S]*?height:\s*36px;/);
+        expect(styles).toMatch(/\.fund-watch-status:empty\s*\{[\s\S]*?display:\s*none;/);
+        expect(styles).toMatch(/\.fund-watch-list > \.ui-state\s*\{[\s\S]*?min-height:\s*72px;/);
     });
 
     it('盘中筛选紧跟机会雷达，初始只提供手动获取入口', () => {

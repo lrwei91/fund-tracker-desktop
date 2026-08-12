@@ -151,6 +151,9 @@
         if (tab === 'signals') {
             if (!isBootstrapping && window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
         }
+        if (tab === 'funds' && !isBootstrapping && window.AppRefreshCoordinator) {
+            window.AppRefreshCoordinator.refreshTab(tab);
+        }
         if (tab === 'news' && !isBootstrapping && window.AppRefreshCoordinator) {
             window.AppRefreshCoordinator.refreshTab(tab);
         }
@@ -622,6 +625,7 @@
             var refresh = {
                 all: coordinator.refreshAll,
                 main: coordinator.refreshMain,
+                funds: coordinator.refreshFunds,
                 news: coordinator.refreshNews,
                 signals: coordinator.refreshSignals,
             }[scope];
@@ -649,6 +653,7 @@
         initSignalWorkspace();
         initSettingsViews();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
+        if (window.AppFunds) window.AppFunds.initFunds();
         if (window.AppWatchlist) window.AppWatchlist.initWatchlistTabs();
         if (window.AppNews) {
             window.AppNews.initNewsSourceTabs();

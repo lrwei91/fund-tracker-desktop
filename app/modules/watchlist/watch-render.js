@@ -309,6 +309,18 @@
         var tags = [];
         if (warning.anomaly === true) {
             tags.push('<span class="watchlist-warning-tag anomaly" title="' + utils.escapeHtml(warning.anomalyRule || '严重异动') + '">严重异动</span>');
+        } else if (warning.anomalyWarning === true) {
+            var anomalyWarningTitle = warning.anomalyWarningRule || '严重异动预警';
+            if (warning.anomalyWarningPredictionType === 0) {
+                anomalyWarningTitle += '；当日尚未触发';
+            } else if (warning.anomalyWarningPredictionType === 2) {
+                anomalyWarningTitle += '；次日预测';
+            }
+            var triggerPct = Number(warning.anomalyWarningTriggerPct);
+            if (Number.isFinite(triggerPct)) {
+                anomalyWarningTitle += '；参考触发涨跌幅 ' + (triggerPct > 0 ? '+' : '') + triggerPct.toFixed(2) + '%';
+            }
+            tags.push('<span class="watchlist-warning-tag anomaly-warning" title="' + utils.escapeHtml(anomalyWarningTitle) + '">严重异动预警</span>');
         }
         if (warning.monitored === true) {
             var monitorTitle = warning.monitorEnd ? '重点监控至 ' + warning.monitorEnd : '重点监控';
@@ -326,6 +338,12 @@
             state.watchMarketWarnings[code] = {
                 anomaly: typeof incoming.anomaly === 'boolean' ? incoming.anomaly : previous.anomaly === true,
                 anomalyRule: incoming.anomalyRule || previous.anomalyRule || '',
+                anomalyWarning: typeof incoming.anomalyWarning === 'boolean' ? incoming.anomalyWarning : previous.anomalyWarning === true,
+                anomalyWarningRule: incoming.anomalyWarningRule || previous.anomalyWarningRule || '',
+                anomalyWarningPredictionType: incoming.anomalyWarningPredictionType === 0 || incoming.anomalyWarningPredictionType === 2
+                    ? incoming.anomalyWarningPredictionType : previous.anomalyWarningPredictionType,
+                anomalyWarningTriggerPct: typeof incoming.anomalyWarningTriggerPct === 'number' && Number.isFinite(incoming.anomalyWarningTriggerPct)
+                    ? incoming.anomalyWarningTriggerPct : previous.anomalyWarningTriggerPct,
                 monitored: typeof incoming.monitored === 'boolean' ? incoming.monitored : previous.monitored === true,
                 monitorEnd: incoming.monitorEnd || previous.monitorEnd || '',
             };

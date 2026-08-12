@@ -53,6 +53,10 @@ function installHarness() {
         loadLimitUpData: vi.fn().mockResolvedValue(undefined),
     };
     window.AppNews = { refreshNewsData: vi.fn().mockResolvedValue(undefined) };
+    window.AppFunds = {
+        getFundCodes: () => [],
+        loadFundQuotes: vi.fn().mockResolvedValue(undefined),
+    };
     window.shell = { syncHoldingWidget: vi.fn().mockResolvedValue({ ok: true }) };
     document.body.innerHTML = '<button id="refresh-btn"></button><div id="refresh-status"></div>';
     return { watchCodes };
@@ -114,6 +118,20 @@ describe('AppRefreshCoordinator', () => {
         resolveQuotes({ success: true, data: {}, meta: {} });
         await first;
         expect(window.AppRefreshCoordinator.isRunning()).toBe(false);
+    });
+
+    it('切到基金 Tab 只刷新基金净值，且进入全量刷新任务', async () => {
+        installHarness();
+        window.AppFunds.getFundCodes = () => ['110022'];
+        await import('../app/modules/refresh-coordinator.js');
+
+        await window.AppRefreshCoordinator.refreshTab('funds');
+        expect(window.AppFunds.loadFundQuotes).toHaveBeenCalledTimes(1);
+        expect(window.AppMarket.loadIndexData).not.toHaveBeenCalled();
+        expect(window.AppSignals.loadHotRankData).not.toHaveBeenCalled();
+
+        await window.AppRefreshCoordinator.refreshAll({ skipLimitUp: true, skipOpportunity: true });
+        expect(window.AppFunds.loadFundQuotes).toHaveBeenCalledTimes(2);
     });
 
     it('普通刷新任务并发不超过 3 个', async () => {

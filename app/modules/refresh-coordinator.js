@@ -10,9 +10,10 @@
     var visible = document.visibilityState !== 'hidden';
     var started = false;
     var detailTail = Promise.resolve();
-    var nextDue = { main: 0, signals: 0, news: 0, daily: 0 };
+    var nextDue = { main: 0, signals: 0, funds: 0, news: 0, daily: 0 };
     var MAX_ACTIVE = 3;
     var QUOTE_BATCH_SIZE = 50;
+    var FUND_REFRESH_SECONDS = 5 * 60;
 
     function uniqueCodes(values) {
         var seen = {};
@@ -176,6 +177,15 @@
                 return window.AppSignals ? window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), !!options.force) : null;
             } });
         }
+        if (kind === 'all' || kind === 'funds') {
+            var fundCodes = window.AppFunds && typeof window.AppFunds.getFundCodes === 'function'
+                ? uniqueCodes(window.AppFunds.getFundCodes()) : [];
+            if (fundCodes.length && typeof window.AppFunds.loadFundQuotes === 'function') {
+                tasks.push({ name: '基金净值', priority: 65, run: function () {
+                    return window.AppFunds.loadFundQuotes(!!options.force);
+                } });
+            }
+        }
         if ((kind === 'all' || kind === 'news') && state.currentTab === 'news') {
             tasks.push({ name: '快讯', priority: 85, run: function () {
                 return window.AppNews ? window.AppNews.refreshNewsData(!!options.force) : null;
@@ -324,6 +334,7 @@
             var current = now();
             var dueMain = current >= nextDue.main && utils.isIntradayRefreshWindow();
             var dueSignals = current >= nextDue.signals && utils.isIntradayRefreshWindow();
+            var dueFunds = current >= nextDue.funds && state.currentTab === 'funds';
             var dueNews = current >= nextDue.news && state.currentTab === 'news';
             var dueDaily = current >= nextDue.daily && utils.isAfterCloseDailyWindow();
             if (dueMain) {
@@ -332,19 +343,24 @@
             if (dueSignals) {
                 nextDue.signals = current + state.refreshSecondsSignal * 1000;
             }
+            if (current >= nextDue.funds) {
+                nextDue.funds = current + FUND_REFRESH_SECONDS * 1000;
+            }
             if (dueNews) {
                 nextDue.news = current + state.refreshSecondsNews * 1000;
             }
             if (dueDaily) {
                 nextDue.daily = current + 30 * 60 * 1000;
             }
-            var dueCount = [dueMain, dueSignals, dueNews, dueDaily].filter(Boolean).length;
+            var dueCount = [dueMain, dueSignals, dueFunds, dueNews, dueDaily].filter(Boolean).length;
             if (dueCount > 1) {
                 request('all', { force: dueDaily, skipOpportunity: dueDaily });
             } else if (dueMain) {
                 request('main');
             } else if (dueSignals || dueDaily) {
                 request('signals', { force: dueDaily, skipOpportunity: dueDaily });
+            } else if (dueFunds) {
+                request('funds');
             } else if (dueNews) {
                 request('news');
             }
@@ -357,6 +373,7 @@
         var current = now();
         nextDue.main = current + state.refreshSecondsMain * 1000;
         nextDue.signals = current + state.refreshSecondsSignal * 1000;
+        nextDue.funds = current + FUND_REFRESH_SECONDS * 1000;
         nextDue.news = current + state.refreshSecondsNews * 1000;
         nextDue.daily = current + 30 * 60 * 1000;
         schedule();
@@ -373,12 +390,14 @@
         var current = now();
         nextDue.main = current + state.refreshSecondsMain * 1000;
         nextDue.signals = current + state.refreshSecondsSignal * 1000;
+        nextDue.funds = current + FUND_REFRESH_SECONDS * 1000;
         nextDue.news = current + state.refreshSecondsNews * 1000;
         schedule();
     }
 
     function refreshTab(tab) {
         if (tab === 'signals') return request('signals', { skipLimitUp: false });
+        if (tab === 'funds') return request('funds');
         if (tab === 'news') return request('news');
         return request('main');
     }
@@ -389,6 +408,7 @@
             var current = now();
             nextDue.main = current + state.refreshSecondsMain * 1000;
             nextDue.signals = current + state.refreshSecondsSignal * 1000;
+            nextDue.funds = current + FUND_REFRESH_SECONDS * 1000;
             nextDue.news = current + state.refreshSecondsNews * 1000;
             refreshTab(state.currentTab);
             schedule();
@@ -405,6 +425,7 @@
         refreshAll: function (options) { return request('all', options || {}); },
         refreshMain: function (options) { return request('main', options || {}); },
         refreshSignals: function (options) { return request('signals', options || {}); },
+        refreshFunds: function (options) { return request('funds', options || {}); },
         refreshNews: function (options) { return request('news', options || {}); },
         runDetail: runDetail,
         refreshTab: refreshTab,

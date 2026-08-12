@@ -480,6 +480,11 @@ html[data-theme="dark"] .electron-app {
     color: var(--red);
 }
 
+.electron-app .watchlist-warning-tag.anomaly-warning {
+    background: var(--amber-soft-bg);
+    color: var(--amber);
+}
+
 .electron-app .watchlist-warning-tag.monitored {
     background: var(--amber-soft-bg);
     color: var(--amber);
@@ -1178,6 +1183,205 @@ html[data-theme="dark"] .electron-app {
     margin-left: -12px;
 }
 
+/* Fund watchlist reuses the stock watchlist density without stock-only controls. */
+.electron-app #tab-funds.active {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    width: min(100%, 1120px);
+    margin: 0 auto;
+}
+
+.electron-app .fund-watch-section {
+    min-width: 0;
+}
+
+.electron-app .fund-watch-section > .card-body {
+    padding: 0;
+}
+
+.electron-app .fund-watch-header,
+.electron-app .fund-watch-header > div {
+    display: flex;
+    align-items: center;
+}
+
+.electron-app .fund-watch-header {
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.electron-app .fund-watch-header > div {
+    gap: 12px;
+    min-width: 0;
+}
+
+.electron-app .fund-watch-caption,
+.electron-app .fund-watch-update-time,
+.electron-app .fund-watch-source {
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.electron-app .fund-watch-update-time {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+}
+
+.electron-app .fund-watch-add {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+}
+
+.electron-app .fund-watch-add input {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+    padding: 0 11px;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    outline: none;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.electron-app .fund-watch-add input:focus {
+    border-color: var(--focus);
+    box-shadow: 0 0 0 2px var(--color-focus-soft);
+}
+
+.electron-app .fund-watch-status {
+    min-height: 22px;
+    padding: 0 12px 8px;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.electron-app .fund-watch-status:empty {
+    display: none;
+}
+
+.electron-app .fund-watch-status.loading {
+    color: var(--amber);
+}
+
+.electron-app .fund-watch-status.error {
+    color: var(--red);
+}
+
+.electron-app .fund-watch-table-head,
+.electron-app .fund-watch-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.8fr) minmax(116px, 0.9fr) 110px 112px 88px 28px;
+    align-items: center;
+    gap: 12px;
+}
+
+.electron-app .fund-watch-table-head {
+    min-height: 32px;
+    padding: 0 14px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.electron-app .fund-watch-table-head span:nth-child(n + 3) {
+    text-align: right;
+}
+
+.electron-app .fund-watch-row {
+    min-height: 72px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--color-surface);
+}
+
+.electron-app .fund-watch-row:hover {
+    background: var(--bg-row-alt);
+}
+
+.electron-app .fund-watch-row.is-stale {
+    opacity: 0.74;
+}
+
+.electron-app .fund-watch-identity,
+.electron-app .fund-watch-nav {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 4px;
+}
+
+.electron-app .fund-watch-identity strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .fund-watch-identity span,
+.electron-app .fund-watch-nav span {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+
+.electron-app .fund-watch-type,
+.electron-app .fund-watch-date {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.electron-app .fund-watch-nav,
+.electron-app .fund-watch-date,
+.electron-app .fund-watch-change {
+    text-align: right;
+}
+
+.electron-app .fund-watch-nav strong,
+.electron-app .fund-watch-change {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.electron-app .fund-watch-remove {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+}
+
+.electron-app .fund-watch-remove:hover {
+    background: var(--red-bg);
+    color: var(--red);
+}
+
+.electron-app .fund-watch-list > .ui-state {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    min-height: 72px;
+    margin: 10px 12px 8px;
+    padding: 14px 16px;
+    column-gap: 14px;
+}
+
+.electron-app .fund-watch-section:has(.fund-watch-list > .ui-state) .fund-watch-table-head {
+    display: none;
+}
+
+.electron-app .fund-watch-source {
+    margin: 0;
+    padding: 8px 12px 10px;
+}
+
 .electron-app .watchlist-header-row {
     display: grid;
     grid-template-columns: minmax(92px, 1fr) minmax(110px, 1.35fr) 70px 76px 24px;
@@ -1786,7 +1990,7 @@ html[data-theme="dark"] .electron-app {
     color: var(--amber);
 }
 
-/* Compact and wide layouts share one four-action navigation group. */
+/* Compact and wide layouts share one five-action navigation group. */
 .electron-app .desktop-sidebar {
     height: var(--desktop-bottombar-h);
     border-color: var(--desktop-border);
@@ -3535,6 +3739,43 @@ html[data-theme="dark"] .electron-app {
 }
 
 @media (max-width: 600px) {
+    .electron-app .fund-watch-caption {
+        display: none;
+    }
+
+    .electron-app .fund-watch-add {
+        align-items: stretch;
+    }
+
+    .electron-app .fund-watch-table-head {
+        display: none;
+    }
+
+    .electron-app .fund-watch-row {
+        grid-template-columns: minmax(0, 1fr) 88px 74px;
+        grid-template-areas:
+            'identity nav change'
+            'type date remove';
+        gap: 8px 10px;
+        min-height: 92px;
+        padding: 12px;
+    }
+
+    .electron-app .fund-watch-identity { grid-area: identity; }
+    .electron-app .fund-watch-type { grid-area: type; }
+    .electron-app .fund-watch-nav { grid-area: nav; }
+    .electron-app .fund-watch-date { grid-area: date; }
+    .electron-app .fund-watch-change { grid-area: change; }
+    .electron-app .fund-watch-remove {
+        grid-area: remove;
+        justify-self: end;
+    }
+
+    .electron-app .fund-watch-date {
+        align-self: center;
+        font-size: 10px;
+    }
+
     .electron-app .api-status span:last-child {
         display: none;
     }
@@ -3627,6 +3868,23 @@ html[data-theme="dark"] .electron-app {
 }
 
 @media (max-width: 480px) {
+    .electron-app .fund-watch-add {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: 10px;
+    }
+
+    .electron-app .fund-watch-row {
+        grid-template-columns: minmax(0, 1fr) 78px 66px;
+        gap: 7px 8px;
+    }
+
+    .electron-app .fund-watch-list > .ui-state {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 84px;
+        row-gap: 4px;
+    }
+
     .electron-app .header-meta {
         display: none;
     }

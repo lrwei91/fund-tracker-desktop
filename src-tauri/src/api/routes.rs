@@ -55,6 +55,8 @@ mod tests {
     const ROUTES: &[&str] = &[
         "stock",
         "stock-search",
+        "fund-search",
+        "fund-quotes",
         "hot-rank",
         "limit-up",
         "cls-news",

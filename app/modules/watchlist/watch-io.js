@@ -138,6 +138,8 @@
     function getExportPayload() {
         var tabs = W.getWatchTabs();
         var activeWatchTabId = getImportedActiveWatchTabId(state.activeWatchTabId, tabs);
+        var funds = window.AppFunds && typeof window.AppFunds.exportFunds === 'function'
+            ? window.AppFunds.exportFunds() : [];
         return {
             version: 3,
             exportedAt: new Date().toISOString(),
@@ -146,6 +148,7 @@
             watchlistCost: normalizeImportedWatchlistCost(state.watchlistCost, tabs),
             watchlistRemarks: normalizeImportedWatchlistRemarks(state.watchlistRemarks, tabs),
             customIndexCodes: normalizeImportedCustomIndexCodes(state.customIndexCodes),
+            funds: funds,
         };
     }
 
@@ -180,6 +183,7 @@
                 var activeWatchTabId = getImportedActiveWatchTabId(json.activeWatchTabId, tabs);
                 var rawCustomIndexCodes = getRawCustomIndexCodesFromJson(json);
                 var customIndexCodes = rawCustomIndexCodes ? normalizeImportedCustomIndexCodes(rawCustomIndexCodes) : null;
+                var rawFunds = W.hasOwn(json, 'funds') ? json.funds : json.fundWatchlist;
                 W.saveWatchTabs(tabs);
                 state.watchlistCost = watchlistCost;
                 W.saveWatchlistCost();
@@ -195,6 +199,10 @@
                     W.persistCustomIndexCache();
                     W.persistCustomIndexUpdateTime('');
                 }
+                var importedFundCount = null;
+                if (Array.isArray(rawFunds) && window.AppFunds && typeof window.AppFunds.importFunds === 'function') {
+                    importedFundCount = window.AppFunds.importFunds(rawFunds);
+                }
                 state.watchQuoteCache = {};
                 state.watchQuoteUpdateTime = '';
                 state.watchAlertState = {};
@@ -206,7 +214,9 @@
                 W.renderCustomIndex();
                 W.loadWatchlistData();
                 if (customIndexCodes) W.loadCustomIndexData();
-                W.showDataStatus('已导入 ' + tabs.length + ' 个分组' + (customIndexCodes ? '、' + customIndexCodes.length + ' 个自选指数' : ''));
+                W.showDataStatus('已导入 ' + tabs.length + ' 个分组' +
+                    (customIndexCodes ? '、' + customIndexCodes.length + ' 个自选指数' : '') +
+                    (importedFundCount !== null ? '、' + importedFundCount + ' 只基金' : ''));
             } catch (err) {
                 W.showDataStatus(err.message || '导入失败', 'error');
             } finally {
