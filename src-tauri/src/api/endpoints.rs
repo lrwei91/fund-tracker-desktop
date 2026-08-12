@@ -1583,6 +1583,7 @@ fn parse_price_anomaly(value: &Value) -> Result<Value, ApiError> {
             }
             let board = number(field(row, "s")).unwrap_or(0.0) as i64;
             let base_rule = number(field(row, "e")).unwrap_or(0.0) as i64;
+            let prediction_type = number(field(row, "o")).unwrap_or(0.0) as i64;
             let rule_code = if board == 6 && matches!(base_rule, 4..=7) {
                 base_rule * 10
             } else {
@@ -1598,7 +1599,9 @@ fn parse_price_anomaly(value: &Value) -> Result<Value, ApiError> {
                 "board":board,
                 "ruleCode":rule_code,
                 "rule":anomaly_rule(rule_code),
-                "isToday":number(field(row,"o")).unwrap_or(0.0)as i64 != 2
+                "predictionType":prediction_type,
+                "isToday":prediction_type != 2,
+                "isTriggered":prediction_type == 1
             }))
         })
         .collect::<Vec<_>>();
@@ -1637,6 +1640,7 @@ fn market_warning_data(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
+        .filter(|item| item.get("isTriggered").and_then(Value::as_bool) == Some(true))
         .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
         .collect::<HashMap<_, _>>();
     codes
@@ -1732,6 +1736,7 @@ fn apply_market_warnings(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
+        .filter(|item| item.get("isTriggered").and_then(Value::as_bool) == Some(true))
         .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
         .collect::<HashMap<_, _>>();
     for candidate in candidates.values_mut() {
@@ -2006,13 +2011,21 @@ mod contract_tests {
         let anomaly = parse_price_anomaly(&json!({
             "result":0,"date":20260810,"pages":1,"data":[
                 {"m":0,"c":"920575","n":"示例","s":8,"e":8,"x":40.0,"d":10,"a":12.0,"o":1},
-                {"m":1,"c":"688001","n":"科创示例","s":6,"e":4,"x":151.0,"d":10,"a":15.0,"o":2}
+                {"m":1,"c":"688001","n":"科创示例","s":6,"e":4,"x":151.0,"d":10,"a":15.0,"o":2},
+                {"m":0,"c":"301047","n":"义翘神州","s":4,"e":4,"x":62.45,"d":8,"a":-2.25,"o":0}
             ]
         }))
         .unwrap();
         assert_eq!(anomaly["items"][0]["market"], "BJ");
         assert_eq!(anomaly["items"][0]["ruleCode"], 8);
+        assert_eq!(anomaly["items"][0]["predictionType"], 1);
+        assert_eq!(anomaly["items"][0]["isTriggered"], true);
         assert_eq!(anomaly["items"][1]["ruleCode"], 40);
+        assert_eq!(anomaly["items"][1]["isToday"], false);
+        assert_eq!(anomaly["items"][1]["isTriggered"], false);
+        assert_eq!(anomaly["items"][2]["predictionType"], 0);
+        assert_eq!(anomaly["items"][2]["isToday"], true);
+        assert_eq!(anomaly["items"][2]["isTriggered"], false);
         assert!(parse_price_anomaly(&json!({"result":1001,"msg":"unknow team"})).is_err());
     }
 
@@ -2027,7 +2040,9 @@ mod contract_tests {
             },
         )]);
         let monitor = vec![json!({"code":"920575","end":"2026-08-14"})];
-        let anomaly = json!({"items":[{"code":"920575","rule":"北交所严重异动"}]});
+        let anomaly = json!({"items":[{
+            "code":"920575","rule":"北交所严重异动","isTriggered":true
+        }]});
         apply_market_warnings(&mut candidates, &monitor, &anomaly);
         let candidate = &candidates["920575"];
         assert!(candidate.monitored);
@@ -2038,15 +2053,24 @@ mod contract_tests {
 
     #[test]
     fn market_warning_batch_distinguishes_hits_absence_and_unavailable_sources() {
-        let codes = vec!["600664".to_string(), "600519".to_string()];
+        let codes = vec![
+            "600664".to_string(),
+            "600519".to_string(),
+            "301047".to_string(),
+        ];
         let monitor = vec![json!({"code":"600519","end":"2026-08-20"})];
-        let anomaly = json!({"items":[{"code":"600664","rule":"30日累计正偏离达到200%"}]});
+        let anomaly = json!({"items":[
+            {"code":"600664","rule":"30日累计正偏离达到200%","isTriggered":true},
+            {"code":"301047","rule":"10日累计正偏离达到100%","isTriggered":false}
+        ]});
         let complete = market_warning_data(&codes, Some(&monitor), Some(&anomaly));
         assert_eq!(complete["600664"]["anomaly"], true);
         assert_eq!(complete["600664"]["anomalyRule"], "30日累计正偏离达到200%");
         assert_eq!(complete["600664"]["monitored"], false);
         assert_eq!(complete["600519"]["monitored"], true);
         assert_eq!(complete["600519"]["monitorEnd"], "2026-08-20");
+        assert_eq!(complete["301047"]["anomaly"], false);
+        assert_eq!(complete["301047"]["anomalyRule"], "");
 
         let partial = market_warning_data(&codes, None, Some(&anomaly));
         assert!(partial["600664"]["monitored"].is_null());
