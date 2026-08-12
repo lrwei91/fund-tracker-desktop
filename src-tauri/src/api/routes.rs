@@ -68,6 +68,7 @@ mod tests {
         "stock-kline",
         "stock-minute",
         "opportunity-radar",
+        "market-warnings",
         "intraday-screening",
     ];
 

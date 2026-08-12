@@ -127,6 +127,7 @@
     var watchQuoteCache = {};
     var watchQuoteUpdateTime = '';
     var watchQuoteFreshCodes = {};
+    var watchMarketWarnings = {};
     var customIndexCodes = [];
     var customIndexCache = {};
     var customIndexFreshCodes = {};
@@ -144,7 +145,7 @@
     var watchAlertState = {};
 
     // 新闻源 / 列表 state
-    var currentNewsSource = storage.getItem(NEWS_SOURCE_KEY) || 'jin10';
+    var currentNewsSource = 'jin10';
     var newsState = {
         jin10: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'jin10', degraded: false, stale: false, staleAgeSeconds: 0 },
         eastmoney: { items: [], cursor: null, hasMore: true, isLoading: false, error: false, actualSource: 'eastmoney', degraded: false, stale: false, staleAgeSeconds: 0 },
@@ -259,10 +260,8 @@
     }
 
     function restorePersistentState() {
-        var restoredNewsSource = storage.getItem(NEWS_SOURCE_KEY);
-        if (restoredNewsSource === 'jin10' || restoredNewsSource === 'eastmoney') {
-            window.AppState.currentNewsSource = restoredNewsSource;
-        }
+        // 每次启动固定从金十快讯进入，来源切换只在当前会话生效。
+        window.AppState.currentNewsSource = 'jin10';
         try {
             var restoredCodes = JSON.parse(storage.getItem(CUSTOM_INDICES_KEY) || '[]');
             if (Array.isArray(restoredCodes)) {
@@ -357,6 +356,7 @@
         watchQuoteCache: watchQuoteCache,
         watchQuoteUpdateTime: watchQuoteUpdateTime,
         watchQuoteFreshCodes: watchQuoteFreshCodes,
+        watchMarketWarnings: watchMarketWarnings,
         customIndexCodes: customIndexCodes,
         customIndexCache: customIndexCache,
         customIndexFreshCodes: customIndexFreshCodes,

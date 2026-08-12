@@ -22,6 +22,13 @@ describe('自选股详情入口', () => {
                     '600519': { name: '贵州茅台', priceValue: 1346.5 },
                 },
                 watchlistCost: {},
+                watchMarketWarnings: {
+                    '600519': {
+                        anomaly: true,
+                        anomalyRule: '30日累计正偏离达到200%',
+                        monitored: false,
+                    },
+                },
             },
             utils: {
                 escapeHtml,
@@ -50,10 +57,13 @@ describe('自选股详情入口', () => {
 
         const trigger = grid.querySelector('.watchlist-detail-trigger');
         const remove = grid.querySelector('.watchlist-remove-btn');
+        const warning = grid.querySelector('.watchlist-warning-tag.anomaly');
 
         expect(trigger.tagName).toBe('BUTTON');
         expect(trigger.type).toBe('button');
         expect(trigger.getAttribute('aria-label')).toBe('查看 贵州茅台 600519 详情');
+        expect(warning.textContent).toBe('严重异动');
+        expect(warning.title).toBe('30日累计正偏离达到200%');
 
         trigger.focus();
         trigger.click();

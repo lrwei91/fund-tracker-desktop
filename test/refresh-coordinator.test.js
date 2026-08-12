@@ -39,6 +39,7 @@ function installHarness() {
         applyWatchQuoteBatch: vi.fn(),
         applyCustomIndexQuoteBatch: vi.fn(),
         markQuoteUnavailable: vi.fn(),
+        loadWatchMarketWarnings: vi.fn().mockResolvedValue(true),
     };
     window.AppMarket = {
         loadIndexData: vi.fn().mockResolvedValue(undefined),
@@ -80,6 +81,7 @@ describe('AppRefreshCoordinator', () => {
             expect.any(Object),
             watchCodes,
         );
+        expect(window.AppWatchlist.loadWatchMarketWarnings).toHaveBeenCalledWith(watchCodes, false);
     });
 
     it('超过 50 只时分批请求，但只做一次批量回填', async () => {

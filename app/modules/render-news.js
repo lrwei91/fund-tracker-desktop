@@ -44,7 +44,6 @@
                 tab.parentElement.querySelectorAll('.news-source-tab').forEach(function (item) { item.classList.remove('active'); });
                 tab.classList.add('active');
                 state.currentNewsSource = tab.getAttribute('data-source');
-                try { window.AppStorage.setItem(KEYS.NEWS_SOURCE_KEY, state.currentNewsSource); } catch (e) {}
                 if (!state.newsState[state.currentNewsSource]) resetNewsState(state.currentNewsSource);
                 renderNewsList();
                 if (!state.newsState[state.currentNewsSource].items.length) loadMoreNews();
@@ -217,12 +216,14 @@
             });
             return;
         }
-        var statusLabel = current.stale
-            ? dataStatus.label({ stale: true, staleAgeSeconds: current.staleAgeSeconds })
-            : (current.degraded ? '备用来源 · ' + actualSourceLabel(current.actualSource) : '当前来源 ' + actualSourceLabel(current.actualSource));
-        var sourceStatus = '<div class="news-actual-source' + (current.degraded || current.stale ? ' degraded' : '') + '">' +
-            utils.escapeHtml(statusLabel) + '</div>';
-        var html = sourceStatus + current.items.map(renderNewsItem).join('');
+        var sourceWarning = '';
+        if (current.stale || current.degraded) {
+            var statusLabel = current.stale
+                ? dataStatus.label({ stale: true, staleAgeSeconds: current.staleAgeSeconds })
+                : '备用来源 · ' + actualSourceLabel(current.actualSource);
+            sourceWarning = '<div class="news-source-warning">' + utils.escapeHtml(statusLabel) + '</div>';
+        }
+        var html = sourceWarning + current.items.map(renderNewsItem).join('');
         if (current.isLoading) html += '<div class="news-status news-loading">刷新中...</div>';
         else if (current.error) html += uiState.render('error', {
             title: '刷新失败，正在显示已有快讯',

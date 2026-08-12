@@ -503,11 +503,11 @@
             ? '<div class="stock-analysis-source">' + utils.escapeHtml(dataStatus.label(newsData.meta, newsData.sourceLabel || '个股新闻')) + '</div>'
             : '';
         return status + '<ul class="stock-news-list">' + items.slice(0, 5).map(function (item) {
-            var meta = [item.time, item.source].filter(Boolean).join(' · ');
-            var summary = item.summary ? '<em>' + utils.escapeHtml(item.summary) + '</em>' : '';
-            return '<li>' +
-                '<span>' + utils.escapeHtml(item.title || '--') + '</span>' +
-                (meta ? '<b>' + utils.escapeHtml(meta) + '</b>' : '') +
+            var meta = [item.source, item.time].filter(Boolean).join(' · ');
+            var summary = item.summary ? '<em class="stock-news-summary">' + utils.escapeHtml(item.summary) + '</em>' : '';
+            return '<li class="stock-news-item">' +
+                '<span class="stock-news-title">' + utils.escapeHtml(item.title || '--') + '</span>' +
+                (meta ? '<b class="stock-news-meta">' + utils.escapeHtml(meta) + '</b>' : '') +
                 summary +
             '</li>';
         }).join('') + '</ul>';
@@ -704,15 +704,17 @@
         var concentration = chips.concentration90
             ? '90%筹码 ' + formatPriceValue(chips.concentration90.low) + '-' + formatPriceValue(chips.concentration90.high)
             : '';
+        var windowLabel = chips.windowDays ? '近' + chips.windowDays + '日' : '';
         return '<div class="stock-chip-block">' +
             '<div class="stock-chip-title">' +
-                '<span>筹码估算</span>' +
+                '<div class="stock-chip-heading"><span>筹码估算</span>' +
+                    (windowLabel ? '<small>' + utils.escapeHtml(windowLabel) + '</small>' : '') +
+                '</div>' +
                 '<em>' + utils.escapeHtml(concentration) + '</em>' +
             '</div>' +
             '<div class="stock-chip-chart" aria-label="筹码分布估算">' + bars + '</div>' +
             '<div class="stock-chip-axis">' +
                 '<span>' + utils.escapeHtml(formatPriceValue(first.price)) + '</span>' +
-                '<span>' + utils.escapeHtml(chips.windowDays ? '近' + chips.windowDays + '日' : '') + '</span>' +
                 '<span>' + utils.escapeHtml(formatPriceValue(last.price)) + '</span>' +
             '</div>' +
         '</div>';

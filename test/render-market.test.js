@@ -113,8 +113,10 @@ describe('板块资金流筛选', () => {
         });
 
         expect(document.getElementById('large-value').previousElementSibling.textContent).toBe('主力流入');
+        expect(document.getElementById('large-value').classList.contains('positive')).toBe(true);
         expect(document.getElementById('medium-value').textContent).toBe('-6302.51亿');
         expect(document.getElementById('small-value').previousElementSibling.textContent).toBe('散户');
+        expect(document.getElementById('north-daily-value').classList.contains('neutral')).toBe(true);
     });
 
     it('刷新失败时保留本次会话已显示的指数并明确标记陈旧', async () => {
@@ -134,5 +136,18 @@ describe('板块资金流筛选', () => {
         expect(document.getElementById('shangzhi-value').textContent).toBe('3210.88');
         expect(document.querySelector('.index-section').classList.contains('is-stale')).toBe(true);
         expect(window.AppUtils.setLastUpdated).toHaveBeenCalledWith('行情更新失败 · 显示上次结果');
+    });
+
+    it('指数分时线横向铺满卡片并按昨收绘制零轴', () => {
+        const svg = window.AppMarket.buildIndexSparklineSvg({
+            sparkline: [99, 101, 100.5],
+            priceValue: 101,
+            changePercent: 1,
+        }, 'positive', null);
+
+        expect(svg).toContain('preserveAspectRatio="none"');
+        expect(svg).toContain('class="index-sparkline-zero"');
+        expect(svg).toContain('class="index-sparkline-path"');
+        expect(svg).toContain('aria-label="当日走势"');
     });
 });

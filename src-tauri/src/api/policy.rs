@@ -28,11 +28,10 @@ pub fn endpoint_policy(path: &str) -> EndpointPolicy {
             stale_for: Duration::from_secs(10 * 60),
         },
         "stock-search" | "hot-rank" | "limit-up" | "cls-news" | "global-news" | "news"
-        | "stock-news" | "stock-risk" | "dragon-tiger" | "fund-flow-120d" | "stock-kline" => {
-            EndpointPolicy::Informational {
-                stale_for: Duration::from_secs(30 * 60),
-            }
-        }
+        | "stock-news" | "stock-risk" | "dragon-tiger" | "fund-flow-120d" | "stock-kline"
+        | "market-warnings" => EndpointPolicy::Informational {
+            stale_for: Duration::from_secs(30 * 60),
+        },
         _ => EndpointPolicy::Live,
     }
 }

@@ -71,6 +71,9 @@
             delete state.watchQuoteCache[code];
             W.persistWatchQuoteCache();
         }
+        if (!stillReferenced && state.watchMarketWarnings && state.watchMarketWarnings[code]) {
+            delete state.watchMarketWarnings[code];
+        }
         if (!stillReferenced && watchSparkCache[code]) delete watchSparkCache[code];
         if (!stillReferenced && watchSparkPending[code]) delete watchSparkPending[code];
         if (!stillReferenced && state.watchAlertState[code]) {
@@ -258,6 +261,7 @@
             persistWatchQuoteCache();
             renderWatchlist();
             W.persistCurrentChangePct();
+            loadWatchMarketWarnings([code], false);
             if (window.AppAlerts && typeof window.AppAlerts.checkAlerts === 'function') {
                 window.AppAlerts.checkAlerts(result.data);
             }
@@ -286,16 +290,65 @@
         var displayPrice = utils.formatQuotePrice(priceValue, price, code, data && data.name ? data.name : name);
         var costCell = showCost ? renderCostCell(code, priceValue) : '';
         var spark = renderWatchSparklineCell(code, cls, fresh);
+        var warningTags = renderWatchWarningTags(code);
         return '<div class="watchlist-item clickable" data-code="' + utils.escapeHtml(code) + '" data-pct="' + utils.escapeHtml(changePercent) + '">' +
             '<button class="watchlist-detail-trigger" type="button" aria-label="查看 ' + utils.escapeHtml(name) + ' ' + utils.escapeHtml(code) + ' 详情"></button>' +
             '<div class="watchlist-item-main">' +
             '<div class="watchlist-stock-name">' + utils.escapeHtml(name) + '</div>' +
-            '<div class="watchlist-stock-code">' + utils.escapeHtml(code) + '</div></div>' +
+            '<div class="watchlist-stock-code">' + utils.escapeHtml(code) + '</div>' + warningTags + '</div>' +
             spark +
             costCell +
             '<div class="watchlist-stock-price ' + cls + '">' + utils.escapeHtml(displayPrice) + '</div>' +
             '<div class="watchlist-stock-change ' + cls + '">' + utils.escapeHtml(pt) + ' <span class="trend-arrow">' + utils.escapeHtml(arrow) + '</span></div>' +
             '<button class="watchlist-remove-btn" data-code="' + utils.escapeHtml(code) + '" aria-label="删除 ' + utils.escapeHtml(code) + '">✕</button></div>';
+    }
+
+    function renderWatchWarningTags(code) {
+        var warning = state.watchMarketWarnings && state.watchMarketWarnings[code];
+        if (!warning) return '';
+        var tags = [];
+        if (warning.anomaly === true) {
+            tags.push('<span class="watchlist-warning-tag anomaly" title="' + utils.escapeHtml(warning.anomalyRule || '严重异动') + '">严重异动</span>');
+        }
+        if (warning.monitored === true) {
+            var monitorTitle = warning.monitorEnd ? '重点监控至 ' + warning.monitorEnd : '重点监控';
+            tags.push('<span class="watchlist-warning-tag monitored" title="' + utils.escapeHtml(monitorTitle) + '">重点监控</span>');
+        }
+        return tags.length ? '<div class="watchlist-stock-tags">' + tags.join('') + '</div>' : '';
+    }
+
+    function applyWatchMarketWarnings(result, requestedCodes) {
+        if (!result || result.success === false || !result.data || typeof result.data !== 'object') return false;
+        if (!state.watchMarketWarnings || typeof state.watchMarketWarnings !== 'object') state.watchMarketWarnings = {};
+        W.sanitizeCodes(requestedCodes || W.getAllWatchCodes()).forEach(function (code) {
+            var incoming = result.data[code] || {};
+            var previous = state.watchMarketWarnings[code] || {};
+            state.watchMarketWarnings[code] = {
+                anomaly: typeof incoming.anomaly === 'boolean' ? incoming.anomaly : previous.anomaly === true,
+                anomalyRule: incoming.anomalyRule || previous.anomalyRule || '',
+                monitored: typeof incoming.monitored === 'boolean' ? incoming.monitored : previous.monitored === true,
+                monitorEnd: incoming.monitorEnd || previous.monitorEnd || '',
+            };
+        });
+        renderWatchlist();
+        return true;
+    }
+
+    async function loadWatchMarketWarnings(codes, force) {
+        var cleanCodes = W.sanitizeCodes(codes || W.getAllWatchCodes());
+        if (!cleanCodes.length || !window.AppDataClient) return false;
+        try {
+            var result = await window.AppDataClient.fetchData('/market-warnings', {
+                codes: cleanCodes.join(','),
+            }, {
+                force: !!force,
+                cacheMode: force ? 'bypass_fresh' : 'normal',
+            });
+            return applyWatchMarketWarnings(result, cleanCodes);
+        } catch (error) {
+            console.error('自选股市场异动获取失败:', error);
+            return false;
+        }
     }
 
     function renderWatchSparklineCell(code, cls, quoteFresh) {
@@ -525,9 +578,12 @@
     W.persistWatchQuoteUpdateTime = persistWatchQuoteUpdateTime;
     W.loadWatchlistData = loadWatchlistData;
     W.applyWatchQuoteBatch = applyWatchQuoteBatch;
+    W.loadWatchMarketWarnings = loadWatchMarketWarnings;
+    W.applyWatchMarketWarnings = applyWatchMarketWarnings;
     W.markQuoteUnavailable = markQuoteUnavailable;
     W.loadSingleWatchQuote = loadSingleWatchQuote;
     W.renderWatchItem = renderWatchItem;
+    W.renderWatchWarningTags = renderWatchWarningTags;
     W.renderCostCell = renderCostCell;
     W.saveWatchlistCost = saveWatchlistCost;
     W.saveWatchlistRemarks = saveWatchlistRemarks;

@@ -12,26 +12,21 @@
         return v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
     }
 
-    // 主力净流入柱着色
-    function flowCls(v) {
-        return v > 0 ? 'flow-positive' : v < 0 ? 'flow-negative' : 'flow-neutral';
-    }
-
-    function trendHtml(recent) {
-        var bars = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇'];
-        return (recent || []).map(function (r) {
-            var abs = Math.abs(r.mainNet || 0);
-            var level = 0;
-            if (abs > 5e8) level = 7;
-            else if (abs > 2e8) level = 6;
-            else if (abs > 1e8) level = 5;
-            else if (abs > 5e7) level = 4;
-            else if (abs > 1e7) level = 3;
-            else if (abs > 1e6) level = 2;
-            else if (abs > 0) level = 1;
-            return '<span class="' + flowCls(r.mainNet) + '" title="' +
-                utils.escapeHtml(r.date) + ' ' + utils.formatYuan(r.mainNet) + '">' + bars[level] + '</span>';
-        }).join('');
+    function fundHistoryHtml(recent) {
+        var rows = (Array.isArray(recent) ? recent : []).slice(-10).reverse();
+        if (!rows.length) return '<div class="list-empty">暂无近10日资金明细</div>';
+        return '<div class="stock-fund-history-head" aria-hidden="true"><span>日期</span><span>方向</span><span>主力净额</span></div>' +
+            '<ul class="stock-fund-history">' + rows.map(function (row) {
+                row = row || {};
+                var value = Number(row.mainNet);
+                if (!Number.isFinite(value)) value = 0;
+                var direction = value > 0 ? '净流入' : value < 0 ? '净流出' : '持平';
+                return '<li class="stock-fund-history-row">' +
+                    '<time datetime="' + utils.escapeHtml(row.date || '') + '">' + utils.escapeHtml(row.date || '--') + '</time>' +
+                    '<span class="stock-fund-history-direction ' + cls(value) + '">' + direction + '</span>' +
+                    '<strong class="stock-fund-history-value ' + cls(value) + '">' + utils.escapeHtml(utils.formatYuan(value)) + '</strong>' +
+                '</li>';
+            }).join('') + '</ul>';
     }
 
     function renderStockFundFlowBody(item, latestFlow, last, prevMain, options) {
@@ -80,19 +75,23 @@
                 '</span>' +
             '</div>';
         }).join('');
-        var recentTrend = trendHtml(item.recent || []);
+        var recentHistory = fundHistoryHtml(item.recent || []);
 
         return (includeEditor ? W.renderStockCostEditor(item.code) : '') +
             '<div class="stock-fund-header">' +
-            '<div class="stock-fund-main">主力合计' + utils.escapeHtml(flowDateText) + ' ' + utils.escapeHtml(utils.formatYuan(mainNet)) + utils.escapeHtml(prevMainText) + '</div>' +
+            '<div class="stock-fund-main">' +
+                '<span class="stock-fund-main-label">主力合计' + utils.escapeHtml(flowDateText) + '</span>' +
+                '<strong class="stock-fund-main-value ' + cls(mainNet) + '">' + utils.escapeHtml(utils.formatYuan(mainNet)) + '</strong>' +
+                (prevMainText ? '<span class="stock-fund-main-previous">' + utils.escapeHtml(prevMainText) + '</span>' : '') +
+            '</div>' +
             '</div>' +
             '<div class="watchlist-fund-flow">' + rows + '</div>' +
             '<div class="stock-fund-summary">' +
                 '<div class="stock-fund-section-title">主力净流入</div>' +
                 '<div class="stock-fund-summary-grid">' + summaryRows + '</div>' +
-                '<div class="stock-fund-trend-row">' +
-                    '<span class="stock-fund-trend-label">近10日趋势</span>' +
-                    '<span class="stock-fund-trend">' + recentTrend + '</span>' +
+                '<div class="stock-fund-history-block">' +
+                    '<div class="stock-fund-history-title">近10日明细</div>' +
+                    recentHistory +
                 '</div>' +
             '</div>';
     }

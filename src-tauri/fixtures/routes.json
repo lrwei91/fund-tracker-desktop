@@ -84,6 +84,19 @@
     "data": {"generatedAt": "2026-08-08T00:00:00Z", "items": [], "sourceStatus": {}},
     "meta": {"degraded": true, "stale": false}
   },
+  "market-warnings": {
+    "success": true,
+    "data": {
+      "600664": {
+        "code": "600664",
+        "monitored": false,
+        "monitorEnd": "",
+        "anomaly": true,
+        "anomalyRule": "30日累计正偏离达到200%"
+      }
+    },
+    "meta": {"degraded": false, "stale": false}
+  },
   "intraday-screening": {
     "success": true,
     "data": {

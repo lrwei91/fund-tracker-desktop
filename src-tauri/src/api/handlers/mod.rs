@@ -29,6 +29,7 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
         "stock-kline" => detail::kline(gateway, query).await,
         "stock-minute" => detail::minute(gateway, query).await,
         "opportunity-radar" => signals::opportunity(gateway, query).await,
+        "market-warnings" => signals::market_warnings(gateway, query).await,
         "intraday-screening" => signals::intraday_screening(gateway, query).await,
         _ => super::policy::failure("API not found", "unknown route", None),
     }

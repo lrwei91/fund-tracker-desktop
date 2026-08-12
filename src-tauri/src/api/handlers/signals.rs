@@ -11,6 +11,10 @@ pub(crate) async fn opportunity(gateway: Arc<Gateway>, query: Query) -> Value {
     endpoints::opportunity_radar(gateway, query).await
 }
 
+pub(crate) async fn market_warnings(gateway: Arc<Gateway>, query: Query) -> Value {
+    endpoints::market_warnings(gateway, query).await
+}
+
 pub(crate) async fn intraday_screening(gateway: Arc<Gateway>, _query: Query) -> Value {
     super::super::intraday::handle(gateway).await
 }

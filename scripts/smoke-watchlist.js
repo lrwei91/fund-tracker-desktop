@@ -1,5 +1,5 @@
 // 拆分回归冒烟:用 jsdom 以浏览器加载顺序装配 state/utils/cache + watchlist/* + 门面,
-// 校验 window.AppWatchlist 公开 API 与原 render-watchlist.js 完全一致(62 个方法),
+// 校验 window.AppWatchlist 公开 API 完整(65 个方法),
 // 并跑通无需网络的几条主流程(标签页 / 列表渲染 / 自选指数渲染 / 弹窗初始化)。
 // 运行: node scripts/smoke-watchlist.js
 
@@ -97,7 +97,8 @@ const expected = [
     'exportWatchlistData', 'importWatchlistData',
     'resolveStockInput', 'addStockToWatchlist', 'removeStockFromWatchlist', 'getAllWatchCodes', 'getHoldingCodes', 'isHoldingTab',
     'loadWatchlistData', 'applyWatchQuoteBatch', 'applyCustomIndexQuoteBatch', 'markQuoteUnavailable',
-    'loadSingleWatchQuote', 'renderWatchlist', 'renderWatchItem', 'renderCostCell', 'saveWatchlistCost',
+    'loadWatchMarketWarnings', 'applyWatchMarketWarnings',
+    'loadSingleWatchQuote', 'renderWatchlist', 'renderWatchItem', 'renderWatchWarningTags', 'renderCostCell', 'saveWatchlistCost',
     'getDisplayStockName', 'saveWatchlistRemarks', 'persistWatchQuoteCache', 'persistWatchQuoteUpdateTime',
     'persistCurrentChangePct', 'getPrevChangePct', 'bindWatchRemove', 'bindWatchItemClick',
     'showStockFundFlow', 'renderStockCostEditor', 'saveStockCostFromForm', 'renderStockFundFlowBody',

@@ -149,19 +149,28 @@
         return (number > 0 ? '+' : '') + number.toFixed(2) + '%';
     }
 
-    function sparklinePath(values, width, height, pad) {
-        var min = Math.min.apply(Math, values);
-        var max = Math.max.apply(Math, values);
+    function sparklineGeometry(values, width, height, pad, baseline) {
+        var scaleValues = values.slice();
+        if (Number.isFinite(baseline) && baseline > 0) scaleValues.push(baseline);
+        var min = Math.min.apply(Math, scaleValues);
+        var max = Math.max.apply(Math, scaleValues);
         if (!Number.isFinite(min) || !Number.isFinite(max)) return '';
         if (min === max) {
             min -= Math.max(0.01, Math.abs(min) * 0.001);
             max += Math.max(0.01, Math.abs(max) * 0.001);
         }
-        return values.map(function (value, index) {
+        var yScale = function (value) {
+            return pad + (max - value) / (max - min) * (height - pad * 2);
+        };
+        var path = values.map(function (value, index) {
             var x = pad + index / Math.max(1, values.length - 1) * (width - pad * 2);
-            var y = pad + (max - value) / (max - min) * (height - pad * 2);
+            var y = yScale(value);
             return (index === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2);
         }).join(' ');
+        return {
+            path: path,
+            zeroY: Number.isFinite(baseline) && baseline > 0 ? yScale(baseline) : null,
+        };
     }
 
     function buildIndexSparklineValues(data) {
@@ -171,16 +180,29 @@
         }).filter(function (value) { return Number.isFinite(value); });
     }
 
+    function getIndexSparklineBaseline(data) {
+        var explicit = Number(data && data.preClose);
+        if (Number.isFinite(explicit) && explicit > 0) return explicit;
+        var current = Number(data && data.priceValue);
+        var changePercent = Number(data && data.changePercent);
+        var ratio = 1 + changePercent / 100;
+        if (!Number.isFinite(current) || current <= 0 || !Number.isFinite(ratio) || ratio <= 0) return null;
+        return current / ratio;
+    }
+
     function buildIndexSparklineSvg(data, cls, prev) {
         var values = buildIndexSparklineValues(data, prev);
         if (!values.length) return '';
         var width = 180;
         var height = 44;
         var pad = 2;
-        var path = sparklinePath(values, width, height, pad);
-        if (!path) return '';
-        return '<svg viewBox="0 0 ' + width + ' ' + height + '" aria-hidden="true" focusable="false">' +
-            '<path d="' + path + '"></path>' +
+        var geometry = sparklineGeometry(values, width, height, pad, getIndexSparklineBaseline(data));
+        if (!geometry || !geometry.path) return '';
+        var zeroAxis = geometry.zeroY === null ? '' :
+            '<line class="index-sparkline-zero" x1="' + pad + '" y1="' + geometry.zeroY.toFixed(2) + '" x2="' + (width - pad) + '" y2="' + geometry.zeroY.toFixed(2) + '"></line>';
+        return '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-label="当日走势" role="img" focusable="false">' +
+            zeroAxis +
+            '<path class="index-sparkline-path" d="' + geometry.path + '"></path>' +
             '</svg>';
     }
 
@@ -363,6 +385,8 @@
             el.className = 'capital-value';
             if (cell.data && typeof cell.data.isPositive === 'boolean') {
                 el.classList.add(cell.data.isPositive ? 'positive' : 'negative');
+            } else {
+                el.classList.add('neutral');
             }
         });
     }

@@ -146,6 +146,11 @@
             batches.forEach(function (batch) {
                 tasks.push(buildQuotesTask(!!options.force, id, batch));
             });
+            if (watchCodes.length && window.AppWatchlist && typeof window.AppWatchlist.loadWatchMarketWarnings === 'function') {
+                tasks.push({ name: '市场异动', priority: 88, run: function () {
+                    return window.AppWatchlist.loadWatchMarketWarnings(watchCodes, !!options.force);
+                } });
+            }
             tasks.push({ name: '大盘指数', priority: 90, run: function () {
                 return window.AppMarket ? window.AppMarket.loadIndexData(!!options.force) : null;
             } });

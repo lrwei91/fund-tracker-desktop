@@ -1622,6 +1622,102 @@ pub(crate) async fn price_anomaly(g: &Arc<Gateway>) -> Result<Value, ApiError> {
     parse_price_anomaly(&value)
 }
 
+fn market_warning_data(
+    codes: &[String],
+    monitor: Option<&[Value]>,
+    anomaly: Option<&Value>,
+) -> Map<String, Value> {
+    let monitor_by_code = monitor
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
+        .collect::<HashMap<_, _>>();
+    let anomaly_by_code = anomaly
+        .and_then(|value| value.get("items"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|item| Some((item.get("code")?.as_str()?, item)))
+        .collect::<HashMap<_, _>>();
+    codes
+        .iter()
+        .map(|code| {
+            let monitored = monitor.map(|_| monitor_by_code.contains_key(code.as_str()));
+            let anomaly_hit = anomaly.map(|_| anomaly_by_code.contains_key(code.as_str()));
+            let monitor_end = monitor_by_code
+                .get(code.as_str())
+                .map(|item| string(item.get("end")))
+                .unwrap_or_default();
+            let anomaly_rule = anomaly_by_code
+                .get(code.as_str())
+                .map(|item| string(item.get("rule")))
+                .unwrap_or_default();
+            (
+                code.clone(),
+                json!({
+                    "code":code,
+                    "monitored":monitored,
+                    "monitorEnd":monitor_end,
+                    "anomaly":anomaly_hit,
+                    "anomalyRule":anomaly_rule
+                }),
+            )
+        })
+        .collect()
+}
+
+pub(crate) async fn market_warnings(g: Arc<Gateway>, query: Query) -> Value {
+    let mut seen = HashSet::new();
+    let codes = q(&query, "codes")
+        .split(',')
+        .map(str::trim)
+        .filter(|code| valid_code(code) && seen.insert((*code).to_string()))
+        .take(100)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if codes.is_empty() {
+        return fail("缺少股票代码", "");
+    }
+    let (monitor_result, anomaly_result) = tokio::join!(stock_monitor(&g), price_anomaly(&g));
+    if monitor_result.is_err() && anomaly_result.is_err() {
+        return fail(
+            "市场异动数据不可用",
+            format!(
+                "重点监控: {}; 严重异动: {}",
+                monitor_result
+                    .as_ref()
+                    .err()
+                    .map(|error| error.message.as_str())
+                    .unwrap_or("未知错误"),
+                anomaly_result
+                    .as_ref()
+                    .err()
+                    .map(|error| error.message.as_str())
+                    .unwrap_or("未知错误")
+            ),
+        );
+    }
+    let degraded = monitor_result.is_err() || anomaly_result.is_err();
+    let data = market_warning_data(
+        &codes,
+        monitor_result.as_deref().ok(),
+        anomaly_result.as_ref().ok(),
+    );
+    ok_extra(
+        Value::Object(data),
+        json!({
+            "meta":{
+                "degraded":degraded,
+                "stale":false,
+                "sources":{
+                    "stockMonitor":{"status":if monitor_result.is_ok(){"live"}else{"failed"},"actual":"eastmoney","actualLabel":"东方财富重点监控"},
+                    "priceAnomaly":{"status":if anomaly_result.is_ok(){"live"}else{"failed"},"actual":"eastmoney","actualLabel":"东方财富严重异动"}
+                }
+            }
+        }),
+    )
+}
+
 fn apply_market_warnings(
     candidates: &mut HashMap<String, Candidate>,
     monitor: &[Value],
@@ -1938,5 +2034,22 @@ mod contract_tests {
         assert_eq!(candidate.monitor_end, "2026-08-14");
         assert_eq!(candidate.anomaly_rule, "北交所严重异动");
         assert_eq!(candidate.signals.len(), 2);
+    }
+
+    #[test]
+    fn market_warning_batch_distinguishes_hits_absence_and_unavailable_sources() {
+        let codes = vec!["600664".to_string(), "600519".to_string()];
+        let monitor = vec![json!({"code":"600519","end":"2026-08-20"})];
+        let anomaly = json!({"items":[{"code":"600664","rule":"30日累计正偏离达到200%"}]});
+        let complete = market_warning_data(&codes, Some(&monitor), Some(&anomaly));
+        assert_eq!(complete["600664"]["anomaly"], true);
+        assert_eq!(complete["600664"]["anomalyRule"], "30日累计正偏离达到200%");
+        assert_eq!(complete["600664"]["monitored"], false);
+        assert_eq!(complete["600519"]["monitored"], true);
+        assert_eq!(complete["600519"]["monitorEnd"], "2026-08-20");
+
+        let partial = market_warning_data(&codes, None, Some(&anomaly));
+        assert!(partial["600664"]["monitored"].is_null());
+        assert_eq!(partial["600519"]["anomaly"], false);
     }
 }

@@ -100,6 +100,20 @@ describe('主界面信息架构', () => {
         }
     });
 
+    it('主窗口提供 Tauri 原生拖拽区域且交互按钮不抢占拖动', () => {
+        const doc = parseIndex();
+        const header = doc.getElementById('header');
+        const headerActions = header.querySelector('.header-right');
+        const brand = doc.querySelector('.desktop-brand');
+        const brandMark = doc.querySelector('.desktop-brand-mark');
+
+        expect(header.getAttribute('data-tauri-drag-region')).toBe('deep');
+        expect(brand.getAttribute('data-tauri-drag-region')).toBe('deep');
+        expect(headerActions.getAttribute('data-tauri-drag-region')).toBe('false');
+        expect(brandMark.getAttribute('draggable')).toBe('false');
+        expect(styles).toMatch(/\.desktop-brand-mark\s*\{[\s\S]*?-webkit-user-drag:\s*none;/);
+    });
+
     it('关于页使用仓库 metadata，并通过 shell 契约打开真实 GitHub 地址', async () => {
         const opened = [];
         const shell = {
@@ -140,6 +154,8 @@ describe('主界面信息架构', () => {
     it('四个入口位于同一导航组并共享尺寸规则', () => {
         const doc = parseIndex();
         expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(4);
+        expect(doc.querySelector('[data-tab="dashboard"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('market');
+        expect(doc.querySelector('[data-tab="signals"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('radar');
         expect(styles).toMatch(/\.desktop-nav-btn\s*\{[\s\S]*?flex:\s*1;/);
         expect(styles).toMatch(/@media \(min-width: 1280px\)[\s\S]*?\.desktop-nav-btn\s*\{[\s\S]*?height:\s*58px;/);
         expect(styles).not.toMatch(/\.desktop-sidebar-footer\s*\{/);

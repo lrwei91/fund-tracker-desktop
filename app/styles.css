@@ -161,6 +161,11 @@ html[data-theme="dark"] .electron-app {
     display: none;
 }
 
+.electron-app .desktop-brand-mark {
+    -webkit-user-drag: none;
+    user-select: none;
+}
+
 .electron-app .desktop-nav,
 .electron-app .desktop-nav-btn,
 .electron-app .desktop-nav-icon,
@@ -448,6 +453,36 @@ html[data-theme="dark"] .electron-app {
     margin-top: 4px;
     font-family: var(--mono);
     font-size: 11px;
+}
+
+.electron-app .watchlist-stock-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.electron-app .watchlist-warning-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.electron-app .watchlist-warning-tag.anomaly {
+    background: color-mix(in srgb, var(--red) 10%, transparent);
+    color: var(--red);
+}
+
+.electron-app .watchlist-warning-tag.monitored {
+    background: var(--amber-soft-bg);
+    color: var(--amber);
 }
 
 .electron-app .watchlist-stock-price {
@@ -995,7 +1030,7 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .index-sparkline {
-    height: 28px;
+    height: 32px;
     margin-top: 8px;
     color: var(--text-tertiary);
     opacity: 0.9;
@@ -1009,7 +1044,13 @@ html[data-theme="dark"] .electron-app {
     color: var(--green);
 }
 
-.electron-app .index-sparkline path {
+.electron-app .index-sparkline-zero {
+    stroke: var(--border-subtle);
+    stroke-dasharray: 4 5;
+    vector-effect: non-scaling-stroke;
+}
+
+.electron-app .index-sparkline-path {
     fill: none;
     stroke: currentColor;
     stroke-width: 2.25;
@@ -1641,18 +1682,14 @@ html[data-theme="dark"] .electron-app {
     column-count: auto;
 }
 
-.electron-app .news-actual-source {
+.electron-app .news-source-warning {
     margin: 8px 0 0;
     padding: 6px 8px;
     border: 0;
-    border-left: 2px solid var(--border-strong);
+    border-left: 2px solid var(--amber-soft);
     border-radius: 6px;
-    background: var(--bg-row-alt);
-}
-
-.electron-app .news-actual-source.degraded {
-    border-left-color: var(--amber-soft);
     background: var(--amber-soft-bg);
+    color: var(--text-secondary);
 }
 
 .electron-app .news-item {
@@ -2958,7 +2995,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app .stock-research-condition,
 .electron-app .stock-news-list li,
 .electron-app .stock-risk-row,
-.electron-app .stock-fund-trend-row {
+.electron-app .stock-fund-history-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px;
@@ -2989,6 +3026,83 @@ html[data-theme="dark"] .electron-app {
     grid-column: 1 / -1;
     min-width: 0;
     text-align: left;
+}
+
+.electron-app .stock-news-list .stock-news-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 0;
+}
+
+.electron-app .stock-news-title {
+    display: block;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.55;
+}
+
+.electron-app .stock-news-meta {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+.electron-app .stock-news-list .stock-news-summary {
+    margin-top: 2px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    text-align: left;
+}
+
+.electron-app .stock-fund-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.electron-app .stock-fund-main-label {
+    color: var(--text-secondary);
+}
+
+.electron-app .stock-fund-main-value {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.electron-app .stock-fund-main-previous {
+    color: var(--text-tertiary);
+}
+
+.electron-app .stock-chip-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    min-width: 0;
+}
+
+.electron-app .stock-chip-heading small {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.electron-app .stock-chip-title em {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-style: normal;
+    text-align: right;
 }
 
 .electron-app .stock-research-condition {
@@ -3217,9 +3331,59 @@ html[data-theme="dark"] .electron-app {
     font-size: 11px;
 }
 
-.electron-app .watchlist-fund-label,
-.electron-app .stock-fund-trend-label {
+.electron-app .watchlist-fund-label {
     color: var(--text-tertiary);
+}
+
+.electron-app .stock-fund-history-block {
+    margin-top: 10px;
+}
+
+.electron-app .stock-fund-history-title {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.electron-app .stock-fund-history-head,
+.electron-app .stock-fund-history-row {
+    display: grid;
+    grid-template-columns: minmax(96px, 1fr) 64px minmax(82px, auto);
+    align-items: center;
+    gap: 10px;
+}
+
+.electron-app .stock-fund-history-head {
+    margin-top: 7px;
+    padding: 0 0 5px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+
+.electron-app .stock-fund-history-head span:last-child,
+.electron-app .stock-fund-history-value {
+    text-align: right;
+}
+
+.electron-app .stock-fund-history {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.electron-app .stock-fund-history-row {
+    padding: 7px 0;
+    font-family: var(--mono);
+}
+
+.electron-app .stock-fund-history-row time {
+    color: var(--text-secondary);
+}
+
+.electron-app .stock-fund-history-direction,
+.electron-app .stock-fund-history-value {
+    font-weight: 700;
 }
 
 .electron-app .watchlist-fund-track {
