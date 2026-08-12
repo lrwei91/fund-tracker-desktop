@@ -25,6 +25,12 @@ fn config_storage_path(store: tauri::State<ConfigStore>) -> String {
 }
 
 fn is_allowed_external_url(url: &str) -> bool {
+    if matches!(
+        url,
+        "https://github.com/lrwei91" | "https://github.com/lrwei91/fund-tracker-desktop"
+    ) {
+        return true;
+    }
     url::Url::parse(url).is_ok_and(|parsed| {
         parsed.scheme() == "https"
             && matches!(
@@ -96,6 +102,17 @@ mod tests {
     fn external_links_use_exact_https_allowlist() {
         assert!(is_allowed_external_url("https://pdf.dfcfw.com/a.pdf"));
         assert!(is_allowed_external_url("https://disc.static.szse.cn/x"));
+        assert!(is_allowed_external_url(
+            "https://github.com/lrwei91/fund-tracker-desktop"
+        ));
+        assert!(is_allowed_external_url("https://github.com/lrwei91"));
+        assert!(!is_allowed_external_url("https://github.com/lrwei91/other"));
+        assert!(!is_allowed_external_url(
+            "https://github.com/lrwei91/fund-tracker-desktop/issues"
+        ));
+        assert!(!is_allowed_external_url(
+            "https://github.com/lrwei91/fund-tracker-desktop/"
+        ));
         assert!(!is_allowed_external_url("http://pdf.dfcfw.com/a.pdf"));
         assert!(!is_allowed_external_url(
             "https://pdf.dfcfw.com.example.com/a"

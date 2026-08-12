@@ -16,7 +16,7 @@
 <div class="app-shell" id="app-shell">
 <aside class="desktop-sidebar" aria-label="桌面导航">
     <div class="desktop-brand">
-        <div class="desktop-brand-mark">G</div>
+        <img class="desktop-brand-mark" src="assets/app-icon.png" alt="" aria-hidden="true">
         <div>
             <div class="desktop-brand-name">恭喜发财</div>
             <div class="desktop-brand-subtitle">LOCAL MARKET</div>
@@ -60,8 +60,6 @@
                 <span class="desktop-nav-meta">金十 / 财联社 / 东财</span>
             </span>
         </button>
-    </nav>
-    <div class="desktop-sidebar-footer">
         <button class="desktop-nav-btn desktop-settings-btn" id="settings-btn" aria-label="设置" title="设置" type="button">
             <span class="desktop-nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
@@ -71,9 +69,10 @@
             </span>
             <span class="desktop-nav-copy">
                 <span class="desktop-nav-label">设置</span>
+                <span class="desktop-nav-meta">外观 / 数据 / 关于</span>
             </span>
         </button>
-    </div>
+    </nav>
 </aside>
 
 <div class="app-main-pane">
@@ -416,6 +415,7 @@
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="data">数据</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="about">关于</button>
         </div>
         <section class="settings-view active" data-settings-panel="appearance">
         <div class="settings-group-intro">
@@ -558,6 +558,36 @@
             <input type="file" id="import-watchlist-file" accept="application/json,.json" hidden>
         </div>
         <div class="watchlist-status data-status" id="data-status"></div>
+        </section>
+        <section class="settings-view settings-about-view" data-settings-panel="about" hidden>
+        <div class="settings-about-identity">
+            <img class="settings-about-mark" src="assets/app-icon.png" alt="" aria-hidden="true">
+            <div>
+                <strong class="settings-about-name">恭喜发财桌面版</strong>
+                <span class="settings-about-kicker">本地行情、自选股与持仓提醒工具</span>
+            </div>
+        </div>
+        <p class="settings-about-description">基于 Tauri 2 的本地桌面应用，使用原生 HTML、CSS 和 JavaScript 构建前端；行情代理、配置存储和窗口管理由 Rust 提供。</p>
+        <dl class="settings-about-details">
+            <div>
+                <dt>运行方式</dt>
+                <dd>本地桌面应用</dd>
+            </div>
+            <div>
+                <dt>维护者</dt>
+                <dd>lrwei91</dd>
+            </div>
+            <div>
+                <dt>项目仓库</dt>
+                <dd>lrwei91/fund-tracker-desktop</dd>
+            </div>
+        </dl>
+        <div class="settings-about-actions">
+            <button class="data-action-btn" id="about-github-btn" type="button" data-external-url="https://github.com/lrwei91/fund-tracker-desktop">查看 GitHub 项目 ↗</button>
+            <button class="data-action-btn secondary" id="about-author-github-btn" type="button" data-external-url="https://github.com/lrwei91">维护者主页 ↗</button>
+            <span class="settings-about-status" id="about-external-status" aria-live="polite"></span>
+        </div>
+        <p class="settings-about-disclaimer">数据仅供参考，不构成投资建议。</p>
         </section>
     </div>
 </div>

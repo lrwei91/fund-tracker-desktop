@@ -52,6 +52,8 @@ npm run build:win:raw   # Windows x64 EXE + portable ZIP
 
 产物输出到 `dist/`。两个分发 ZIP 的硬门禁均为 20 MB；普通构建不会修改版本号。Windows portable 包依赖系统 WebView2，不携带离线运行时；现代 Windows 10/11 通常已提供，缺失时 release runtime 会显示原生提示和官方下载链接。
 
+应用图标母版位于 `brand/app-icon-1024.png`。修改母版后运行 `npm run icons:generate`，会统一更新应用内品牌图标及 `build/icon.png`、`build/icon.icns` 和 `build/icon.ico`。
+
 ## 运行与数据
 
 前端继续通过 `window.shell` 和 `AppDataClient.fetch/fetchData` 调用桌面能力，内部传输改为 Tauri commands/events。权限仅开放事件能力，不开放任意文件系统、shell 或进程访问。

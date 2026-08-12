@@ -118,13 +118,13 @@
         });
 
         window.addEventListener('hashchange', handleHash);
-        handleHash();
+        // 每次启动都从行情页进入，不恢复上次停留的主 Tab。
+        switchTab('dashboard');
     }
 
     function handleHash() {
         var hash = window.location.hash.replace('#', '');
-        var savedTab = window.AppStorage.getItem(KEYS.ACTIVE_TAB_KEY);
-        var tab = KEYS.VALID_TABS.includes(hash) ? hash : (KEYS.VALID_TABS.includes(savedTab) ? savedTab : 'dashboard');
+        var tab = KEYS.VALID_TABS.includes(hash) ? hash : 'dashboard';
         switchTab(tab, false);
     }
 
@@ -352,6 +352,34 @@
         if (importBtn && fileInput) importBtn.addEventListener('click', function () { fileInput.click(); });
         if (fileInput) fileInput.addEventListener('change', function (e) {
             if (window.AppWatchlist) window.AppWatchlist.importWatchlistData(e);
+        });
+    }
+
+    function initAboutActions() {
+        var githubButtons = document.querySelectorAll('.settings-about-actions [data-external-url]');
+        var status = document.getElementById('about-external-status');
+        if (!githubButtons.length) return;
+
+        githubButtons.forEach(function (githubBtn) {
+            githubBtn.addEventListener('click', async function () {
+                if (githubBtn.disabled) return;
+                var url = githubBtn.getAttribute('data-external-url');
+                if (!url || !window.shell || typeof window.shell.openExternalUrl !== 'function') {
+                    if (status) status.textContent = '当前环境无法打开外部链接';
+                    return;
+                }
+
+                githubBtn.disabled = true;
+                if (status) status.textContent = '';
+                try {
+                    var result = await window.shell.openExternalUrl(url);
+                    if (!result || !result.ok) throw new Error('open failed');
+                } catch (e) {
+                    if (status) status.textContent = 'GitHub 链接打开失败';
+                } finally {
+                    githubBtn.disabled = false;
+                }
+            });
         });
     }
 
@@ -629,6 +657,7 @@
         initSettings();
         syncSettingsControls();
         initDataActions();
+        initAboutActions();
         initHoldingWindowButton();
         bindEvents();
         initUiStateRetries();
