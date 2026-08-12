@@ -54,6 +54,16 @@ npm run build:win:raw   # Windows x64 EXE + portable ZIP
 
 应用图标母版位于 `brand/app-icon-1024.png`。修改母版后运行 `npm run icons:generate`，会统一更新应用内品牌图标及 `build/icon.png`、`build/icon.icns` 和 `build/icon.ico`。
 
+### macOS 首次打开
+
+macOS 安装包目前未公证。若从本项目正式 Release 下载并核对 SHA-256 后，首次打开仍提示“‘恭喜发财’已损坏，无法打开”，请先将 `恭喜发财.app` 拖入“应用程序”，然后在终端执行：
+
+```bash
+sudo xattr -rd com.apple.quarantine "/Applications/恭喜发财.app"
+```
+
+按回车后输入当前 macOS 用户密码（输入时终端不会显示字符），命令完成后重新打开应用。若应用不在 `/Applications`，请将命令中的路径替换为实际位置；不要对来源不明的应用执行此命令。
+
 ## 运行与数据
 
 前端继续通过 `window.shell` 和 `AppDataClient.fetch/fetchData` 调用桌面能力，内部传输改为 Tauri commands/events。权限仅开放事件能力，不开放任意文件系统、shell 或进程访问。
