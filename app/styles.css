@@ -940,6 +940,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app .watchlist-header-time,
 .electron-app .custom-index-header-time,
 .electron-app .opportunity-radar-header-time,
+.electron-app .intraday-screening-update-time,
 .electron-app .hot-rank-header-time {
     color: var(--text-tertiary);
     font-size: 11px;
@@ -1340,7 +1341,7 @@ html[data-theme="dark"] .electron-app {
     top: 0;
     z-index: 4;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 3px;
     padding: 0;
     background: var(--bg-base);
@@ -1356,6 +1357,237 @@ html[data-theme="dark"] .electron-app {
 
 .electron-app .signal-workspace-panel {
     align-self: start;
+}
+
+/* Intraday screening stays idle until the user explicitly starts it. */
+.electron-app .intraday-screening-heading {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 9px;
+}
+
+.electron-app .intraday-screening-update-time {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .intraday-screening-run-btn {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid var(--text-primary);
+    border-radius: 7px;
+    background: var(--text-primary);
+    color: var(--color-canvas);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.electron-app .intraday-screening-run-btn:hover:not(:disabled) {
+    border-color: var(--text-secondary);
+    background: var(--text-secondary);
+}
+
+.electron-app .intraday-screening-run-btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.electron-app .intraday-screening-run-btn:disabled {
+    cursor: progress;
+    opacity: 0.56;
+}
+
+.electron-app .intraday-screening-status {
+    min-height: 36px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: 7px;
+    background: var(--bg-row);
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.electron-app .intraday-screening-status:empty {
+    display: none;
+}
+
+.electron-app .intraday-screening-status[data-state="loading"] {
+    border-left-color: var(--color-status-info);
+}
+
+.electron-app .intraday-screening-status[data-state="ready"] {
+    border-left-color: var(--color-status-success);
+}
+
+.electron-app .intraday-screening-status[data-state="error"] {
+    border-color: var(--color-market-rise-border);
+    border-left-color: var(--color-status-error);
+    background: var(--red-bg);
+}
+
+.electron-app .intraday-screening-results {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.electron-app .intraday-screening-results:empty {
+    display: none;
+}
+
+.electron-app .intraday-screening-board {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface);
+}
+
+.electron-app .intraday-screening-board-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-row);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.electron-app .intraday-screening-board-header span {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.electron-app .intraday-screening-table {
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+.electron-app .intraday-screening-table-head,
+.electron-app .intraday-screening-card,
+.electron-app .intraday-screening-row {
+    display: grid;
+    grid-template-columns: 34px minmax(120px, 1fr) 52px 64px 64px 54px 72px;
+    align-items: center;
+    gap: 8px;
+    min-width: 650px;
+    padding: 8px 10px;
+}
+
+.electron-app .intraday-screening-table-head {
+    min-height: 30px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text-tertiary);
+    font-size: 10px;
+}
+
+.electron-app .intraday-screening-card,
+.electron-app .intraday-screening-row {
+    min-height: 58px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.electron-app :where(.intraday-screening-card, .intraday-screening-row):last-child {
+    border-bottom: 0;
+}
+
+.electron-app .intraday-screening-rank {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    text-align: center;
+}
+
+.electron-app .intraday-screening-stock,
+.electron-app .intraday-screening-name,
+.electron-app .intraday-screening-code {
+    min-width: 0;
+}
+
+.electron-app .intraday-screening-name,
+.electron-app .intraday-screening-code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .intraday-screening-name {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.electron-app .intraday-screening-code {
+    margin-top: 3px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+
+.electron-app .intraday-screening-score,
+.electron-app .intraday-screening-metric {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.electron-app .intraday-screening-metrics {
+    display: contents;
+}
+
+.electron-app .intraday-screening-score {
+    color: var(--amber);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.electron-app .intraday-screening-chips {
+    display: flex;
+    grid-column: 2 / -1;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+.electron-app .intraday-screening-chip {
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-row);
+    color: var(--text-tertiary);
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.electron-app .intraday-screening-reason {
+    grid-column: 2 / -1;
+    min-width: 0;
+    margin: 0;
+    padding: 3px 0 0 18px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.electron-app .intraday-screening-reason li + li {
+    margin-top: 2px;
 }
 
 .electron-app .opportunity-radar-item {
@@ -1536,7 +1768,7 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .desktop-sidebar-footer {
-    width: 188px;
+    width: 94px;
     gap: 0;
     padding: 0;
     border-color: var(--desktop-border);
@@ -1586,14 +1818,12 @@ html[data-theme="dark"] .electron-app {
 }
 
 /* Shared dialogs and settings views. */
-.electron-app .settings-overlay,
-.electron-app .data-overlay {
+.electron-app .settings-overlay {
     background: var(--color-overlay);
     transition: opacity 160ms ease;
 }
 
-.electron-app .settings-panel,
-.electron-app .data-panel {
+.electron-app .settings-panel {
     top: calc(50% - 26px);
     width: min(92vw, 460px);
     max-height: min(calc(100dvh - var(--desktop-bottombar-h) - 24px), 700px);
@@ -1604,15 +1834,13 @@ html[data-theme="dark"] .electron-app {
     transition: opacity 150ms ease, transform 150ms ease;
 }
 
-.electron-app .settings-panel .settings-header,
-.electron-app .data-panel .settings-header {
+.electron-app .settings-panel .settings-header {
     min-height: 50px;
     padding: 0 14px;
     border-bottom: 1px solid var(--border);
 }
 
-.electron-app .settings-panel .settings-header h3,
-.electron-app .data-panel .settings-header h3 {
+.electron-app .settings-panel .settings-header h3 {
     color: var(--text-primary);
     font-family: var(--font);
     font-size: 15px;
@@ -1633,14 +1861,13 @@ html[data-theme="dark"] .electron-app {
     color: var(--text-primary);
 }
 
-.electron-app .settings-panel .settings-body,
-.electron-app .data-panel .settings-body {
+.electron-app .settings-panel .settings-body {
     padding: 12px 14px 14px;
 }
 
 .electron-app .settings-nav {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 3px;
     padding: 0;
 }
@@ -2259,7 +2486,6 @@ html[data-theme="dark"] .electron-app {
 
 /* Dialog mechanics */
 .electron-app .settings-overlay,
-.electron-app .data-overlay,
 .electron-app .modal-overlay {
     position: fixed;
     inset: 0 0 var(--desktop-bottombar-h);
@@ -2269,14 +2495,12 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .settings-overlay.open,
-.electron-app .data-overlay.open,
 .electron-app .modal-overlay:not([hidden]) {
     opacity: 1;
     pointer-events: auto;
 }
 
 .electron-app .settings-panel,
-.electron-app .data-panel,
 .electron-app .modal-panel {
     position: fixed;
     z-index: 81;
@@ -2285,16 +2509,14 @@ html[data-theme="dark"] .electron-app {
     min-height: 0;
 }
 
-.electron-app .settings-panel,
-.electron-app .data-panel {
+.electron-app .settings-panel {
     left: 50%;
     opacity: 0;
     pointer-events: none;
     transform: translate(-50%, -50%) scale(0.98);
 }
 
-.electron-app .settings-panel.open,
-.electron-app .data-panel.open {
+.electron-app .settings-panel.open {
     opacity: 1;
     pointer-events: auto;
     transform: translate(-50%, -50%) scale(1);
@@ -3077,7 +3299,63 @@ html[data-theme="dark"] .electron-app {
     }
 
     .electron-app .desktop-sidebar-footer {
-        width: 176px;
+        width: 88px;
+    }
+
+    .electron-app .intraday-screening-heading {
+        display: grid;
+        gap: 2px;
+    }
+
+    .electron-app .intraday-screening-table {
+        overflow-x: visible;
+    }
+
+    .electron-app .intraday-screening-table-head {
+        display: none;
+    }
+
+    .electron-app .intraday-screening-card,
+    .electron-app .intraday-screening-row {
+        grid-template-columns: 28px minmax(0, 1fr) 48px;
+        align-items: start;
+        min-width: 0;
+        gap: 8px;
+        padding: 12px 10px;
+    }
+
+    .electron-app .intraday-screening-score {
+        padding-top: 1px;
+    }
+
+    .electron-app .intraday-screening-metrics {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 5px;
+    }
+
+    .electron-app .intraday-screening-metric {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+        padding: 6px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 5px;
+        background: var(--bg-row);
+        text-align: left;
+    }
+
+    .electron-app .intraday-screening-metric::before {
+        color: var(--text-tertiary);
+        font-family: var(--font);
+        font-size: 9px;
+        content: attr(data-label);
+    }
+
+    .electron-app .intraday-screening-chips,
+    .electron-app .intraday-screening-reason {
+        grid-column: 1 / -1;
     }
 
     .electron-app .desktop-nav-btn {
@@ -3109,10 +3387,9 @@ html[data-theme="dark"] .electron-app {
     }
 
     .electron-app .desktop-sidebar-footer {
-        width: 148px;
+        width: 74px;
     }
 
-    .electron-app .desktop-data-btn .desktop-nav-label,
     .electron-app .desktop-settings-btn .desktop-nav-label {
         display: none;
     }
@@ -3171,7 +3448,7 @@ html[data-theme="dark"] .electron-app {
     }
 
     .electron-app .desktop-sidebar-footer {
-        width: 104px;
+        width: 52px;
     }
 
     .electron-app .desktop-nav-icon,
@@ -3335,13 +3612,11 @@ html[data-theme="dark"] .electron-app {
         line-height: 1;
     }
 
-    .electron-app .desktop-data-btn,
     .electron-app .desktop-settings-btn {
         flex: 0 0 46px;
         height: 46px;
     }
 
-    .electron-app .desktop-data-btn .desktop-nav-meta,
     .electron-app .desktop-settings-btn .desktop-nav-meta {
         display: none;
     }
@@ -3388,13 +3663,11 @@ html[data-theme="dark"] .electron-app {
     }
 
     .electron-app .settings-overlay,
-    .electron-app .data-overlay,
     .electron-app .modal-overlay {
         inset: 0;
     }
 
     .electron-app .settings-panel,
-    .electron-app .data-panel,
     .electron-app .modal-panel {
         top: 50%;
     }

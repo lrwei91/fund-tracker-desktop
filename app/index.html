@@ -62,19 +62,6 @@
         </button>
     </nav>
     <div class="desktop-sidebar-footer">
-        <button class="desktop-nav-btn desktop-data-btn" id="watchlist-data-btn" aria-label="自选股导入导出" title="自选股数据" type="button">
-            <span class="desktop-nav-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" focusable="false">
-                    <path d="M5 19h14" />
-                    <path d="M12 5v9" />
-                    <path d="M8.5 10.5 12 14l3.5-3.5" />
-                    <path d="M7 5h10" />
-                </svg>
-            </span>
-            <span class="desktop-nav-copy">
-                <span class="desktop-nav-label">导入/导出</span>
-            </span>
-        </button>
         <button class="desktop-nav-btn desktop-settings-btn" id="settings-btn" aria-label="设置" title="设置" type="button">
             <span class="desktop-nav-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" focusable="false">
@@ -279,6 +266,7 @@
 
         <div class="signal-workspace-tabs" role="tablist" aria-label="市场信号分类">
             <button class="signal-workspace-tab active" type="button" role="tab" aria-selected="true" data-signal-view="radar">机会雷达</button>
+            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="screening">盘中筛选</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="heat">市场热度</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="limit">打板情绪</button>
         </div>
@@ -300,7 +288,22 @@
             </div>
         </section>
 
-        <!-- 2. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
+        <!-- 2. 盘中筛选（仅手动执行） -->
+        <section class="card intraday-screening-section signal-workspace-panel" data-signal-panel="screening" hidden>
+            <div class="card-header intraday-screening-header">
+                <div class="intraday-screening-heading">
+                    <h2>盘中筛选</h2>
+                    <span class="intraday-screening-update-time" id="intraday-screening-update-time"></span>
+                </div>
+                <button class="intraday-screening-run-btn" id="intraday-screening-run-btn" type="button">获取今日推荐</button>
+            </div>
+            <div class="card-body">
+                <div class="intraday-screening-status" id="intraday-screening-status" role="status" aria-live="polite">不会自动获取。交易日通常在 14:30–14:40 更新，点击“获取今日推荐”读取公开报告。</div>
+                <div class="intraday-screening-results" id="intraday-screening-results"></div>
+            </div>
+        </section>
+
+        <!-- 3. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
         <section class="card hot-rank-section signal-workspace-panel" data-signal-panel="heat" hidden>
             <div class="card-header">
                 <h2>市场热度</h2>
@@ -338,7 +341,7 @@
             </div>
         </section>
 
-        <!-- 3. 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停 + 情绪摘要) -->
+        <!-- 4. 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停 + 情绪摘要) -->
         <section class="card limit-up-section signal-workspace-panel" data-signal-panel="limit" hidden>
             <div class="card-header">
                 <h2>打板情绪</h2>
@@ -412,6 +415,7 @@
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="refresh">刷新</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="data">数据</button>
         </div>
         <section class="settings-view active" data-settings-panel="appearance">
         <div class="settings-group-intro">
@@ -533,17 +537,11 @@
             <input type="range" id="holding-opacity-input" min="0" max="100" step="1" value="100" class="settings-range-input">
         </div>
         </section>
-    </div>
-</div>
-
-<!-- 自选数据面板 -->
-<div class="data-overlay" id="data-overlay" hidden></div>
-<div class="data-panel" id="data-panel" role="dialog" aria-modal="true" aria-labelledby="data-panel-title" hidden>
-    <div class="settings-header">
-        <h3 id="data-panel-title">自选数据</h3>
-        <button class="settings-close" id="data-close" aria-label="关闭">✕</button>
-    </div>
-    <div class="settings-body">
+        <section class="settings-view" data-settings-panel="data" hidden>
+        <div class="settings-group-intro">
+            <strong>自选数据</strong>
+            <span>备份或恢复自选股分组、持仓信息、备注和自选指数。</span>
+        </div>
         <div class="data-action">
             <div>
                 <div class="data-action-title">导出自选数据</div>
@@ -560,6 +558,7 @@
             <input type="file" id="import-watchlist-file" accept="application/json,.json" hidden>
         </div>
         <div class="watchlist-status data-status" id="data-status"></div>
+        </section>
     </div>
 </div>
 

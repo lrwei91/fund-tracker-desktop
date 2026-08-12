@@ -83,5 +83,30 @@
     "success": true,
     "data": {"generatedAt": "2026-08-08T00:00:00Z", "items": [], "sourceStatus": {}},
     "meta": {"degraded": true, "stale": false}
+  },
+  "intraday-screening": {
+    "success": true,
+    "data": {
+      "status": "not_ready",
+      "snapshotDate": "2026-08-08",
+      "snapshotTime": "14:30",
+      "latestPublishedAt": "2026-08-08 14:30",
+      "source": "portfolio",
+      "sourceLabel": "公开报告",
+      "moduleHtml": ""
+    },
+    "meta": {
+      "asOf": "2026-08-09T00:00:00Z",
+      "degraded": true,
+      "stale": false,
+      "sources": {
+        "intradayScreening": {
+          "actual": "portfolio",
+          "actualLabel": "公开报告",
+          "requested": "portfolio",
+          "status": "not_ready"
+        }
+      }
+    }
   }
 }

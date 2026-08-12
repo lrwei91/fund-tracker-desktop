@@ -68,6 +68,7 @@ mod tests {
         "stock-kline",
         "stock-minute",
         "opportunity-radar",
+        "intraday-screening",
     ];
 
     fn cache_key(path: &str, query: &HashMap<String, String>) -> String {

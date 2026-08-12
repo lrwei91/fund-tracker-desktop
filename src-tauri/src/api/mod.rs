@@ -2,6 +2,7 @@ mod diagnostics;
 mod endpoints;
 mod handlers;
 mod http;
+mod intraday;
 mod kline;
 mod market;
 mod minute;
@@ -143,6 +144,7 @@ mod tests {
             ("stock-kline", vec![("code", "600519"), ("days", "120")]),
             ("stock-minute", vec![("code", "600519"), ("count", "30")]),
             ("opportunity-radar", vec![("limit", "3")]),
+            ("intraday-screening", vec![]),
         ];
         let mut failures = Vec::new();
         for (path, pairs) in targets {
@@ -183,6 +185,10 @@ mod tests {
                 "opportunity-radar" => result["data"]["items"]
                     .as_array()
                     .is_some_and(|rows| !rows.is_empty()),
+                "intraday-screening" => matches!(
+                    result["data"]["status"].as_str(),
+                    Some("ready" | "not_ready")
+                ),
                 "market-data" if pairs.iter().any(|pair| pair == &("type", "capital")) => {
                     result["data"]["mainFund"]["available"] == true
                 }

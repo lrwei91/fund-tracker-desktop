@@ -1,7 +1,7 @@
 // ================================================================
 // 市场行情 — App 入口
 // 职责:
-//   1. DOM init / wiring (tabs / collapsible / sector tabs / settings / data panel)
+//   1. DOM init / wiring (tabs / collapsible / sector tabs / settings / data actions)
 //   2. 设置 + 事件绑定 (auto refresh / opacity / threshold / 添加按钮)
 //   3. 自动刷新 (交易时段窗口触发各模块 load 函数)
 //   4. 主入口 (DOMContentLoaded)
@@ -216,6 +216,28 @@
         var panels = document.querySelectorAll('[data-signal-panel]');
         if (!tabs.length || !panels.length) return;
 
+        function reconcileIntradayScreeningDate() {
+            if (window.AppSignals && typeof window.AppSignals.reconcileIntradayScreeningDate === 'function') {
+                window.AppSignals.reconcileIntradayScreeningDate();
+            }
+        }
+
+        function scheduleIntradayScreeningDayRollover() {
+            var shanghaiOffsetMs = 8 * 60 * 60 * 1000;
+            var shiftedNow = Date.now() + shanghaiOffsetMs;
+            var shanghaiNow = new Date(shiftedNow);
+            var nextDay = Date.UTC(
+                shanghaiNow.getUTCFullYear(),
+                shanghaiNow.getUTCMonth(),
+                shanghaiNow.getUTCDate() + 1
+            );
+            var delay = Math.max(1000, nextDay - shiftedNow + 1000);
+            window.setTimeout(function () {
+                reconcileIntradayScreeningDate();
+                scheduleIntradayScreeningDayRollover();
+            }, delay);
+        }
+
         function selectSignalView(view) {
             tabs.forEach(function (tab) {
                 var active = tab.getAttribute('data-signal-view') === view;
@@ -229,6 +251,7 @@
                 panel.hidden = !active;
             });
             try { window.AppStorage.setItem('fund_tracker_signal_view', view); } catch (e) {}
+            if (view === 'screening') reconcileIntradayScreeningDate();
         }
 
         var savedView = 'radar';
@@ -242,6 +265,10 @@
                 selectSignalView(tab.getAttribute('data-signal-view'));
             });
         });
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) reconcileIntradayScreeningDate();
+        });
+        scheduleIntradayScreeningDayRollover();
     }
 
     function initSettingsViews() {
@@ -268,7 +295,7 @@
     }
 
     // ============================================================
-    // 设置面板 + 数据面板
+    // 设置面板 + 数据操作
     // ============================================================
 
     function initSettings() {
@@ -314,55 +341,16 @@
         overlay.addEventListener('click', closeSettings);
     }
 
-    function initDataPanel() {
-        var overlay = document.getElementById('data-overlay');
-        var panel = document.getElementById('data-panel');
-        var openBtn = document.getElementById('watchlist-data-btn');
-        var closeBtn = document.getElementById('data-close');
+    function initDataActions() {
         var exportBtn = document.getElementById('export-watchlist-btn');
         var importBtn = document.getElementById('import-watchlist-btn');
         var fileInput = document.getElementById('import-watchlist-file');
 
-        function openPanel() {
-            openBtn.setAttribute('aria-expanded', 'true');
-            if (window.AppDialog) {
-                window.AppDialog.open(panel, overlay, {
-                    trigger: openBtn,
-                    openClass: 'open',
-                    hideOnClose: true,
-                    focusTarget: closeBtn,
-                    onClose: function () { openBtn.setAttribute('aria-expanded', 'false'); },
-                });
-            } else {
-                overlay.hidden = false;
-                panel.hidden = false;
-                overlay.classList.add('open');
-                panel.classList.add('open');
-                closeBtn.focus();
-            }
-        }
-
-        function closePanel() {
-            if (window.AppDialog) window.AppDialog.close(panel);
-            else {
-                overlay.classList.remove('open');
-                panel.classList.remove('open');
-                overlay.hidden = true;
-                panel.hidden = true;
-                openBtn.setAttribute('aria-expanded', 'false');
-                openBtn.focus();
-            }
-        }
-
-        openBtn.setAttribute('aria-expanded', 'false');
-        openBtn.addEventListener('click', openPanel);
-        closeBtn.addEventListener('click', closePanel);
-        overlay.addEventListener('click', closePanel);
-        exportBtn.addEventListener('click', function () {
+        if (exportBtn) exportBtn.addEventListener('click', function () {
             if (window.AppWatchlist) window.AppWatchlist.exportWatchlistData();
         });
-        importBtn.addEventListener('click', function () { fileInput.click(); });
-        fileInput.addEventListener('change', function (e) {
+        if (importBtn && fileInput) importBtn.addEventListener('click', function () { fileInput.click(); });
+        if (fileInput) fileInput.addEventListener('change', function (e) {
             if (window.AppWatchlist) window.AppWatchlist.importWatchlistData(e);
         });
     }
@@ -522,6 +510,14 @@
         document.getElementById('refresh-btn').addEventListener('click', function () {
             manualRefreshAll();
         });
+        var intradayScreeningRunBtn = document.getElementById('intraday-screening-run-btn');
+        if (intradayScreeningRunBtn) {
+            intradayScreeningRunBtn.addEventListener('click', function () {
+                if (window.AppSignals && typeof window.AppSignals.runIntradayScreening === 'function') {
+                    window.AppSignals.runIntradayScreening(true);
+                }
+            });
+        }
 
     }
 
@@ -632,7 +628,7 @@
         }
         initSettings();
         syncSettingsControls();
-        initDataPanel();
+        initDataActions();
         initHoldingWindowButton();
         bindEvents();
         initUiStateRetries();

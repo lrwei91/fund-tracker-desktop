@@ -23,7 +23,7 @@ impl EndpointPolicy {
 
 pub fn endpoint_policy(path: &str) -> EndpointPolicy {
     match path.trim_start_matches('/') {
-        "stock" | "market-data" | "stock-minute" => EndpointPolicy::Live,
+        "stock" | "market-data" | "stock-minute" | "intraday-screening" => EndpointPolicy::Live,
         "opportunity-radar" => EndpointPolicy::Derived {
             stale_for: Duration::from_secs(10 * 60),
         },
@@ -129,6 +129,7 @@ mod tests {
         assert!(!endpoint_policy("stock").allows_stale());
         assert!(!endpoint_policy("market-data").allows_stale());
         assert!(!endpoint_policy("stock-minute").allows_stale());
+        assert!(!endpoint_policy("intraday-screening").allows_stale());
     }
 
     #[test]
