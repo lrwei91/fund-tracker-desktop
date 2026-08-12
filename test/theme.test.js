@@ -22,6 +22,7 @@ describe('AppTheme', () => {
 
     beforeEach(() => {
         media.matches = false;
+        delete window.__TAURI__;
         window.AppTheme.start({ storage: emptyStorage, window, media, document });
     });
 
@@ -50,5 +51,20 @@ describe('AppTheme', () => {
         }));
         expect(window.AppTheme.getMode()).toBe('dark');
         expect(document.documentElement.dataset.theme).toBe('dark');
+    });
+
+    it('同步最终主题到 Tauri 原生窗口', () => {
+        const setTheme = vi.fn(() => Promise.resolve());
+        window.__TAURI__ = {
+            window: {
+                getCurrentWindow: () => ({ setTheme }),
+            },
+        };
+
+        window.AppTheme.setMode('light', { window });
+        expect(setTheme).toHaveBeenCalledWith('light');
+
+        window.AppTheme.setMode('system', { window, prefersDark: true });
+        expect(setTheme).toHaveBeenLastCalledWith('dark');
     });
 });

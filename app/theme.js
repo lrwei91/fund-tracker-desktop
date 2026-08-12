@@ -38,6 +38,20 @@
         return normalizeMode(parseSettings(storage.getItem(SETTINGS_KEY)).colorMode);
     }
 
+    function syncNativeWindowTheme(resolved, windowObject) {
+        var tauriWindow = windowObject
+            && windowObject.__TAURI__
+            && windowObject.__TAURI__.window;
+        if (!tauriWindow || typeof tauriWindow.getCurrentWindow !== 'function') return;
+
+        try {
+            var result = tauriWindow.getCurrentWindow().setTheme(resolved);
+            if (result && typeof result.catch === 'function') result.catch(function () {});
+        } catch (_error) {
+            // Browser previews and tests do not expose the native window API.
+        }
+    }
+
     function apply(mode, options) {
         options = options || {};
         currentMode = normalizeMode(mode);
@@ -56,6 +70,7 @@
                 }));
             }
         }
+        syncNativeWindowTheme(resolved, options.window || root);
         return { mode: currentMode, resolved: resolved };
     }
 
