@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "fund-tracker"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "atomicwrites",
  "chrono",
