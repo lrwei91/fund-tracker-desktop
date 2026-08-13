@@ -151,8 +151,13 @@
         if (tab === 'signals') {
             if (!isBootstrapping && window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
         }
-        if (tab === 'funds' && !isBootstrapping && window.AppRefreshCoordinator) {
-            window.AppRefreshCoordinator.refreshTab(tab);
+        if (tab === 'funds' && !isBootstrapping) {
+            // 子页可能由上次选择直接恢复为“基金筛选”。即使启动总刷新仍在运行，
+            // 也要独立确保首次数据加载，避免刷新协调器复用旧批次后漏掉该请求。
+            if (window.AppFundBoard && typeof window.AppFundBoard.ensureLoaded === 'function') {
+                window.AppFundBoard.ensureLoaded().catch(function () {});
+            }
+            if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
         }
         if (tab === 'news' && !isBootstrapping && window.AppRefreshCoordinator) {
             window.AppRefreshCoordinator.refreshTab(tab);
@@ -541,6 +546,14 @@
         document.getElementById('refresh-btn').addEventListener('click', function () {
             manualRefreshAll();
         });
+        var sectorRotationRunBtn = document.getElementById('sector-rotation-run-btn');
+        if (sectorRotationRunBtn) {
+            sectorRotationRunBtn.addEventListener('click', function () {
+                if (window.AppSignals && typeof window.AppSignals.runSectorRotation === 'function') {
+                    window.AppSignals.runSectorRotation();
+                }
+            });
+        }
         var intradayScreeningRunBtn = document.getElementById('intraday-screening-run-btn');
         if (intradayScreeningRunBtn) {
             intradayScreeningRunBtn.addEventListener('click', function () {
@@ -654,6 +667,7 @@
         initSettingsViews();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
         if (window.AppFunds) window.AppFunds.initFunds();
+        if (window.AppFundBoard) window.AppFundBoard.initFundBoard();
         if (window.AppWatchlist) window.AppWatchlist.initWatchlistTabs();
         if (window.AppNews) {
             window.AppNews.initNewsSourceTabs();

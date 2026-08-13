@@ -19,6 +19,9 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
         "stock-search" => stock::search(gateway, query).await,
         "fund-search" => fund::search(gateway, query).await,
         "fund-quotes" => fund::quotes(gateway, query).await,
+        "fund-board" => fund::board(gateway, query).await,
+        "fund-board-trends" => fund::board_trends(gateway, query).await,
+        "fund-board-realtime" => fund::board_realtime(gateway, query).await,
         "hot-rank" => market::hot_rank(gateway, query).await,
         "limit-up" => market::limit_up(gateway, query).await,
         "cls-news" => news::cls(gateway, query).await,
@@ -33,6 +36,7 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
         "stock-minute" => detail::minute(gateway, query).await,
         "opportunity-radar" => signals::opportunity(gateway, query).await,
         "market-warnings" => signals::market_warnings(gateway, query).await,
+        "sector-rotation" => signals::sector_rotation(gateway, query).await,
         "intraday-screening" => signals::intraday_screening(gateway, query).await,
         _ => super::policy::failure("API not found", "unknown route", None),
     }

@@ -30,6 +30,21 @@
     "time": "2026-08-12",
     "meta": {"degraded": false, "stale": false, "missingCodes": [], "sources": {"quotes": {"actual": "sina-fund"}}}
   },
+  "fund-board": {
+    "success": true,
+    "data": {"funds": [{"sector": "有色金属", "name": "示例基金", "code": "017193", "weekReturn": "1.35%", "yearReturn": "56.35%", "maxDrawdown": "32.15%", "scale": "65.2亿", "institutionHolding": "3%", "managerHolding": "0万份", "internalHolding": "37万份", "stars": "★★★★★", "tags": "涨得多、跌得少", "redemptionFee": "7免"}], "etfInfo": {}},
+    "meta": {"degraded": false, "stale": false, "sources": {"fundPool": {"actual": "deepq-star"}}}
+  },
+  "fund-board-trends": {
+    "success": true,
+    "data": {"有色金属": 1.23},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "fund-board-realtime": {
+    "success": true,
+    "data": {"017193": 1.08},
+    "meta": {"degraded": false, "stale": false}
+  },
   "hot-rank": {
     "success": true,
     "data": {"source": "ths", "items": []},
@@ -106,6 +121,11 @@
         "anomalyRule": "30日累计正偏离达到200%"
       }
     },
+    "meta": {"degraded": false, "stale": false}
+  },
+  "sector-rotation": {
+    "success": true,
+    "data": {"status": "ready", "snapshotDate": "2026-08-12", "sectors": [{"rank": 1, "sectorName": "医药", "stocksCount": 18, "heatValue": 100, "driveEvent": "创新药交易活跃", "rotationDays": 5, "rotationTimes": 5, "rotationProb": "100%", "emotionalCycle": "发酵", "recognitionBenchmark": "示例股票", "trendAnalysis": "示例趋势", "tradingStrategy": "示例策略"}], "source": "deepq-ticai", "sourceLabel": "DeepQ 题材记忆库"},
     "meta": {"degraded": false, "stale": false}
   },
   "intraday-screening": {

@@ -56,6 +56,8 @@ async function bootstrapApp(options = {}) {
         setItem: (key, value) => stored.set(key, String(value)),
     };
     window.shell = options.shell;
+    window.AppFundBoard = options.fundBoard;
+    window.AppRefreshCoordinator = options.refreshCoordinator;
 
     window.eval(appScript);
     if (window.document.readyState === 'loading') {
@@ -95,6 +97,30 @@ describe('主界面信息架构', () => {
             expect(dom.window.location.hash).toBe('');
             expect(dom.window.document.querySelector('.tab-panel.active').id).toBe('tab-dashboard');
             expect(dom.window.document.querySelector('.desktop-nav .tab-btn.active').dataset.tab).toBe('dashboard');
+        } finally {
+            dom.window.close();
+        }
+    });
+
+    it('进入基金主 Tab 时独立确保已恢复的基金筛选子页完成首次加载', async () => {
+        let ensureCount = 0;
+        let refreshCount = 0;
+        const dom = await bootstrapApp({
+            fundBoard: {
+                initFundBoard() {},
+                ensureLoaded: async () => { ensureCount += 1; },
+            },
+            refreshCoordinator: {
+                start() {},
+                refreshAll: async () => {},
+                refreshTab: async (tab) => { if (tab === 'funds') refreshCount += 1; },
+            },
+        });
+        try {
+            dom.window.document.querySelector('.tab-btn[data-tab="funds"]').click();
+            await Promise.resolve();
+            expect(ensureCount).toBe(1);
+            expect(refreshCount).toBe(1);
         } finally {
             dom.window.close();
         }
@@ -170,22 +196,32 @@ describe('主界面信息架构', () => {
         const panel = doc.getElementById('tab-funds');
         expect(panel.querySelector('#fund-input')).not.toBeNull();
         expect(panel.querySelector('#add-fund-btn').textContent).toBe('添加基金');
-        expect(panel.querySelectorAll('.fund-watch-table-head [role="columnheader"]')).toHaveLength(6);
+        expect(panel.querySelectorAll('.fund-watch-table-head [role="columnheader"]')).toHaveLength(7);
         expect(panel.textContent).toContain('单位净值');
         expect(panel.textContent).toContain('日涨跌');
         expect(styles).toMatch(/\.fund-watch-section > \.card-body\s*\{[\s\S]*?padding:\s*0;/);
         expect(styles).toMatch(/\.fund-watch-add input\s*\{[\s\S]*?height:\s*36px;/);
         expect(styles).toMatch(/\.fund-watch-status:empty\s*\{[\s\S]*?display:\s*none;/);
         expect(styles).toMatch(/\.fund-watch-list > \.ui-state\s*\{[\s\S]*?min-height:\s*72px;/);
+        expect(styles).toMatch(/#main-content:has\(#tab-funds\.active \.fund-board-workspace\.active\)\s*\{[\s\S]*?overflow:\s*hidden;/);
+        expect(styles).toMatch(/#tab-funds\.active:has\(\.fund-board-workspace\.active\)\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\);[\s\S]*?height:\s*100%;/);
+        expect(styles).toMatch(/\.fund-board-workspace\.active\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\) auto;[\s\S]*?overflow:\s*hidden;/);
+        expect(styles).toMatch(/\.fund-board-grid\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     });
 
-    it('盘中筛选紧跟机会雷达，初始只提供手动获取入口', () => {
+    it('轮动板块位于盘中筛选左侧，两个面板初始都只提供手动入口', () => {
         const doc = parseIndex();
         const signalViews = Array.from(doc.querySelectorAll('[data-signal-view]'))
             .map((button) => button.getAttribute('data-signal-view'));
+        const rotationPanel = doc.querySelector('[data-signal-panel="rotation"]');
         const screeningPanel = doc.querySelector('[data-signal-panel="screening"]');
 
-        expect(signalViews).toEqual(['radar', 'screening', 'heat', 'limit']);
+        expect(signalViews).toEqual(['radar', 'rotation', 'screening', 'heat', 'limit']);
+        expect(rotationPanel).not.toBeNull();
+        expect(rotationPanel.hidden).toBe(true);
+        expect(rotationPanel.querySelector('#sector-rotation-run-btn').textContent).toBe('获取板块轮动');
+        expect(rotationPanel.querySelector('#sector-rotation-status').textContent).toContain('不会自动获取');
+        expect(rotationPanel.querySelector('#sector-rotation-results').children).toHaveLength(0);
         expect(screeningPanel).not.toBeNull();
         expect(screeningPanel.hidden).toBe(true);
         expect(screeningPanel.querySelector('#intraday-screening-run-btn').textContent).toBe('获取今日推荐');
@@ -198,5 +234,10 @@ describe('主界面信息架构', () => {
         expect(appScript).toMatch(/intradayScreeningRunBtn\.addEventListener\('click',[\s\S]*runIntradayScreening\(true\)/);
         expect(appScript).toMatch(/visibilitychange[\s\S]*reconcileIntradayScreeningDate/);
         expect(appScript).toMatch(/scheduleIntradayScreeningDayRollover/);
+    });
+
+    it('轮动板块 loader 只绑定到专属按钮点击', () => {
+        expect(appScript.match(/runSectorRotation\(\)/g)).toHaveLength(1);
+        expect(appScript).toMatch(/sectorRotationRunBtn\.addEventListener\('click',[\s\S]*runSectorRotation\(\)/);
     });
 });

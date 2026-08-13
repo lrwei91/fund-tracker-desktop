@@ -57,6 +57,9 @@ mod tests {
         "stock-search",
         "fund-search",
         "fund-quotes",
+        "fund-board",
+        "fund-board-trends",
+        "fund-board-realtime",
         "hot-rank",
         "limit-up",
         "cls-news",
@@ -71,6 +74,7 @@ mod tests {
         "stock-minute",
         "opportunity-radar",
         "market-warnings",
+        "sector-rotation",
         "intraday-screening",
     ];
 

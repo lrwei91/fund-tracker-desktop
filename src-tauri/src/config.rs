@@ -107,14 +107,6 @@ impl ConfigStore {
         persist(&self.path, &value)?;
         Ok(snapshot(&value))
     }
-
-    #[cfg(any(windows, test))]
-    pub fn clear(&self) -> Result<(), String> {
-        let mut value = self.value.lock().map_err(|_| "配置锁不可用".to_string())?;
-        *value = empty();
-        value["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
-        persist(&self.path, &value)
-    }
 }
 
 fn normalize(raw: Value) -> Value {
@@ -187,8 +179,6 @@ mod tests {
         assert!(store.load()["data"]
             .get("fund_tracker_active_main_tab")
             .is_none());
-        store.clear().unwrap();
-        assert_eq!(store.load()["data"], json!({}));
         let _ = fs::remove_file(path);
     }
 }

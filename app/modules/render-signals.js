@@ -50,6 +50,130 @@
     }
 
     // ============================================================
+    // 轮动板块（仅由页面按钮手动触发，展示上一交易日）
+    // ============================================================
+
+    var sectorRotationRequest = null;
+    var sectorRotationResult = null;
+
+    function setSectorRotationStatus(text, kind) {
+        var status = document.getElementById('sector-rotation-status');
+        if (!status) return;
+        status.textContent = text || '';
+        status.setAttribute('data-state', kind || 'idle');
+    }
+
+    function setSectorRotationButtonLoading(loading) {
+        var button = document.getElementById('sector-rotation-run-btn');
+        if (!button) return;
+        button.disabled = !!loading;
+        if (loading) button.setAttribute('aria-busy', 'true');
+        else button.removeAttribute('aria-busy');
+    }
+
+    function normalizeSectorRotation(data) {
+        if (!data || data.status !== 'ready' || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.snapshotDate || ''))) {
+            throw new Error('轮动板块日期无效');
+        }
+        var sectors = (Array.isArray(data.sectors) ? data.sectors : []).map(function (item) {
+            return {
+                rank: toFiniteNumber(item && item.rank),
+                sectorName: String(item && item.sectorName || '').trim().slice(0, 40),
+                stocksCount: toFiniteNumber(item && item.stocksCount),
+                heatValue: toFiniteNumber(item && item.heatValue),
+                driveEvent: String(item && item.driveEvent || '').trim().slice(0, 500),
+                rotationDays: toFiniteNumber(item && item.rotationDays),
+                rotationTimes: toFiniteNumber(item && item.rotationTimes),
+                rotationProb: String(item && item.rotationProb || '').trim().slice(0, 20),
+                emotionalCycle: String(item && item.emotionalCycle || '').trim().slice(0, 40),
+                recognitionBenchmark: String(item && item.recognitionBenchmark || '').trim().slice(0, 300),
+                trendAnalysis: String(item && item.trendAnalysis || '').trim().slice(0, 1200),
+                tradingStrategy: String(item && item.tradingStrategy || '').trim().slice(0, 1200),
+            };
+        }).filter(function (item) { return item.sectorName && item.rank !== null; });
+        sectors.sort(function (left, right) { return left.rank - right.rank; });
+        return { snapshotDate: data.snapshotDate, sectors: sectors };
+    }
+
+    function renderSectorRotation(data) {
+        var container = document.getElementById('sector-rotation-results');
+        if (!container) return;
+        if (!data.sectors.length) {
+            container.innerHTML = uiState.render('empty', {
+                title: '上一交易日暂无轮动板块',
+                detail: '数据源已更新，但没有返回板块记录。',
+            });
+            return;
+        }
+        container.innerHTML = '<div class="sector-rotation-list">' + data.sectors.map(function (item) {
+            var metrics = [
+                ['热度', item.heatValue === null ? '--' : item.heatValue],
+                ['个股', item.stocksCount === null ? '--' : item.stocksCount + '只'],
+                ['轮动', item.rotationDays === null && item.rotationTimes === null ? '--' :
+                    [item.rotationDays === null ? '' : item.rotationDays + '天',
+                        item.rotationTimes === null ? '' : item.rotationTimes + '次'].filter(Boolean).join(' / ')],
+                ['概率', item.rotationProb || '--'],
+            ];
+            return '<details class="sector-rotation-card"' + (item.rank === 1 ? ' open' : '') + '>' +
+                '<summary><span class="sector-rotation-rank">' + utils.escapeHtml(String(item.rank)) + '</span>' +
+                '<div class="sector-rotation-title"><strong>' + utils.escapeHtml(item.sectorName) + '</strong>' +
+                '<span>' + utils.escapeHtml(item.emotionalCycle || '周期未标注') + '</span></div>' +
+                '<div class="sector-rotation-metrics">' + metrics.map(function (metric) {
+                    return '<span><small>' + utils.escapeHtml(metric[0]) + '</small><b>' + utils.escapeHtml(String(metric[1])) + '</b></span>';
+                }).join('') + '</div><span class="sector-rotation-toggle" aria-hidden="true">⌄</span></summary>' +
+                '<div class="sector-rotation-detail">' +
+                    '<div><small>驱动事件</small><p>' + utils.escapeHtml(item.driveEvent || '暂无') + '</p></div>' +
+                    '<div><small>辨识度标杆</small><p>' + utils.escapeHtml(item.recognitionBenchmark || '暂无') + '</p></div>' +
+                    '<div><small>趋势观察</small><p>' + utils.escapeHtml(item.trendAnalysis || '暂无') + '</p></div>' +
+                    '<div><small>参考策略</small><p>' + utils.escapeHtml(item.tradingStrategy || '暂无') + '</p></div>' +
+                '</div></details>';
+        }).join('') + '</div>';
+    }
+
+    function runSectorRotation() {
+        if (sectorRotationRequest) return sectorRotationRequest;
+        var container = document.getElementById('sector-rotation-results');
+        var timeEl = document.getElementById('sector-rotation-update-time');
+        setSectorRotationButtonLoading(true);
+        setSectorRotationStatus(sectorRotationResult ? '正在刷新，当前结果保留至请求完成。' : '正在获取上一交易日轮动板块…', 'loading');
+        if (!sectorRotationResult && container) container.innerHTML = uiState.render('loading', {
+            title: '正在获取轮动板块',
+            detail: '只有本次手动操作会发起请求。',
+        });
+        var request = window.AppDataClient.fetchData('/sector-rotation', {}, {
+            force: true,
+            cacheMode: 'bypass_fresh',
+        }).then(function (result) {
+            var normalized = normalizeSectorRotation(result.data);
+            sectorRotationResult = normalized;
+            renderSectorRotation(normalized);
+            if (timeEl) timeEl.textContent = '数据日期：' + normalized.snapshotDate;
+            var stale = !!(result.meta && result.meta.stale);
+            setSectorRotationStatus('数据源：' + (result.data.sourceLabel || 'DeepQ 题材记忆库') +
+                (stale ? ' · 缓存数据' : '') + ' · 仅手动更新', stale ? 'degraded' : 'ready');
+            return normalized;
+        }).catch(function (error) {
+            console.error('轮动板块获取失败:', error);
+            if (sectorRotationResult) {
+                setSectorRotationStatus('刷新失败，保留当前结果。', 'error');
+            } else {
+                if (timeEl) timeEl.textContent = '';
+                setSectorRotationStatus('轮动板块获取失败，请稍后手动重试。', 'error');
+                if (container) container.innerHTML = uiState.render('error', {
+                    title: '轮动板块暂不可用',
+                    detail: '本次没有获取到上一交易日数据。',
+                });
+            }
+            return null;
+        });
+        sectorRotationRequest = request.finally(function () {
+            sectorRotationRequest = null;
+            setSectorRotationButtonLoading(false);
+        });
+        return sectorRotationRequest;
+    }
+
+    // ============================================================
     // 盘中筛选（仅由页面按钮手动触发）
     // ============================================================
 
@@ -830,6 +954,9 @@
     }
 
     window.AppSignals = {
+        // sector rotation (manual only)
+        normalizeSectorRotation: normalizeSectorRotation,
+        runSectorRotation: runSectorRotation,
         // intraday screening (manual only)
         runIntradayScreening: runIntradayScreening,
         reconcileIntradayScreeningDate: reconcileIntradayScreeningDate,

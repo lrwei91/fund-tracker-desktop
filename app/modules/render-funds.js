@@ -1,12 +1,17 @@
-// 自选基金：独立于股票自选的轻量列表，只保留基金需要的增删、净值与日涨跌。
+// 自选基金：基金增删、盘后净值、日涨跌与当日盘中估值采样。
 (function () {
     var STORAGE_KEY = 'fund_tracker_fund_watchlist';
+    var INTRADAY_CACHE_KEY = 'fund_tracker_fund_intraday_cache';
     var MAX_FUNDS = 30;
     var funds = [];
     var quotes = {};
     var freshCodes = {};
     var loaded = false;
     var inflight = null;
+    var intradayInflight = null;
+    var intradayTimer = null;
+    var intradayDate = '';
+    var intradayPoints = {};
     var utils = window.AppUtils;
     var uiState = window.AppUiState;
 
@@ -80,6 +85,109 @@
         return number > 0 ? 'positive' : number < 0 ? 'negative' : 'neutral';
     }
 
+    function restoreIntraday() {
+        if (intradayDate) return;
+        var today = currentDateKey();
+        try {
+            var cached = JSON.parse(window.AppStorage.getItem(INTRADAY_CACHE_KEY) || 'null');
+            intradayDate = today;
+            if (!cached || cached.date !== today || !cached.points || typeof cached.points !== 'object') return;
+            Object.keys(cached.points).forEach(function (code) {
+                if (!/^\d{6}$/.test(code) || !Array.isArray(cached.points[code])) return;
+                intradayPoints[code] = cached.points[code].map(function (point) {
+                    return { time: Number(point.time), value: normalizeIntradayValue(point.value) };
+                }).filter(function (point) {
+                    return Number.isFinite(point.time) && point.value !== null;
+                }).slice(-242);
+            });
+        } catch (error) {
+            intradayDate = today;
+            intradayPoints = {};
+        }
+    }
+
+    function persistIntraday() {
+        try {
+            window.AppStorage.setItem(INTRADAY_CACHE_KEY, JSON.stringify({ date: intradayDate, points: intradayPoints }));
+        } catch (error) {}
+    }
+
+    function currentDateKey(date) {
+        var value = date || new Date();
+        return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-');
+    }
+
+    function resetIntradayIfNeeded() {
+        restoreIntraday();
+        var today = currentDateKey();
+        if (intradayDate === today) return;
+        intradayDate = today;
+        intradayPoints = {};
+        persistIntraday();
+    }
+
+    function normalizeIntradayValue(value) {
+        var number = Number(value);
+        return Number.isFinite(number) && Math.abs(number) <= 30 ? number : null;
+    }
+
+    function applyFundIntraday(result, requestedCodes, sampledAt) {
+        if (!result || result.success === false || !result.data) return false;
+        resetIntradayIfNeeded();
+        var timestamp = sampledAt || Date.now();
+        var minute = Math.floor(timestamp / 60000) * 60000;
+        var received = 0;
+        requestedCodes.forEach(function (code) {
+            var value = normalizeIntradayValue(result.data[code]);
+            if (value === null) return;
+            var points = intradayPoints[code] || [];
+            var point = { time: minute, value: value };
+            if (points.length && points[points.length - 1].time === minute) points[points.length - 1] = point;
+            else points.push(point);
+            intradayPoints[code] = points.slice(-242);
+            received += 1;
+        });
+        if (received) {
+            persistIntraday();
+            renderFunds();
+        }
+        return received > 0;
+    }
+
+    function renderFundIntraday(code) {
+        resetIntradayIfNeeded();
+        var points = intradayPoints[code] || [];
+        if (!points.length) return '<div class="fund-watch-intraday is-empty" role="cell"><span>--</span><small>' +
+            (isMarketActive() ? '等待盘中估值' : '非交易时段') + '</small></div>';
+        var latest = points[points.length - 1].value;
+        var tone = changeClass(latest);
+        var chart = '';
+        if (points.length > 1) {
+            var width = 104;
+            var height = 30;
+            var padding = 2;
+            var bound = Math.max(0.1, Math.max.apply(Math, points.map(function (point) { return Math.abs(point.value); })));
+            var xStep = (width - padding * 2) / Math.max(1, points.length - 1);
+            var coordinates = points.map(function (point, index) {
+                var x = padding + index * xStep;
+                var y = padding + (bound - point.value) / (bound * 2) * (height - padding * 2);
+                return [x, y];
+            });
+            var path = coordinates.map(function (point, index) {
+                return (index ? 'L' : 'M') + point[0].toFixed(2) + ',' + point[1].toFixed(2);
+            }).join(' ');
+            var last = coordinates[coordinates.length - 1];
+            chart = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' +
+                '<line class="fund-watch-intraday-base" x1="2" y1="15" x2="102" y2="15"></line>' +
+                '<path class="fund-watch-intraday-line" d="' + path + '" vector-effect="non-scaling-stroke"></path>' +
+                '<circle class="fund-watch-intraday-dot" cx="' + last[0].toFixed(2) + '" cy="' + last[1].toFixed(2) + '" r="1.8"></circle></svg>';
+        }
+        var time = new Date(points[points.length - 1].time);
+        var timeText = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+        return '<div class="fund-watch-intraday ' + tone + '" role="cell" title="盘中估值采样 ' + escapeHtml(timeText) + '">' +
+            chart + '<span>' + escapeHtml(formatChange(latest)) + '</span><small>' + escapeHtml(timeText) + '</small></div>';
+    }
+
     function renderFundRow(fund) {
         var quote = quotes[fund.code] || null;
         var change = quote ? quote.dayChangePercent : null;
@@ -88,6 +196,7 @@
         return '<div class="fund-watch-row' + (quote && !fresh ? ' is-stale' : '') + '" data-fund-code="' + escapeHtml(fund.code) + '" role="row">' +
             '<div class="fund-watch-identity" role="cell"><strong>' + escapeHtml(name) + '</strong><span>' + escapeHtml(fund.code) + '</span></div>' +
             '<div class="fund-watch-type" role="cell">' + escapeHtml(fund.type || '基金') + '</div>' +
+            renderFundIntraday(fund.code) +
             '<div class="fund-watch-nav" role="cell"><strong>' + escapeHtml(quote ? formatNav(quote.unitNav) : '--') + '</strong><span>单位净值</span></div>' +
             '<div class="fund-watch-date" role="cell">' + escapeHtml(quote && quote.navDate ? quote.navDate : '--') + '</div>' +
             '<div class="fund-watch-change ' + changeClass(change) + '" role="cell">' + escapeHtml(formatChange(change)) + '</div>' +
@@ -156,6 +265,43 @@
         return receivedCount > 0;
     }
 
+    function loadFundIntraday(force) {
+        restoreFunds();
+        if (!funds.length || !window.AppDataClient) return Promise.resolve({ skipped: true });
+        resetIntradayIfNeeded();
+        if (!isMarketActive()) {
+            renderFunds();
+            return Promise.resolve({ skipped: true, reason: 'market_closed' });
+        }
+        if (intradayInflight) return intradayInflight;
+        var codes = getFundCodes();
+        intradayInflight = Promise.resolve(window.AppDataClient.fetchData('/fund-board-realtime', {
+            codes: codes.join(','),
+        }, {
+            force: !!force,
+            cacheMode: force ? 'bypass_fresh' : 'normal',
+        })).then(function (result) {
+            applyFundIntraday(result, codes);
+            return result;
+        }).finally(function () {
+            intradayInflight = null;
+        });
+        return intradayInflight;
+    }
+
+    function isFundWatchActive() {
+        var main = document.getElementById('tab-funds');
+        var watch = document.querySelector('[data-fund-panel="watch"]');
+        return !!(main && watch && main.classList.contains('active') && watch.classList.contains('active'));
+    }
+
+    function isMarketActive() {
+        var now = new Date();
+        var day = now.getDay();
+        var minutes = now.getHours() * 60 + now.getMinutes();
+        return day > 0 && day < 6 && minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30;
+    }
+
     function loadFundQuotes(force) {
         restoreFunds();
         if (!funds.length || !window.AppDataClient) {
@@ -181,6 +327,7 @@
             throw error;
         }).finally(function () {
             inflight = null;
+            loadFundIntraday(force).catch(function () {});
         });
         return inflight;
     }
@@ -242,7 +389,9 @@
         funds = funds.filter(function (fund) { return fund.code !== code; });
         delete quotes[code];
         delete freshCodes[code];
+        delete intradayPoints[code];
         persistFunds();
+        persistIntraday();
         renderFunds();
         if (!funds.length) {
             var timeElement = document.getElementById('fund-watch-update-time');
@@ -256,7 +405,10 @@
         funds = normalizeFunds(entries);
         quotes = {};
         freshCodes = {};
+        intradayPoints = {};
+        intradayDate = currentDateKey();
         persistFunds();
+        persistIntraday();
         renderFunds();
         if (funds.length) loadFundQuotes(true).catch(function () {});
         return funds.length;
@@ -276,15 +428,24 @@
             var button = event.target.closest('[data-remove-fund]');
             if (button) removeFund(button.getAttribute('data-remove-fund'));
         });
+        if (!intradayTimer) {
+            intradayTimer = window.setInterval(function () {
+                if (isFundWatchActive() && !document.hidden && isMarketActive()) {
+                    loadFundIntraday(false).catch(function () {});
+                }
+            }, 60 * 1000);
+        }
     }
 
     window.AppFunds = {
         addFund: addFund,
+        applyFundIntraday: applyFundIntraday,
         applyFundQuotes: applyFundQuotes,
         exportFunds: getFunds,
         getFundCodes: getFundCodes,
         importFunds: importFunds,
         initFunds: initFunds,
+        loadFundIntraday: loadFundIntraday,
         loadFundQuotes: loadFundQuotes,
         removeFund: removeFund,
         renderFunds: renderFunds,

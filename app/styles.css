@@ -1273,7 +1273,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app .fund-watch-table-head,
 .electron-app .fund-watch-row {
     display: grid;
-    grid-template-columns: minmax(220px, 1.8fr) minmax(116px, 0.9fr) 110px 112px 88px 28px;
+    grid-template-columns: minmax(190px, 1.6fr) minmax(96px, 0.75fr) 116px 100px 102px 78px 28px;
     align-items: center;
     gap: 12px;
 }
@@ -1341,6 +1341,48 @@ html[data-theme="dark"] .electron-app {
 .electron-app .fund-watch-change {
     text-align: right;
 }
+
+.electron-app .fund-watch-intraday {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 30px auto;
+    align-items: end;
+    min-width: 0;
+    column-gap: 5px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.electron-app .fund-watch-intraday svg {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 30px;
+    overflow: visible;
+}
+
+.electron-app .fund-watch-intraday-base {
+    stroke: var(--border);
+    stroke-dasharray: 2 2;
+    stroke-width: 1;
+}
+
+.electron-app .fund-watch-intraday-line {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.5;
+}
+
+.electron-app .fund-watch-intraday-dot { fill: currentColor; }
+.electron-app .fund-watch-intraday > span { font-weight: 700; }
+.electron-app .fund-watch-intraday > small { color: var(--text-tertiary); font-size: 9px; text-align: right; }
+.electron-app .fund-watch-intraday.is-empty { display: flex; flex-direction: column; align-items: flex-end; }
+.electron-app .fund-watch-intraday.is-empty span { color: var(--text-tertiary); }
+.electron-app .fund-watch-intraday.is-empty small { margin-top: 3px; white-space: nowrap; }
 
 .electron-app .fund-watch-nav strong,
 .electron-app .fund-watch-change {
@@ -1581,7 +1623,7 @@ html[data-theme="dark"] .electron-app {
     top: 0;
     z-index: 4;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 3px;
     padding: 0;
     background: var(--bg-base);
@@ -1598,6 +1640,69 @@ html[data-theme="dark"] .electron-app {
 .electron-app .signal-workspace-panel {
     align-self: start;
 }
+
+/* Sector rotation stays idle until the user explicitly starts it. */
+.electron-app .sector-rotation-heading {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 9px;
+}
+
+.electron-app .sector-rotation-update-time {
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.electron-app .sector-rotation-section > .card-body { padding: 0; }
+.electron-app .sector-rotation-results:empty { display: none; }
+.electron-app .sector-rotation-results > .ui-state { margin: 0 12px 12px; }
+.electron-app .sector-rotation-list { display: grid; gap: 8px; padding: 0 12px 12px; }
+.electron-app .sector-rotation-card {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--color-surface);
+}
+
+.electron-app .sector-rotation-card > summary {
+    display: grid;
+    grid-template-columns: 28px minmax(120px, .9fr) minmax(300px, 1.8fr) 20px;
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.electron-app .sector-rotation-card > summary::-webkit-details-marker { display: none; }
+.electron-app .sector-rotation-card[open] > summary { background: var(--amber-soft-bg); }
+.electron-app .sector-rotation-rank {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--bg-input);
+    color: var(--text-secondary);
+    font: 700 11px var(--mono);
+}
+
+.electron-app .sector-rotation-card:first-child .sector-rotation-rank { background: var(--amber); color: #fff; }
+.electron-app .sector-rotation-title { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.electron-app .sector-rotation-title strong { overflow: hidden; color: var(--text-primary); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.electron-app .sector-rotation-title span { color: var(--text-tertiary); font-size: 10px; }
+.electron-app .sector-rotation-metrics { display: grid; grid-template-columns: repeat(4, minmax(54px, 1fr)); gap: 6px; }
+.electron-app .sector-rotation-metrics > span { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.electron-app .sector-rotation-metrics small { color: var(--text-tertiary); font-size: 9px; }
+.electron-app .sector-rotation-metrics b { color: var(--text-secondary); font: 700 11px var(--mono); }
+.electron-app .sector-rotation-toggle { color: var(--text-tertiary); transition: transform .16s ease; }
+.electron-app .sector-rotation-card[open] .sector-rotation-toggle { transform: rotate(180deg); }
+.electron-app .sector-rotation-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; border-top: 1px solid var(--border); }
+.electron-app .sector-rotation-detail > div { padding: 9px 10px; border-radius: 7px; background: var(--bg-row-alt); }
+.electron-app .sector-rotation-detail small { color: var(--text-tertiary); font-size: 10px; }
+.electron-app .sector-rotation-detail p { margin: 5px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.65; white-space: pre-line; }
 
 /* Intraday screening stays idle until the user explicitly starts it. */
 .electron-app .intraday-screening-heading {
@@ -3027,6 +3132,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app :where(
     .sector-tab,
     .signal-workspace-tab,
+    .fund-workspace-tab,
     .hot-rank-tab,
     .limit-up-tab,
     .news-source-tab,
@@ -3049,6 +3155,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app :where(
     .sector-tab,
     .signal-workspace-tab,
+    .fund-workspace-tab,
     .hot-rank-tab,
     .limit-up-tab,
     .news-source-tab,
@@ -3062,6 +3169,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app :where(
     .sector-tab,
     .signal-workspace-tab,
+    .fund-workspace-tab,
     .hot-rank-tab,
     .limit-up-tab,
     .news-source-tab,
@@ -3752,17 +3860,21 @@ html[data-theme="dark"] .electron-app {
     }
 
     .electron-app .fund-watch-row {
-        grid-template-columns: minmax(0, 1fr) 88px 74px;
+        grid-template-columns: minmax(0, 1fr) 98px 74px;
         grid-template-areas:
             'identity nav change'
+            'intraday intraday intraday'
             'type date remove';
         gap: 8px 10px;
-        min-height: 92px;
+        min-height: 126px;
         padding: 12px;
     }
 
     .electron-app .fund-watch-identity { grid-area: identity; }
     .electron-app .fund-watch-type { grid-area: type; }
+    .electron-app .fund-watch-intraday { grid-area: intraday; grid-template-columns: minmax(0, 1fr) auto; }
+    .electron-app .fund-watch-intraday svg { height: 34px; }
+    .electron-app .fund-watch-intraday.is-empty { align-items: flex-start; }
     .electron-app .fund-watch-nav { grid-area: nav; }
     .electron-app .fund-watch-date { grid-area: date; }
     .electron-app .fund-watch-change { grid-area: change; }
@@ -3788,10 +3900,19 @@ html[data-theme="dark"] .electron-app {
         gap: 9px;
     }
 
+    .electron-app .sector-rotation-heading,
     .electron-app .intraday-screening-heading {
         display: grid;
         gap: 2px;
     }
+
+    .electron-app .sector-rotation-card > summary {
+        grid-template-columns: 26px minmax(0, 1fr) 18px;
+    }
+
+    .electron-app .sector-rotation-metrics { grid-column: 2; }
+    .electron-app .sector-rotation-toggle { grid-column: 3; grid-row: 1 / span 2; }
+    .electron-app .sector-rotation-detail { grid-template-columns: 1fr; }
 
     .electron-app .intraday-screening-table {
         overflow-x: visible;
@@ -4151,4 +4272,349 @@ html[data-theme="dark"] .electron-app {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Fund workspace + fund screening */
+.electron-app .fund-workspace-tabs {
+    position: sticky;
+    z-index: 8;
+    top: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+    width: 100%;
+    padding: 0;
+    background: var(--bg-base);
+}
+
+.electron-app .fund-workspace-tab {
+    height: 34px;
+}
+
+.electron-app .fund-workspace-panel[hidden] { display: none !important; }
+.electron-app #main-content:has(#tab-funds.active .fund-board-workspace.active) {
+    overflow: hidden;
+}
+
+.electron-app #tab-funds.active:has(.fund-board-workspace.active) {
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.electron-app .fund-board-workspace {
+    min-width: 0;
+    overflow: clip;
+    border: 1px solid color-mix(in srgb, var(--amber) 18%, var(--border));
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 12% 0, rgb(251 191 36 / 8%), transparent 24rem),
+        color-mix(in srgb, var(--color-surface) 96%, #fff7ed);
+    box-shadow: var(--shadow-sm);
+}
+
+.electron-app .fund-board-workspace.active {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.electron-app .fund-board-toolbar {
+    position: relative;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(260px, 420px);
+    gap: 8px 14px;
+    padding: 11px 13px 9px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--color-surface) 94%, #fff8e8);
+}
+
+.electron-app .fund-board-heading,
+.electron-app .fund-board-search-wrap,
+.electron-app .fund-board-filter-row,
+.electron-app .fund-board-fund-title,
+.electron-app .fund-board-fund-meta,
+.electron-app .fund-board-sector-name,
+.electron-app .fund-board-etf,
+.electron-app .fund-board-etf span {
+    display: flex;
+    align-items: center;
+}
+
+.electron-app .fund-board-heading {
+    justify-content: space-between;
+    gap: 9px;
+}
+
+.electron-app .fund-board-heading span,
+.electron-app .fund-board-status {
+    color: var(--text-tertiary);
+    font-size: 10px;
+}
+
+.electron-app .fund-board-help,
+.electron-app .fund-board-filter,
+.electron-app .fund-board-sort {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--color-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 10px;
+}
+
+.electron-app .fund-board-help { padding: 3px 7px; }
+.electron-app .fund-board-help:hover { border-color: var(--amber); color: #9a5a11; }
+
+.electron-app .fund-board-search-wrap {
+    height: 32px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-tertiary);
+}
+
+.electron-app .fund-board-search-wrap:focus-within {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px rgb(245 158 11 / 13%);
+}
+
+.electron-app .fund-board-search-wrap input {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    padding: 0 0 0 7px;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 11px;
+}
+
+.electron-app .fund-board-filter-row {
+    grid-column: 1 / -1;
+    gap: 5px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.electron-app .fund-board-filter,
+.electron-app .fund-board-sort {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+}
+
+.electron-app .fund-board-filter.active,
+.electron-app .fund-board-sort.active {
+    border-color: #d69228;
+    background: #f3a920;
+    color: #fff;
+    box-shadow: 0 1px 3px rgb(180 83 9 / 18%);
+}
+
+.electron-app .fund-board-sort { margin-left: auto; color: #b56010; }
+.electron-app .fund-board-status { grid-column: 1 / -1; min-height: 12px; }
+.electron-app .fund-board-status:empty { display: none; }
+.electron-app .fund-board-status.loading { color: var(--amber); }
+.electron-app .fund-board-status.error { color: var(--red); }
+
+.electron-app .fund-board-grid {
+    display: flex;
+    min-height: 0;
+    align-items: flex-start;
+    gap: 6px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 7px;
+}
+
+.electron-app .fund-board-grid > .ui-state { width: 100%; margin: 10px; }
+.electron-app .fund-board-column {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.electron-app .fund-board-sector {
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, #d7b779);
+    border-radius: 9px;
+    background: var(--color-surface);
+    box-shadow: 0 1px 4px rgb(15 23 42 / 6%);
+}
+
+.electron-app .fund-board-sector-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 39px;
+    padding: 7px 9px;
+    border-bottom: 2px solid rgb(15 23 42 / 55%);
+    color: #334155;
+}
+
+.electron-app .fund-board-sector-header.tone-amber { background: #fef3c7; color: #92400e; }
+.electron-app .fund-board-sector-header.tone-indigo { background: #e0e7ff; color: #3730a3; }
+.electron-app .fund-board-sector-header.tone-blue { background: #dbeafe; color: #1e40af; }
+.electron-app .fund-board-sector-header.tone-pink { background: #fce7f3; color: #9d174d; }
+.electron-app .fund-board-sector-header.tone-green { background: #dcfce7; color: #166534; }
+.electron-app .fund-board-sector-header.tone-purple { background: #f3e8ff; color: #6b21a8; }
+.electron-app .fund-board-sector-header.tone-violet { background: #ede9fe; color: #5b21b6; }
+.electron-app .fund-board-sector-header.tone-red { background: #fee2e2; color: #991b1b; }
+.electron-app .fund-board-sector-header.tone-orange { background: #ffedd5; color: #9a3412; }
+.electron-app .fund-board-sector-header.tone-gray { background: #f1f5f9; color: #334155; }
+
+.electron-app .fund-board-sector-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .fund-board-sector-name i { margin-right: 5px; font-size: 17px; font-style: normal; }
+.electron-app .fund-board-sector-header > strong { flex: 0 0 auto; margin-left: 7px; font: 800 13px var(--mono); }
+.electron-app .fund-board-sector-body { padding: 4px; }
+
+.electron-app .fund-board-etf {
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 3px;
+    padding: 5px 6px;
+    border: 1px solid #fde7b0;
+    border-radius: 6px;
+    background: #fffbeb;
+    color: #66513b;
+    cursor: pointer;
+    font-size: 10px;
+}
+
+.electron-app .fund-board-etf span { min-width: 0; gap: 5px; }
+.electron-app .fund-board-etf b { padding: 1px 4px; border-radius: 4px; background: #f6b82f; color: #fff; font-size: 9px; }
+.electron-app .fund-board-etf em { color: #c27412; font: 700 10px var(--mono); font-style: normal; }
+.electron-app .fund-board-etf:hover { background: #fff5cf; }
+
+.electron-app .fund-board-fund {
+    padding: 5px 6px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: var(--color-surface);
+}
+
+.electron-app .fund-board-fund + .fund-board-fund { margin-top: 2px; }
+.electron-app .fund-board-fund:hover { background: var(--bg-row-alt); }
+.electron-app .fund-board-fund.top-pick { border-color: #f2d58e; background: #fff9e7; }
+.electron-app .fund-board-fund-title { justify-content: space-between; gap: 4px; }
+.electron-app .fund-board-fund-title strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .fund-board-stars { display: flex; flex: 0 0 auto; }
+.electron-app .fund-board-stars span { color: #e5e7eb; font-size: 10px; line-height: 1; }
+.electron-app .fund-board-stars span.active { color: #f4b427; }
+.electron-app .fund-board-fund-meta { gap: 4px; margin-top: 5px; }
+
+.electron-app .fund-board-copy {
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font: 9px var(--mono);
+}
+
+.electron-app .fund-board-copy:hover { color: #b56010; }
+.electron-app .fund-board-tags { display: flex; min-width: 0; gap: 2px; overflow: hidden; }
+.electron-app .fund-board-tag {
+    flex: 0 0 auto;
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: #eff6ff;
+    color: #3b82f6;
+    font-size: 8px;
+    line-height: 1.5;
+}
+
+.electron-app .fund-board-tag.hot { background: #fff1f2; color: #ef4444; }
+.electron-app .fund-board-tag.safe,
+.electron-app .fund-board-tag.fee { background: #ecfdf5; color: #059669; }
+.electron-app .fund-board-tag.scale { background: #f5f3ff; color: #8b5cf6; }
+.electron-app .fund-board-tag.selected { font-weight: 900; }
+.electron-app .fund-board-tag.faded { opacity: .3; }
+.electron-app .fund-board-realtime { flex: 0 0 auto; margin-left: auto; font: 800 10px var(--mono); }
+
+.electron-app .fund-board-footer {
+    padding: 8px 12px 10px;
+    color: var(--text-tertiary);
+    font-size: 9px;
+    text-align: center;
+}
+
+.electron-app .fund-board-help-modal {
+    position: fixed;
+    z-index: 1200;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgb(15 23 42 / 46%);
+}
+
+.electron-app .fund-board-help-modal[hidden] { display: none; }
+.electron-app .fund-board-help-card {
+    width: min(560px, 100%);
+    max-height: min(720px, 88vh);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    box-shadow: 0 20px 60px rgb(15 23 42 / 24%);
+}
+
+.electron-app .fund-board-help-card > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    background: #fff8e8;
+}
+
+.electron-app .fund-board-help-card h3 { margin: 0; color: #9a5a11; font-size: 15px; }
+.electron-app .fund-board-help-card header button { border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.electron-app .fund-board-help-body { max-height: calc(min(720px, 88vh) - 50px); padding: 14px 18px 18px; overflow-y: auto; }
+.electron-app .fund-board-help-body h4 { margin: 10px 0 5px; color: var(--text-primary); font-size: 12px; }
+.electron-app .fund-board-help-body h4:first-child { margin-top: 0; }
+.electron-app .fund-board-help-body ol { margin: 0; padding-left: 21px; color: var(--text-secondary); font-size: 11px; line-height: 1.8; }
+.electron-app .fund-board-help-body p { margin: 12px 0 0; color: var(--text-tertiary); font-size: 10px; }
+
+@media (max-width: 760px) {
+    .electron-app .fund-board-toolbar { grid-template-columns: 1fr; }
+    .electron-app .fund-board-search-wrap,
+    .electron-app .fund-board-filter-row,
+    .electron-app .fund-board-status { grid-column: 1; }
+    .electron-app .fund-board-sort { margin-left: 0; }
+}
+
+.electron-app .fund-board-grid.is-realtime-stale .fund-board-sector-header > strong,
+.electron-app .fund-board-grid.is-realtime-stale .fund-board-realtime {
+    opacity: .62;
 }

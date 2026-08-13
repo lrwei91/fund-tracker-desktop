@@ -77,6 +77,44 @@ describe('AppFunds', () => {
         expect(document.querySelector('.fund-watch-change').textContent).toBe('-0.10%');
     });
 
+    it('交易时段批量获取自选基金盘中估值', async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-08-13T10:01:00+08:00'));
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        window.AppDataClient.fetchData.mockResolvedValue({ success: true, data: { 110022: 0.36 } });
+
+        await window.AppFunds.loadFundIntraday(false);
+        expect(window.AppDataClient.fetchData).toHaveBeenCalledWith(
+            '/fund-board-realtime',
+            { codes: '110022' },
+            { force: false, cacheMode: 'normal' },
+        );
+        expect(document.querySelector('.fund-watch-intraday').textContent).toContain('+0.36%');
+        vi.useRealTimers();
+    });
+
+    it('按分钟采样实时估值并渲染基金分时走势', async () => {
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        window.AppFunds.applyFundIntraday({ success: true, data: { 110022: 0.12 } }, ['110022'], new Date('2026-08-13T09:31:10+08:00').getTime());
+        window.AppFunds.applyFundIntraday({ success: true, data: { 110022: 0.28 } }, ['110022'], new Date('2026-08-13T09:32:10+08:00').getTime());
+
+        const intraday = document.querySelector('.fund-watch-intraday');
+        expect(intraday.textContent).toContain('+0.28%');
+        expect(intraday.textContent).toContain('09:32');
+        expect(intraday.querySelector('.fund-watch-intraday-line').getAttribute('vector-effect')).toBe('non-scaling-stroke');
+        expect(intraday.querySelector('.fund-watch-intraday-dot')).not.toBeNull();
+    });
+
+    it('同一分钟重复采样只更新当前点且过滤异常估值', async () => {
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        const sampledAt = new Date('2026-08-13T10:05:10+08:00').getTime();
+        expect(window.AppFunds.applyFundIntraday({ success: true, data: { 110022: 0.1 } }, ['110022'], sampledAt)).toBe(true);
+        expect(window.AppFunds.applyFundIntraday({ success: true, data: { 110022: 0.2 } }, ['110022'], sampledAt + 20_000)).toBe(true);
+        expect(window.AppFunds.applyFundIntraday({ success: true, data: { 110022: 99 } }, ['110022'], sampledAt + 60_000)).toBe(false);
+        expect(document.querySelector('.fund-watch-intraday').textContent).toContain('+0.20%');
+        expect(document.querySelector('.fund-watch-intraday svg')).toBeNull();
+    });
+
     it('按名称搜索后添加基金，并持久化独立基金列表', async () => {
         const { storage } = await installModule();
         window.AppDataClient.fetchData.mockImplementation((path) => {

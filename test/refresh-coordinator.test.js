@@ -57,6 +57,11 @@ function installHarness() {
         getFundCodes: () => [],
         loadFundQuotes: vi.fn().mockResolvedValue(undefined),
     };
+    window.AppFundBoard = {
+        isActive: () => false,
+        hasLoaded: () => false,
+        loadBoard: vi.fn().mockResolvedValue(undefined),
+    };
     window.shell = { syncHoldingWidget: vi.fn().mockResolvedValue({ ok: true }) };
     document.body.innerHTML = '<button id="refresh-btn"></button><div id="refresh-status"></div>';
     return { watchCodes };
@@ -132,6 +137,15 @@ describe('AppRefreshCoordinator', () => {
 
         await window.AppRefreshCoordinator.refreshAll({ skipLimitUp: true, skipOpportunity: true });
         expect(window.AppFunds.loadFundQuotes).toHaveBeenCalledTimes(2);
+    });
+
+    it('基金筛选子 Tab 激活时随基金刷新，未激活时不额外请求', async () => {
+        installHarness();
+        window.AppFundBoard.isActive = () => true;
+        await import('../app/modules/refresh-coordinator.js');
+
+        await window.AppRefreshCoordinator.refreshTab('funds');
+        expect(window.AppFundBoard.loadBoard).toHaveBeenCalledWith(false);
     });
 
     it('普通刷新任务并发不超过 3 个', async () => {

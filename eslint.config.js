@@ -6,7 +6,7 @@ const prettier = require('eslint-config-prettier');
 
 module.exports = [
     {
-        ignores: ['dist/**', '.tauri-frontend/**', 'src-tauri/target/**', 'node_modules/**', 'build/**', 'test/**', 'coverage/**'],
+        ignores: ['dist/**', '.tauri-frontend/**', 'src-tauri/target/**', 'node_modules/**', 'app/vendor/**', 'build/**', 'test/**', 'coverage/**'],
     },
     js.configs.recommended,
     {

@@ -155,6 +155,7 @@ pub struct Gateway {
     endpoint_cache: EndpointResponseCache,
     eastmoney: Arc<Semaphore>,
     tencent: Arc<Semaphore>,
+    deepq: Arc<Semaphore>,
     default: Arc<Semaphore>,
     circuits: Arc<AsyncMutex<HashMap<String, Circuit>>>,
     diagnostics: Arc<DiagnosticStore>,
@@ -175,6 +176,7 @@ impl Gateway {
             endpoint_cache: Arc::new(Mutex::new(HashMap::new())),
             eastmoney: Arc::new(Semaphore::new(1)),
             tencent: Arc::new(Semaphore::new(4)),
+            deepq: Arc::new(Semaphore::new(2)),
             default: Arc::new(Semaphore::new(3)),
             circuits: Arc::new(AsyncMutex::new(HashMap::new())),
             diagnostics: DiagnosticStore::new(DiagnosticStore::product_path()),
@@ -192,6 +194,7 @@ impl Gateway {
             endpoint_cache: self.endpoint_cache.clone(),
             eastmoney: self.eastmoney.clone(),
             tencent: self.tencent.clone(),
+            deepq: self.deepq.clone(),
             default: self.default.clone(),
             circuits: self.circuits.clone(),
             diagnostics: self.diagnostics.clone(),
@@ -213,6 +216,7 @@ impl Gateway {
             endpoint_cache: self.endpoint_cache.clone(),
             eastmoney: self.eastmoney.clone(),
             tencent: self.tencent.clone(),
+            deepq: self.deepq.clone(),
             default: self.default.clone(),
             circuits: self.circuits.clone(),
             diagnostics: self.diagnostics.clone(),
@@ -388,6 +392,8 @@ impl Gateway {
             "eastmoney"
         } else if host.ends_with("gtimg.cn") || host.ends_with("qq.com") {
             "tencent"
+        } else if host == "sq.deepq.tech" {
+            "deepq"
         } else {
             "default"
         };
@@ -395,6 +401,7 @@ impl Gateway {
         let semaphore = match provider {
             "eastmoney" => self.eastmoney.clone(),
             "tencent" => self.tencent.clone(),
+            "deepq" => self.deepq.clone(),
             _ => self.default.clone(),
         };
         let started = Instant::now();

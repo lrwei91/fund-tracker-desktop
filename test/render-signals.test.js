@@ -79,6 +79,51 @@ async function setupIntraday(fetchImpl = vi.fn().mockResolvedValue(readyResponse
     return fetchImpl;
 }
 
+function rotationResponse(overrides = {}) {
+    return {
+        success: true,
+        data: {
+            status: 'ready',
+            snapshotDate: '2026-08-12',
+            source: 'deepq-ticai',
+            sourceLabel: 'DeepQ 题材记忆库',
+            sectors: [
+                { rank: 2, sectorName: '芯片', stocksCount: 8, heatValue: 86, rotationTimes: 3, rotationProb: '60%' },
+                {
+                    rank: 1,
+                    sectorName: '医药',
+                    stocksCount: 12,
+                    heatValue: 100,
+                    driveEvent: '创新药催化',
+                    rotationTimes: 5,
+                    rotationProb: '80%',
+                    emotionalCycle: '发酵期',
+                    recognitionBenchmark: '示例药业',
+                    trendAnalysis: '主线强度提升',
+                    tradingStrategy: '观察分歧承接',
+                },
+            ],
+            ...overrides,
+        },
+        meta: { degraded: false, stale: false },
+    };
+}
+
+async function setupRotation(fetchDataImpl = vi.fn().mockResolvedValue(rotationResponse())) {
+    vi.resetModules();
+    document.body.innerHTML = '<button id="sector-rotation-run-btn">获取板块轮动</button>' +
+        '<span id="sector-rotation-update-time"></span>' +
+        '<div id="sector-rotation-status"></div>' +
+        '<div id="sector-rotation-results"></div>';
+    window.AppState = { KEYS: {} };
+    window.AppUtils = { escapeHtml, getShanghaiDateKey: () => '2026-08-13' };
+    window.AppCache = {};
+    window.AppUiState = { render: uiStateHtml };
+    window.AppDataClient = { fetchData: fetchDataImpl };
+    await import('../app/modules/render-signals.js');
+    return fetchDataImpl;
+}
+
 describe('机会雷达风险提示', () => {
     beforeEach(async () => {
         vi.resetModules();
@@ -120,6 +165,63 @@ describe('机会雷达风险提示', () => {
         expect(text).toContain('重点监控至 2026-08-14');
         expect(text).toContain('严重异动：北交所10日内3次同向异常波动');
         expect(text).toContain('回避');
+    });
+});
+
+describe('轮动板块手动执行', () => {
+    it('模块加载时不请求，点击后按强制刷新契约取数', async () => {
+        const fetchDataMock = await setupRotation();
+        expect(fetchDataMock).not.toHaveBeenCalled();
+
+        await window.AppSignals.runSectorRotation();
+
+        expect(fetchDataMock).toHaveBeenCalledTimes(1);
+        expect(fetchDataMock).toHaveBeenCalledWith('/sector-rotation', {}, {
+            force: true,
+            cacheMode: 'bypass_fresh',
+        });
+    });
+
+    it('按排名展示上一交易日数据，并转义上游文本', async () => {
+        const fetchDataMock = vi.fn().mockResolvedValue(rotationResponse({
+            sectors: [
+                { rank: 2, sectorName: '芯片' },
+                { rank: 1, sectorName: '<img src=x onerror="window.__rotationPwned=true">', driveEvent: '<script>boom()</script>' },
+            ],
+        }));
+        await setupRotation(fetchDataMock);
+
+        await window.AppSignals.runSectorRotation();
+
+        const results = document.getElementById('sector-rotation-results');
+        const cards = results.querySelectorAll('.sector-rotation-card');
+        expect(cards).toHaveLength(2);
+        expect(cards[0].textContent).toContain('<img src=x');
+        expect(cards[1].textContent).toContain('芯片');
+        expect(results.querySelector('img')).toBeNull();
+        expect(results.querySelector('script')).toBeNull();
+        expect(window.__rotationPwned).toBeUndefined();
+        expect(document.getElementById('sector-rotation-update-time').textContent).toBe('数据日期：2026-08-12');
+        expect(document.getElementById('sector-rotation-status').textContent).toContain('仅手动更新');
+    });
+
+    it('重复点击时合并在途请求，失败刷新保留已有结果', async () => {
+        let resolveRequest;
+        const fetchDataMock = vi.fn().mockReturnValue(new Promise((resolve) => { resolveRequest = resolve; }));
+        await setupRotation(fetchDataMock);
+        const first = window.AppSignals.runSectorRotation();
+        const second = window.AppSignals.runSectorRotation();
+        expect(first).toBe(second);
+        expect(fetchDataMock).toHaveBeenCalledTimes(1);
+        expect(document.getElementById('sector-rotation-run-btn').disabled).toBe(true);
+        resolveRequest(rotationResponse());
+        await first;
+
+        fetchDataMock.mockRejectedValueOnce(new Error('offline'));
+        await window.AppSignals.runSectorRotation();
+        expect(document.getElementById('sector-rotation-results').textContent).toContain('医药');
+        expect(document.getElementById('sector-rotation-status').textContent).toContain('保留当前结果');
+        expect(document.getElementById('sector-rotation-run-btn').disabled).toBe(false);
     });
 });
 

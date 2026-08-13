@@ -185,6 +185,15 @@
                     return window.AppFunds.loadFundQuotes(!!options.force);
                 } });
             }
+            var shouldRefreshBoard = window.AppFundBoard && (
+                (typeof window.AppFundBoard.isActive === 'function' && window.AppFundBoard.isActive()) ||
+                (kind === 'all' && typeof window.AppFundBoard.hasLoaded === 'function' && window.AppFundBoard.hasLoaded())
+            );
+            if (shouldRefreshBoard && typeof window.AppFundBoard.loadBoard === 'function') {
+                tasks.push({ name: '基金筛选', priority: 64, run: function () {
+                    return window.AppFundBoard.loadBoard(!!options.force);
+                } });
+            }
         }
         if ((kind === 'all' || kind === 'news') && state.currentTab === 'news') {
             tasks.push({ name: '快讯', priority: 85, run: function () {

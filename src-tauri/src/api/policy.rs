@@ -23,12 +23,20 @@ impl EndpointPolicy {
 
 pub fn endpoint_policy(path: &str) -> EndpointPolicy {
     match path.trim_start_matches('/') {
-        "stock" | "market-data" | "stock-minute" | "intraday-screening" => EndpointPolicy::Live,
+        "stock"
+        | "market-data"
+        | "stock-minute"
+        | "intraday-screening"
+        | "fund-board-trends"
+        | "fund-board-realtime" => EndpointPolicy::Live,
+        "sector-rotation" => EndpointPolicy::Informational {
+            stale_for: Duration::from_secs(30 * 60),
+        },
         "opportunity-radar" => EndpointPolicy::Derived {
             stale_for: Duration::from_secs(10 * 60),
         },
-        "stock-search" | "fund-search" | "fund-quotes" | "hot-rank" | "limit-up" | "cls-news"
-        | "global-news" | "news" | "stock-news" | "stock-risk" | "dragon-tiger"
+        "stock-search" | "fund-search" | "fund-quotes" | "fund-board" | "hot-rank" | "limit-up"
+        | "cls-news" | "global-news" | "news" | "stock-news" | "stock-risk" | "dragon-tiger"
         | "fund-flow-120d" | "stock-kline" | "market-warnings" => EndpointPolicy::Informational {
             stale_for: Duration::from_secs(30 * 60),
         },

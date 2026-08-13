@@ -105,6 +105,9 @@ mod tests {
             ("stock-search", vec![("q", "茅台")]),
             ("fund-search", vec![("q", "易方达消费")]),
             ("fund-quotes", vec![("codes", "110022,000001")]),
+            ("fund-board", vec![]),
+            ("fund-board-trends", vec![("sectors", "有色金属,半导体")]),
+            ("fund-board-realtime", vec![("codes", "017193,015596")]),
             ("hot-rank", vec![("source", "ths"), ("limit", "5")]),
             ("limit-up", vec![("type", "zt"), ("limit", "5")]),
             ("cls-news", vec![("limit", "3")]),
@@ -147,6 +150,7 @@ mod tests {
             ("stock-minute", vec![("code", "600519"), ("count", "30")]),
             ("opportunity-radar", vec![("limit", "3")]),
             ("market-warnings", vec![("codes", "600664,600519")]),
+            ("sector-rotation", vec![]),
             ("intraday-screening", vec![]),
         ];
         let mut failures = Vec::new();
@@ -178,6 +182,14 @@ mod tests {
                     result["data"]["110022"]["unitNav"].is_number()
                         && result["data"]["110022"]["dayChangePercent"].is_number()
                 }
+                "fund-board" => {
+                    result["data"]["funds"]
+                        .as_array()
+                        .is_some_and(|rows| !rows.is_empty())
+                        && result["data"]["etfInfo"].is_object()
+                }
+                "fund-board-trends" => result["data"]["有色金属"].is_number(),
+                "fund-board-realtime" => result["data"].is_object(),
                 "global-news" => {
                     result["data"]["data"]
                         .as_array()
@@ -196,6 +208,18 @@ mod tests {
                     .as_array()
                     .is_some_and(|rows| !rows.is_empty()),
                 "market-warnings" => result["data"].is_object(),
+                "sector-rotation" => {
+                    let today = chrono::Utc::now()
+                        .with_timezone(&chrono::FixedOffset::east_opt(8 * 60 * 60).unwrap())
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    result["data"]["snapshotDate"]
+                        .as_str()
+                        .is_some_and(|date| date < today.as_str())
+                        && result["data"]["sectors"]
+                            .as_array()
+                            .is_some_and(|rows| !rows.is_empty())
+                }
                 "intraday-screening" => matches!(
                     result["data"]["status"].as_str(),
                     Some("ready" | "not_ready")

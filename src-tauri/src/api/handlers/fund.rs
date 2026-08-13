@@ -8,6 +8,9 @@ use serde_json::{json, Map, Value};
 use std::{collections::HashSet, sync::Arc};
 
 const MAX_FUND_CODES: usize = 30;
+const MAX_BOARD_FUND_CODES: usize = 300;
+const MAX_BOARD_SECTORS: usize = 120;
+const STAR_BASE_URL: &str = "https://sq.deepq.tech/star/api";
 
 fn query_value<'a>(query: &'a Query, key: &str) -> &'a str {
     query.get(key).map(String::as_str).unwrap_or("")
@@ -25,6 +28,30 @@ fn sanitize_codes(value: &str) -> Vec<String> {
         .filter(|code| is_fund_code(code))
         .filter(|code| seen.insert((*code).to_string()))
         .take(MAX_FUND_CODES)
+        .map(str::to_owned)
+        .collect()
+}
+
+fn sanitize_board_codes(value: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|code| is_fund_code(code))
+        .filter(|code| seen.insert((*code).to_string()))
+        .take(MAX_BOARD_FUND_CODES)
+        .map(str::to_owned)
+        .collect()
+}
+
+fn sanitize_sectors(value: &str) -> Vec<String> {
+    let mut seen = HashSet::new();
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|sector| !sector.is_empty() && sector.chars().count() <= 32)
+        .filter(|sector| seen.insert((*sector).to_string()))
+        .take(MAX_BOARD_SECTORS)
         .map(str::to_owned)
         .collect()
 }
@@ -157,6 +184,147 @@ fn parse_sina_fund_quotes(payload: &str, expected: &[String]) -> Map<String, Val
         );
     }
     quotes
+}
+
+fn parse_csv_row(line: &str) -> Vec<String> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    let mut chars = line.chars().peekable();
+    while let Some(character) = chars.next() {
+        match character {
+            '"' if quoted && chars.peek() == Some(&'"') => {
+                current.push('"');
+                chars.next();
+            }
+            '"' => quoted = !quoted,
+            ',' if !quoted => {
+                fields.push(current.trim().to_string());
+                current.clear();
+            }
+            _ => current.push(character),
+        }
+    }
+    fields.push(current.trim().to_string());
+    fields
+}
+
+fn parse_board_csv(payload: &str) -> Vec<Value> {
+    let mut lines = payload.lines().filter(|line| !line.trim().is_empty());
+    let Some(header_line) = lines.next() else {
+        return vec![];
+    };
+    let headers = parse_csv_row(header_line.trim_start_matches('\u{feff}'));
+    let expected = [
+        "板块",
+        "基金名称",
+        "基金代码",
+        "近1周涨幅",
+        "2025年涨幅",
+        "今年最大回撤",
+        "基金规模",
+        "机构持有",
+        "基金经理持有",
+        "内部人士持有",
+        "评分星级",
+        "特色标签",
+        "赎回手续费",
+    ];
+    if headers != expected {
+        return vec![];
+    }
+    lines
+        .filter_map(|line| {
+            let fields = parse_csv_row(line);
+            if fields.len() != headers.len() || !is_fund_code(&fields[2]) {
+                return None;
+            }
+            Some(json!({
+                "sector": fields[0], "name": fields[1], "code": fields[2], "weekReturn": fields[3],
+                "yearReturn": fields[4], "maxDrawdown": fields[5], "scale": fields[6],
+                "institutionHolding": fields[7], "managerHolding": fields[8], "internalHolding": fields[9],
+                "stars": fields[10], "tags": fields[11], "redemptionFee": fields[12],
+            }))
+        })
+        .collect()
+}
+
+pub(crate) async fn board(gateway: Arc<Gateway>, _query: Query) -> Value {
+    let data_request = RequestSpec::get(format!("{STAR_BASE_URL}/data"))
+        .cache(5 * 60)
+        .independent_circuit();
+    let etf_request = RequestSpec::get(format!("{STAR_BASE_URL}/etf_info"))
+        .cache(30 * 60)
+        .independent_circuit();
+    let (data_result, etf_result) =
+        tokio::join!(gateway.text(data_request), gateway.json(etf_request));
+    let payload = match data_result {
+        Ok(value) => value,
+        Err(error) => return fail_api("基金池数据不可用", &error),
+    };
+    let funds = parse_board_csv(&payload);
+    if funds.is_empty() {
+        return fail("基金池数据不可用", "CSV 数据为空或字段已变更");
+    }
+    let (etf_info, degraded, etf_status) = match etf_result {
+        Ok(value) if value.is_object() => (value, false, "ready"),
+        _ => (json!({}), true, "unavailable"),
+    };
+    json!({
+        "success": true,
+        "data": {"funds": funds, "etfInfo": etf_info},
+        "meta": {
+            "degraded": degraded, "stale": false,
+            "sources": {
+                "fundPool": {"actual": "deepq-star", "actualLabel": "DeepQ 基金数据"},
+                "sectorEtf": {"actual": "deepq-star", "actualLabel": "DeepQ 基金数据", "status": etf_status}
+            }
+        }
+    })
+}
+
+pub(crate) async fn board_trends(gateway: Arc<Gateway>, query: Query) -> Value {
+    let sectors = sanitize_sectors(query_value(&query, "sectors"));
+    if sectors.is_empty() {
+        return fail("缺少有效板块", "板块名称为空或格式无效");
+    }
+    let encoded = sectors
+        .iter()
+        .map(|sector| urlencoding::encode(sector).into_owned())
+        .collect::<Vec<_>>()
+        .join(",");
+    let request = RequestSpec::get(format!("{STAR_BASE_URL}/changeRatio/{encoded}"))
+        .cache(60)
+        .independent_circuit();
+    match gateway.json(request).await {
+        Ok(data) if data.is_object() => json!({
+            "success": true, "data": data,
+            "meta": {"degraded": false, "stale": false, "sources": {"sectorTrend": {"actual": "deepq-star", "actualLabel": "DeepQ 板块行情"}}}
+        }),
+        Ok(_) => fail("DeepQ 板块行情不可用", "返回字段无效"),
+        Err(error) => fail_api("DeepQ 板块行情不可用", &error),
+    }
+}
+
+pub(crate) async fn board_realtime(gateway: Arc<Gateway>, query: Query) -> Value {
+    let codes = sanitize_board_codes(query_value(&query, "codes"));
+    if codes.is_empty() {
+        return fail("缺少有效基金代码", "基金代码必须是 6 位数字");
+    }
+    let request = RequestSpec::get(format!(
+        "{STAR_BASE_URL}/fund_realtime?codes={}",
+        codes.join(",")
+    ))
+    .cache(60)
+    .independent_circuit();
+    match gateway.json(request).await {
+        Ok(data) if data.is_object() => json!({
+            "success": true, "data": data,
+            "meta": {"degraded": false, "stale": false, "sources": {"fundRealtime": {"actual": "deepq-star", "actualLabel": "DeepQ 基金实时估值"}}}
+        }),
+        Ok(_) => fail("DeepQ 基金实时估值不可用", "返回字段无效"),
+        Err(error) => fail_api("DeepQ 基金实时估值不可用", &error),
+    }
 }
 
 pub(crate) async fn search(gateway: Arc<Gateway>, query: Query) -> Value {
@@ -296,5 +464,33 @@ mod tests {
         );
         let data = parse_sina_fund_quotes(payload, &["110022".into(), "000001".into()]);
         assert!(data.is_empty());
+    }
+
+    #[test]
+    fn board_csv_parser_maps_the_published_contract() {
+        let payload = "\u{feff}板块,基金名称,基金代码,近1周涨幅,2025年涨幅,今年最大回撤,基金规模,机构持有,基金经理持有,内部人士持有,评分星级,特色标签,赎回手续费\n有色金属,示例基金,017193,1.35%,56.35%,32.15%,65.2亿,3%,0万份,37万份,★★★★★,涨得多、跌得少,7免";
+        let data = parse_board_csv(payload);
+        assert_eq!(data.len(), 1);
+        assert_eq!(data[0]["sector"], "有色金属");
+        assert_eq!(data[0]["code"], "017193");
+        assert_eq!(data[0]["stars"], "★★★★★");
+    }
+
+    #[test]
+    fn board_csv_parser_handles_quoted_commas() {
+        let fields = parse_csv_row("板块,\"带,逗号的基金\",017193");
+        assert_eq!(fields, ["板块", "带,逗号的基金", "017193"]);
+    }
+
+    #[test]
+    fn board_inputs_are_validated_deduplicated_and_bounded() {
+        assert_eq!(
+            sanitize_board_codes("017193,bad,017193,015596"),
+            ["017193", "015596"]
+        );
+        assert_eq!(
+            sanitize_sectors("有色金属,,有色金属,半导体"),
+            ["有色金属", "半导体"]
+        );
     }
 }

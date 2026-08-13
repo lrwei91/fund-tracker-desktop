@@ -279,6 +279,7 @@
 
         <div class="signal-workspace-tabs" role="tablist" aria-label="市场信号分类">
             <button class="signal-workspace-tab active" type="button" role="tab" aria-selected="true" data-signal-view="radar">机会雷达</button>
+            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="rotation">轮动板块</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="screening">盘中筛选</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="heat">市场热度</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="limit">打板情绪</button>
@@ -301,7 +302,22 @@
             </div>
         </section>
 
-        <!-- 2. 盘中筛选（仅手动执行） -->
+        <!-- 2. 轮动板块（仅手动执行，展示上一交易日数据） -->
+        <section class="card sector-rotation-section signal-workspace-panel" data-signal-panel="rotation" hidden>
+            <div class="card-header sector-rotation-header">
+                <div class="sector-rotation-heading">
+                    <h2>轮动板块</h2>
+                    <span class="sector-rotation-update-time" id="sector-rotation-update-time"></span>
+                </div>
+                <button class="intraday-screening-run-btn" id="sector-rotation-run-btn" type="button">获取板块轮动</button>
+            </div>
+            <div class="card-body">
+                <div class="intraday-screening-status" id="sector-rotation-status" role="status" aria-live="polite">不会自动获取。点击后读取上一交易日的板块轮动数据。</div>
+                <div class="sector-rotation-results" id="sector-rotation-results"></div>
+            </div>
+        </section>
+
+        <!-- 3. 盘中筛选（仅手动执行） -->
         <section class="card intraday-screening-section signal-workspace-panel" data-signal-panel="screening" hidden>
             <div class="card-header intraday-screening-header">
                 <div class="intraday-screening-heading">
@@ -316,7 +332,7 @@
             </div>
         </section>
 
-        <!-- 3. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
+        <!-- 4. 市场热度 (同花顺热榜 + 东财人气榜;从行情 tab 下移) -->
         <section class="card hot-rank-section signal-workspace-panel" data-signal-panel="heat" hidden>
             <div class="card-header">
                 <h2>市场热度</h2>
@@ -354,7 +370,7 @@
             </div>
         </section>
 
-        <!-- 4. 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停 + 情绪摘要) -->
+        <!-- 5. 打板情绪 (涨停 / 炸板 / 跌停 / 昨涨停 + 情绪摘要) -->
         <section class="card limit-up-section signal-workspace-panel" data-signal-panel="limit" hidden>
             <div class="card-header">
                 <h2>打板情绪</h2>
@@ -381,9 +397,14 @@
         </section>
     </div>
 
-    <!-- ==================== 自选基金 Tab ==================== -->
+    <!-- ==================== 基金 Tab ==================== -->
     <div class="tab-panel" id="tab-funds">
-        <section class="card fund-watch-section">
+        <div class="fund-workspace-tabs" role="tablist" aria-label="基金功能分类">
+            <button class="fund-workspace-tab active" type="button" role="tab" aria-selected="true" data-fund-view="watch">自选基金</button>
+            <button class="fund-workspace-tab" type="button" role="tab" aria-selected="false" data-fund-view="board">基金筛选</button>
+        </div>
+
+        <section class="card fund-watch-section fund-workspace-panel active" data-fund-panel="watch">
             <div class="card-header fund-watch-header">
                 <div>
                     <h2>自选基金</h2>
@@ -398,19 +419,58 @@
                 </div>
                 <div class="fund-watch-status" id="fund-watch-status" role="status" aria-live="polite"></div>
                 <div class="fund-watch-table-head" role="row">
-                    <span role="columnheader">基金</span>
-                    <span role="columnheader">类型</span>
-                    <span role="columnheader">单位净值</span>
-                    <span role="columnheader">净值日期</span>
-                    <span role="columnheader">日涨跌</span>
-                    <span role="columnheader" aria-label="操作"></span>
+                    <span role="columnheader">基金</span><span role="columnheader">类型</span><span role="columnheader">估值分时</span>
+                    <span role="columnheader">单位净值</span><span role="columnheader">净值日期</span><span role="columnheader">日涨跌</span><span role="columnheader" aria-label="操作"></span>
                 </div>
                 <div class="fund-watch-list" id="fund-watch-list">
                     <div class="ui-state ui-state--empty" data-ui-state="empty" role="status"><strong class="ui-state-title">暂无自选基金</strong><span class="ui-state-detail">通过上方输入框添加基金代码或名称。</span></div>
                 </div>
-                <p class="fund-watch-source" id="fund-watch-source">数据来源：东方财富基金搜索 · 新浪基金行情</p>
+                <p class="fund-watch-source" id="fund-watch-source">数据来源：东方财富基金搜索 · 新浪基金净值 · DeepQ 盘中估值</p>
             </div>
         </section>
+
+        <section class="fund-board-workspace fund-workspace-panel" data-fund-panel="board" hidden>
+            <header class="fund-board-toolbar">
+                <div class="fund-board-heading">
+                    <span id="fund-board-summary">等待数据</span>
+                    <button type="button" id="fund-board-help" class="fund-board-help">使用说明</button>
+                </div>
+                <div class="fund-board-search-wrap">
+                    <span aria-hidden="true">⌕</span>
+                    <input type="search" id="fund-board-search" autocomplete="off" placeholder="搜索名称、代码、拼音或板块" aria-label="搜索基金或板块">
+                </div>
+                <div class="fund-board-filter-row" aria-label="基金筛选">
+                    <button class="fund-board-filter active" type="button" data-fund-board-filter="">全部</button>
+                    <button class="fund-board-filter tone-star" type="button" data-fund-board-filter="5star">五星基金</button>
+                    <button class="fund-board-filter tone-strong" type="button" data-fund-board-filter="强势中">近期强势</button>
+                    <button class="fund-board-filter tone-rise" type="button" data-fund-board-filter="涨得多">涨幅领先</button>
+                    <button class="fund-board-filter tone-safe" type="button" data-fund-board-filter="跌得少">回撤较小</button>
+                    <button class="fund-board-filter tone-scale" type="button" data-fund-board-filter="规模大">规模较大</button>
+                    <button class="fund-board-filter tone-buy" type="button" data-fund-board-filter="内部买">内部持有</button>
+                    <button class="fund-board-sort active" type="button" id="fund-board-sort">涨幅降序</button>
+                </div>
+                <div class="fund-board-status" id="fund-board-status" role="status" aria-live="polite"></div>
+            </header>
+            <div class="fund-board-grid" id="fund-board-grid">
+                <div class="ui-state ui-state--loading" data-ui-state="loading" role="status"><strong class="ui-state-title">正在加载基金数据</strong><span class="ui-state-detail">基金池和板块数据返回后会在这里更新。</span><div class="ui-state-skeleton" aria-hidden="true"><span></span><span></span><span></span></div></div>
+            </div>
+            <footer class="fund-board-footer">数据来源：DeepQ 基金公开数据接口 · 投资有风险</footer>
+        </section>
+    </div>
+
+    <div class="fund-board-help-modal" id="fund-board-help-modal" role="dialog" aria-modal="true" aria-labelledby="fund-board-help-title" hidden>
+        <div class="fund-board-help-card">
+            <header><h3 id="fund-board-help-title">基金筛选使用说明</h3><button type="button" id="fund-board-help-close" aria-label="关闭">✕</button></header>
+            <div class="fund-board-help-body">
+                <h4>功能说明</h4>
+                <ol><li>支持按板块、基金名称、代码或拼音搜索。</li><li>支持组合筛选，同一板块内可对比基金评级与标签。</li><li>默认按板块实时涨幅排序，也可切换升序或板块默认顺序。</li></ol>
+                <h4>筛选口径</h4>
+                <ol><li><b>涨幅领先：</b>近 1 年涨幅排名。</li><li><b>回撤较小：</b>近 1 年最大回撤相对较小。</li><li><b>规模较大：</b>基金规模维度；规模过大可能影响调仓，规模过小存在清盘风险。</li><li><b>内部持有 / 机构持有：</b>基金经理、内部员工或机构持有。</li><li><b>赎回费：</b>7免、30免、1年免、2年免表示对应持有期后免赎回费。</li><li><b>近期强势：</b>近一周涨幅领先同类基金。</li><li><b>星级：</b>综合以上机制的评分，最高五星。</li></ol>
+                <h4>数据更新</h4>
+                <ol><li>板块涨幅与基金实时估值：交易时段分钟级更新。</li><li>基金涨幅：基于盘后净值每日更新。</li><li>规模、持有等信息：基于最新季报披露数据更新。</li><li>默认按板块涨幅排序，可切换升序和板块默认顺序。</li></ol>
+                <p>工具仅用于客观数据查询，不判断板块趋势或买卖机会。</p>
+            </div>
+        </div>
     </div>
 
     <!-- ==================== 财经快讯 Tab ==================== -->
@@ -664,7 +724,9 @@
 <script src="modules/render-alerts.js"></script>
 <script src="modules/render-market.js"></script>
 <script src="modules/render-signals.js"></script>
+<script src="vendor/pinyin-pro.min.js"></script>
 <script src="modules/render-funds.js"></script>
+<script src="modules/render-fund-board.js"></script>
 <script src="modules/watchlist/_shared.js"></script>
 <script src="modules/watchlist/watch-state.js"></script>
 <script src="modules/watchlist/watch-tabs-ui.js"></script>

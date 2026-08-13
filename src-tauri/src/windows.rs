@@ -231,27 +231,15 @@ fn create_windows_tray(_app: &tauri::AppHandle) -> tauri::Result<()> {
 #[cfg(windows)]
 fn create_windows_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "显示窗口", true, None::<&str>)?;
-    let clear = MenuItem::with_id(app, "clear", "清除数据并退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &clear])?;
+    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("恭喜发财")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => restore_from_tray(app),
-            "clear" => {
-                if let Err(error) = app.state::<crate::config::ConfigStore>().clear() {
-                    eprintln!("failed to clear config: {error}");
-                    return;
-                }
-                if let Err(error) = app.state::<crate::api::ApiState>().clear_diagnostics() {
-                    eprintln!("failed to clear diagnostics: {error}");
-                }
-                for window in app.webview_windows().values() {
-                    let _ = window.clear_all_browsing_data();
-                }
-                app.exit(0);
-            }
+            "quit" => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
