@@ -112,9 +112,26 @@
         } catch (error) {}
     }
 
+    function shanghaiParts(date) {
+        var parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Shanghai',
+            weekday: 'short',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hourCycle: 'h23',
+        }).formatToParts(date || new Date());
+        return parts.reduce(function (result, part) {
+            if (part.type !== 'literal') result[part.type] = part.value;
+            return result;
+        }, {});
+    }
+
     function currentDateKey(date) {
-        var value = date || new Date();
-        return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-');
+        var parts = shanghaiParts(date);
+        return [parts.year, parts.month, parts.day].join('-');
     }
 
     function resetIntradayIfNeeded() {
@@ -182,8 +199,8 @@
                 '<path class="fund-watch-intraday-line" d="' + path + '" vector-effect="non-scaling-stroke"></path>' +
                 '<circle class="fund-watch-intraday-dot" cx="' + last[0].toFixed(2) + '" cy="' + last[1].toFixed(2) + '" r="1.8"></circle></svg>';
         }
-        var time = new Date(points[points.length - 1].time);
-        var timeText = String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
+        var time = shanghaiParts(new Date(points[points.length - 1].time));
+        var timeText = time.hour + ':' + time.minute;
         return '<div class="fund-watch-intraday ' + tone + '" role="cell" title="盘中估值采样 ' + escapeHtml(timeText) + '">' +
             chart + '<span>' + escapeHtml(formatChange(latest)) + '</span><small>' + escapeHtml(timeText) + '</small></div>';
     }
@@ -296,10 +313,10 @@
     }
 
     function isMarketActive() {
-        var now = new Date();
-        var day = now.getDay();
-        var minutes = now.getHours() * 60 + now.getMinutes();
-        return day > 0 && day < 6 && minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30;
+        var now = shanghaiParts(new Date());
+        var weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(now.weekday);
+        var minutes = Number(now.hour) * 60 + Number(now.minute);
+        return weekday && minutes >= 9 * 60 + 15 && minutes <= 15 * 60 + 30;
     }
 
     function loadFundQuotes(force) {
