@@ -57,7 +57,18 @@ pub fn run() {
         return;
     }
     let store = ConfigStore::new(ConfigStore::product_path());
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(
+        |app, _args, _working_directory| {
+            if let Some(main) = app.get_webview_window("main") {
+                let _ = main.unminimize();
+                let _ = main.show();
+                let _ = main.set_focus();
+            }
+        },
+    ));
+    let app = builder
         .manage(store)
         .manage(api::ApiState::new())
         .setup(|app| {

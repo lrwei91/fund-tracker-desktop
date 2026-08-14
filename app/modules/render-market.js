@@ -150,7 +150,7 @@
         return (number > 0 ? '+' : '') + number.toFixed(2) + '%';
     }
 
-    function sparklineGeometry(values, width, height, pad, baseline) {
+    function sparklineGeometry(values, width, height, pad, baseline, fullLength) {
         var scaleValues = values.slice();
         if (Number.isFinite(baseline) && baseline > 0) scaleValues.push(baseline);
         var min = Math.min.apply(Math, scaleValues);
@@ -164,7 +164,7 @@
             return pad + (max - value) / (max - min) * (height - pad * 2);
         };
         var path = values.map(function (value, index) {
-            var x = pad + index / Math.max(1, values.length - 1) * (width - pad * 2);
+            var x = pad + index / Math.max(1, (fullLength || values.length) - 1) * (width - pad * 2);
             var y = yScale(value);
             return (index === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2);
         }).join(' ');
@@ -179,7 +179,7 @@
         var values = data.sparkline.map(function (point) {
             return typeof point === 'number' ? point : point && Number(point.price);
         }).filter(function (value) { return Number.isFinite(value); });
-        return values.length >= 242 ? values.slice(-242) : [];
+        return values.length >= 2 ? values.slice(-242) : [];
     }
 
     function indexSparklineStatus(data) {
@@ -188,7 +188,7 @@
             var value = typeof point === 'number' ? point : point && Number(point.price);
             return Number.isFinite(value);
         }).length : 0;
-        return { available: valid >= 242, total: total, valid: valid, reason: valid >= 242 ? '' : '分时点不足（' + valid + '/242）' };
+        return { available: valid >= 2, total: total, valid: valid, reason: valid >= 2 ? '' : '分时数据暂不足（' + valid + '）' };
     }
 
     function getIndexSparklineBaseline(data) {
@@ -207,7 +207,7 @@
         var width = 180;
         var height = 44;
         var pad = 2;
-        var geometry = sparklineGeometry(values, width, height, pad, getIndexSparklineBaseline(data));
+        var geometry = sparklineGeometry(values, width, height, pad, getIndexSparklineBaseline(data), 242);
         if (!geometry || !geometry.path) return '';
         var zeroAxis = geometry.zeroY === null ? '' :
             '<line class="index-sparkline-zero" x1="' + pad + '" y1="' + geometry.zeroY.toFixed(2) + '" x2="' + (width - pad) + '" y2="' + geometry.zeroY.toFixed(2) + '"></line>';

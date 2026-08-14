@@ -152,10 +152,20 @@ describe('板块资金流筛选', () => {
         expect(svg).toContain('aria-label="当日走势"');
     });
 
-    it('指数分时不足242个有效点时明确不可用且不绘制曲线', () => {
-        const data = { sparkline: [99, null, { price: 100 }] };
+    it('盘中指数分时按已有点绘制，不要求提前凑满全天242点', () => {
+        const data = { sparkline: Array.from({ length: 112 }, (_, index) => 99 + index / 112) };
         expect(window.AppMarket.indexSparklineStatus(data)).toEqual({
-            available: false, total: 3, valid: 2, reason: '分时点不足（2/242）',
+            available: true, total: 112, valid: 112, reason: '',
+        });
+        const svg = window.AppMarket.buildIndexSparklineSvg(data, 'neutral', null);
+        expect(svg).toContain('class="index-sparkline-path"');
+        expect(svg).not.toContain('L178.00 ');
+    });
+
+    it('指数分时少于两个有效点时明确不可用', () => {
+        const data = { sparkline: [99, null] };
+        expect(window.AppMarket.indexSparklineStatus(data)).toEqual({
+            available: false, total: 2, valid: 1, reason: '分时数据暂不足（1）',
         });
         expect(window.AppMarket.buildIndexSparklineSvg(data, 'neutral', null)).toBe('');
     });
