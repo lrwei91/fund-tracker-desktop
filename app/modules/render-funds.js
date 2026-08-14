@@ -267,7 +267,7 @@
             chart = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' +
                 '<line class="fund-watch-intraday-base" x1="2" y1="15" x2="102" y2="15"></line>' +
                 '<path class="fund-watch-intraday-line" d="' + path + '" vector-effect="non-scaling-stroke"></path>' +
-                '<circle class="fund-watch-intraday-dot" cx="' + last[0].toFixed(2) + '" cy="' + last[1].toFixed(2) + '" r="1.8"></circle></svg>';
+                '<path class="fund-watch-intraday-dot" d="M' + last[0].toFixed(2) + ',' + last[1].toFixed(2) + 'l0.01,0" vector-effect="non-scaling-stroke"></path></svg>';
         }
         var time = shanghaiParts(new Date(points[points.length - 1].time));
         var timeText = time.hour + ':' + time.minute;

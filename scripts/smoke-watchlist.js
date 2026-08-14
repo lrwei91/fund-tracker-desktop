@@ -14,7 +14,7 @@ const MODULES_DIR = path.join(ROOT, 'app', 'modules');
 function assertIndexScriptsExist() {
     const indexHtml = fs.readFileSync(path.join(APP_DIR, 'index.html'), 'utf8');
     const scripts = Array.from(indexHtml.matchAll(/<script\s+src="([^"]+)"/g)).map((match) => match[1]);
-    const missing = scripts.filter((src) => !fs.existsSync(path.join(APP_DIR, src)));
+    const missing = scripts.filter((src) => !fs.existsSync(path.join(APP_DIR, src.split(/[?#]/, 1)[0])));
     if (missing.length) {
         console.error('FAIL: index.html 引用了不存在的脚本 ->', missing);
         process.exit(1);

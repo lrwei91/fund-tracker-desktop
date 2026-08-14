@@ -104,7 +104,8 @@ describe('AppFunds', () => {
         expect(intraday.textContent).toContain('+0.28%');
         expect(intraday.textContent).toContain('09:32');
         expect(intraday.querySelector('.fund-watch-intraday-line').getAttribute('vector-effect')).toBe('non-scaling-stroke');
-        expect(intraday.querySelector('.fund-watch-intraday-dot')).not.toBeNull();
+        expect(intraday.querySelector('.fund-watch-intraday-dot').tagName).toBe('path');
+        expect(intraday.querySelector('.fund-watch-intraday-dot').getAttribute('vector-effect')).toBe('non-scaling-stroke');
     });
 
     it('合并共享全天曲线并按固定交易时间轴渲染缺口', async () => {
