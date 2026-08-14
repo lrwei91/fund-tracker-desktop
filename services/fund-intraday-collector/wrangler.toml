@@ -1,0 +1,33 @@
+name = "fund-intraday-collector"
+main = "src/index.mjs"
+compatibility_date = "2026-08-13"
+workers_dev = true
+preview_urls = false
+
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true
+head_sampling_rate = 1.0
+
+[vars]
+MAX_ACTIVE_FUNDS = "300"
+SUBSCRIPTION_TTL_DAYS = "7"
+POINT_RETENTION_DAYS = "7"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fund-intraday"
+database_id = "2135a11d-e21b-4673-a797-4855c22cabf5"
+migrations_dir = "migrations"
+
+[[ratelimits]]
+name = "INSTALL_RATE_LIMITER"
+namespace_id = "31001"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "31002"
+simple = { limit = 120, period = 60 }

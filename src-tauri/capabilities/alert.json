@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "alert-window",
+  "description": "Alert popup event and native theme permissions.",
+  "windows": ["alert"],
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-set-theme"
+  ]
+}

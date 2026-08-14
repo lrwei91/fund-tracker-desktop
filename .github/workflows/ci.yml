@@ -31,6 +31,20 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
 
+  worker-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Collector unit tests
+        run: npm run worker:test
+      - name: Validate Worker bundle
+        run: npm run worker:deploy:dry
+
   rust-quality:
     runs-on: ubuntu-latest
     steps:
@@ -54,6 +68,10 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Rust dependency audit
+        uses: rustsec/audit-check@v2
+        with:
+          working-directory: src-tauri
 
   package:
     strategy:
@@ -75,27 +93,40 @@ jobs:
       - run: npm ci
       - uses: dtolnay/rust-toolchain@stable
       - name: Package
+        env:
+          FUND_INTRADAY_SERVICE_URL: ${{ vars.FUND_INTRADAY_SERVICE_URL }}
         run: ${{ matrix.command }}
-      - name: Distribution size gate
+      - name: Distribution size, runtime and checksum gate
         run: npm run size:check
+      - name: Verify generated checksums
+        run: npm run artifact:verify
       - uses: actions/upload-artifact@v4
         with:
           name: tauri-${{ matrix.artifact }}
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/*.evidence.json
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [quality, rust-quality, package]
+    needs: [quality, worker-quality, rust-quality, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           pattern: tauri-*
           path: dist
           merge-multiple: true
+      - name: Verify release checksums
+        run: npm run artifact:verify
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.zip dist/*.sha256 dist/*.evidence.json --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

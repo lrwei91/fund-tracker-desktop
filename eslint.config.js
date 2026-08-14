@@ -43,6 +43,18 @@ module.exports = [
         },
     },
     {
+        files: ['services/**/*.mjs'],
+        languageOptions: {
+            ecmaVersion: 2022,
+            sourceType: 'module',
+            globals: { ...globals.browser },
+        },
+        rules: {
+            'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none' }],
+            'no-undef': 'error',
+        },
+    },
+    {
         // 工程配置自身(Node / CommonJS)
         files: ['eslint.config.js', 'vitest.config.js', '*.config.js', '*.config.cjs', '.eslintrc.cjs'],
         languageOptions: {

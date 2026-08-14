@@ -43,6 +43,9 @@ describe('formatQuotePrice: ETF 价格保留三位', () => {
     it('常见 ETF 代码段使用三位小数', () => {
         expect(U.formatQuotePrice(1.2349, '--', '510300', '沪深300')).toBe('1.235');
     });
+    it('持仓行情仅返回价格文本时仍按 ETF 三位格式化', () => {
+        expect(U.formatQuotePrice(null, '1.23', '510300', '沪深300')).toBe('1.230');
+    });
     it('普通股票仍保留两位小数并支持无数据回退', () => {
         expect(U.formatQuotePrice(12.345, '--', '600000', '浦发银行')).toBe('12.35');
         expect(U.formatQuotePrice(null, '--', '600000', '浦发银行')).toBe('--');

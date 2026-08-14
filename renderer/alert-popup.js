@@ -9,15 +9,22 @@
         return typeof value === 'number' && value > 0 ? value.toFixed(2) : '--';
     }
 
+    function percent(value) {
+        if (typeof value !== 'number' || !isFinite(value)) return null;
+        return (value > 0 ? '+' : '') + value.toFixed(2) + '%';
+    }
+
     function showAlert(alert) {
         if (!alert || typeof alert.changePct !== 'number') return;
         if (window.AppTheme) window.AppTheme.syncFromSettings(window.localStorage.getItem(SETTINGS_KEY));
         var rising = alert.changePct >= 0;
         var sign = alert.changePct > 0 ? '+' : '';
-        mascot.textContent = rising ? '↑' : '↓';
+        mascot.textContent = rising ? '🐂' : '🐻';
         alertElement.dataset.direction = rising ? 'up' : 'down';
         title.textContent = String(alert.name || alert.code || '自选股') + (rising ? ' 上涨提醒' : ' 下跌提醒');
-        detail.textContent = sign + alert.changePct.toFixed(2) + '%  /  现价 ' + price(alert.price);
+        var marketChange = percent(alert.marketChangePct);
+        var triggerChange = sign + alert.changePct.toFixed(2) + '%';
+        detail.textContent = (marketChange ? '当前涨跌：' + marketChange + '  /  ' : '') + '涨幅幅度：' + triggerChange + '  /  现价：' + price(alert.price);
         alertElement.style.opacity = String(alert.opacity);
         alertElement.style.animation = 'none';
         void alertElement.offsetWidth;

@@ -1,10 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "main-window",
-  "description": "Main window event, drag-region and native theme permissions.",
-  "windows": [
-    "main"
-  ],
+  "identifier": "holding-window",
+  "description": "Holding widget event, drag-region and native theme permissions.",
+  "windows": ["holding"],
   "permissions": [
     "core:event:default",
     "core:window:allow-start-dragging",

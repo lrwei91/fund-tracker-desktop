@@ -9,6 +9,7 @@
     var state = window.AppState;
     var utils = window.AppUtils;
     var cache = window.AppCache;
+    var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || '实时数据'; } };
     var uiState = window.AppUiState || {
         render: function (_kind, options) { return '<div class="list-empty">' + utils.escapeHtml(options.title) + '</div>'; },
     };
@@ -175,9 +176,19 @@
 
     function buildIndexSparklineValues(data) {
         if (!data || !Array.isArray(data.sparkline)) return [];
-        return data.sparkline.map(function (point) {
-            return typeof point === 'number' ? point : Number(point && point.price);
+        var values = data.sparkline.map(function (point) {
+            return typeof point === 'number' ? point : point && Number(point.price);
         }).filter(function (value) { return Number.isFinite(value); });
+        return values.length >= 242 ? values.slice(-242) : [];
+    }
+
+    function indexSparklineStatus(data) {
+        var total = data && Array.isArray(data.sparkline) ? data.sparkline.length : 0;
+        var valid = data && Array.isArray(data.sparkline) ? data.sparkline.filter(function (point) {
+            var value = typeof point === 'number' ? point : point && Number(point.price);
+            return Number.isFinite(value);
+        }).length : 0;
+        return { available: valid >= 242, total: total, valid: valid, reason: valid >= 242 ? '' : '分时点不足（' + valid + '/242）' };
     }
 
     function getIndexSparklineBaseline(data) {
@@ -215,9 +226,13 @@
         }
         var svg = buildIndexSparklineSvg(data, cls, prev);
         if (!svg) {
-            spark.innerHTML = '';
+            var status = indexSparklineStatus(data);
+            spark.className = 'index-sparkline is-unavailable';
+            spark.textContent = status.reason;
+            spark.title = status.reason;
             return;
         }
+        spark.title = '';
         spark.className = 'index-sparkline ' + cls;
         spark.innerHTML = svg;
     }
@@ -293,12 +308,12 @@
             var result = await res.json();
             if (!result.success || !result.data) throw new Error('数据异常');
             state.liveIndexData = result.data;
-            setSectionStale('.index-section', false);
+            setSectionStale('.index-section', !!(result.meta && result.meta.stale));
             cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.index, result.data);
             Object.keys(result.data).forEach(function (id) { updateIndexUI(id, result.data[id]); });
             // 节流落盘:刷新节奏不变,只决定 prev 落盘的节奏
             persistIndexPrevIfDue('market', snapshotIndexPrice(result.data));
-            utils.setLastUpdated('行情已更新');
+            utils.setLastUpdated(dataStatus.label(result.meta, '行情已更新'));
         } catch (e) {
             if (state.liveIndexData) {
                 setSectionStale('.index-section', true);
@@ -350,7 +365,7 @@
             if (result.success && result.data && result.data.inflow) {
                 newData = result.data;
                 cache.writeTimedCache(KEYS.SHORT_CACHE_KEYS.sector, result.data);
-                statusText = result.meta && result.meta.stale ? '缓存数据' : '实时数据';
+                statusText = dataStatus.label(result.meta, '实时数据');
             }
         } catch (e) {
             statusText = newData ? '接口不可用 · 显示缓存' : '接口暂不可用';
@@ -461,6 +476,7 @@
         trendArrow: trendArrow,
         snapshotIndexPrice: snapshotIndexPrice,
         buildIndexSparklineSvg: buildIndexSparklineSvg,
+        indexSparklineStatus: indexSparklineStatus,
         // 指数 UI / load
         updateIndexUI: updateIndexUI,
         loadIndexData: loadIndexData,

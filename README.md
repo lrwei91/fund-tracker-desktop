@@ -50,7 +50,7 @@ npm run build:mac:raw   # macOS arm64 .app + ZIP
 npm run build:win:raw   # Windows x64 EXE + portable ZIP
 ```
 
-产物输出到 `dist/`。两个分发 ZIP 的硬门禁均为 20 MB；普通构建不会修改版本号。Windows portable 包依赖系统 WebView2，不携带离线运行时；现代 Windows 10/11 通常已提供，缺失时 release runtime 会显示原生提示和官方下载链接。
+产物输出到 `dist/`。两个分发 ZIP 执行三级水位门禁（<16 MB 健康、16–20 MB 预警、≥20 MB 阻断），同时扫描 Chromium/Node/Python/TDX 冗余运行时、记录异常大文件并生成/复核 SHA-256 与 JSON 证据；普通构建不会修改版本号。Windows portable 包依赖系统 WebView2，不携带离线运行时；现代 Windows 10/11 通常已提供，缺失时 release runtime 会显示原生提示和官方下载链接。
 
 应用图标母版位于 `brand/app-icon-1024.png`。修改母版后运行 `npm run icons:generate`，会统一更新应用内品牌图标及 `build/icon.png`、`build/icon.icns` 和 `build/icon.ico`。
 
@@ -68,7 +68,7 @@ sudo xattr -rd com.apple.quarantine "/Applications/恭喜发财.app"
 
 前端继续通过 `window.shell` 和 `AppDataClient.fetch/fetchData` 调用桌面能力，内部传输改为 Tauri commands/events。权限仅开放事件能力，不开放任意文件系统、shell 或进程访问。
 
-关键用户数据仍写入产品名目录下的 `config.json` v2（macOS `~/Library/Application Support/恭喜发财/config.json`，Windows `%APPDATA%\恭喜发财\config.json`），并使用原子写入和旧字段兼容。行情和新闻等 WebView 缓存可以重新拉取。
+关键用户数据仍写入产品名目录下的 `config.json` v2（macOS `~/Library/Application Support/恭喜发财/config.json`，Windows `%APPDATA%\恭喜发财\config.json`），并使用原子写入和旧字段兼容。持仓成本与备注目前以本机明文配置保存，不写入诊断日志；后续存储编码迁移以 `storageEncoding` 为兼容入口。行情和新闻等 WebView 缓存可以重新拉取。
 
 全部数据请求经过 Rust 进程内 gateway：相同在途请求合并并带 TTL 缓存；东方财富单并发、启动间隔 1–1.3 秒，403 或连续失败触发五分钟熔断；handler 保留来源、降级与不可用元数据。
 

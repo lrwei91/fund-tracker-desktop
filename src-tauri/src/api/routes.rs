@@ -24,7 +24,8 @@ pub async fn dispatch_with_options(
     let scoped = gateway.scoped(route).with_context(cache_mode, cycle_id);
     let endpoint_policy = policy::endpoint_policy(route);
     let cache_key = Gateway::endpoint_key(route, &query);
-    let result = handlers::dispatch_raw(scoped.clone(), route, query).await;
+    let mut result = handlers::dispatch_raw(scoped.clone(), route, query).await;
+    policy::finalize_response(&mut result, scoped.trace_id());
 
     if result.get("success") == Some(&Value::Bool(true)) {
         scoped.remember_endpoint(cache_key, result.clone(), endpoint_policy.stale_for());
@@ -39,6 +40,7 @@ pub async fn dispatch_with_options(
     if endpoint_policy.allows_stale() {
         if let Some((mut stale, age_seconds, fetched_at)) = scoped.stale_endpoint(&cache_key) {
             policy::add_stale_meta(&mut stale, age_seconds, &fetched_at);
+            policy::finalize_response(&mut stale, scoped.trace_id());
             scoped.record_marker("endpoint-cache", "stale", "stale", None, None, 0);
             return stale;
         }
@@ -60,6 +62,8 @@ mod tests {
         "fund-board",
         "fund-board-trends",
         "fund-board-realtime",
+        "fund-diagnosis",
+        "fund-interaction",
         "hot-rank",
         "limit-up",
         "cls-news",

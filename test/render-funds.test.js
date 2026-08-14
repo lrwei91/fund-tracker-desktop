@@ -81,7 +81,9 @@ describe('AppFunds', () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-08-13T10:01:00+08:00'));
         await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
-        window.AppDataClient.fetchData.mockResolvedValue({ success: true, data: { 110022: 0.36 } });
+        window.AppDataClient.fetchData.mockImplementation((path) => Promise.resolve(path === '/fund-intraday'
+            ? { success: true, data: { 110022: { points: [] } }, meta: { subscription: { acceptedCodes: ['110022'] } } }
+            : { success: true, data: { 110022: 0.36 } }));
 
         await window.AppFunds.loadFundIntraday(false);
         expect(window.AppDataClient.fetchData).toHaveBeenCalledWith(
@@ -103,6 +105,41 @@ describe('AppFunds', () => {
         expect(intraday.textContent).toContain('09:32');
         expect(intraday.querySelector('.fund-watch-intraday-line').getAttribute('vector-effect')).toBe('non-scaling-stroke');
         expect(intraday.querySelector('.fund-watch-intraday-dot')).not.toBeNull();
+    });
+
+    it('合并共享全天曲线并按固定交易时间轴渲染缺口', async () => {
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        window.AppFunds.applyFundIntraday(
+            { success: true, data: { 110022: 0.1 } }, ['110022'],
+            new Date('2026-08-13T09:31:00+08:00').getTime(),
+        );
+        window.AppFunds.applySharedFundIntraday({
+            success: true,
+            data: { 110022: { points: [
+                { time: new Date('2026-08-13T09:31:00+08:00').getTime(), value: 0.2 },
+                { time: new Date('2026-08-13T13:01:00+08:00').getTime(), value: 0.3 },
+            ] } },
+            meta: { subscription: { acceptedCodes: ['110022'] } },
+        }, ['110022']);
+
+        const intraday = document.querySelector('.fund-watch-intraday');
+        expect(intraday.textContent).toContain('+0.30%');
+        expect(intraday.textContent).toContain('共享采集');
+        expect(intraday.querySelector('path').getAttribute('d').match(/M/g)).toHaveLength(2);
+        expect(window.AppFunds.mergeIntradayPoints(
+            [{ time: 1_000_000, value: 0.1 }],
+            [{ time: 1_000_000, value: 0.2 }],
+        )[0].value).toBe(0.2);
+    });
+
+    it('共享采集池满时明确标记未纳入', async () => {
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        window.AppFunds.applySharedFundIntraday({
+            success: true,
+            data: {},
+            meta: { subscription: { rejectedCodes: [{ code: '110022', reason: 'pool_full' }] } },
+        }, ['110022']);
+        expect(document.querySelector('.fund-watch-intraday').textContent).toContain('未纳入共享采集');
     });
 
     it('同一分钟重复采样只更新当前点且过滤异常估值', async () => {

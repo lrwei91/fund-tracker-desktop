@@ -543,11 +543,15 @@
     function renderOpportunityRadarItem(item) {
         var pct = formatSignedPercent(item.pct);
         var pctCls = trendClass(item.pct);
-        var scoreCls = scoreClass(item.score);
         var risk = item.risk || {};
         var warnings = item.marketWarnings || {};
         var riskStatus = risk.status || 'watch';
         var components = item.components || {};
+        var availableComponentCount = Object.keys(components).filter(function (key) {
+            return Number.isFinite(Number(components[key]));
+        }).length;
+        var visibleScore = availableComponentCount >= 3 ? item.score : null;
+        var scoreCls = scoreClass(visibleScore);
         var tags = [item.topic].concat(item.newsHits || []).filter(Boolean)
             .map(function (tag) { return '<span>' + utils.escapeHtml(tag) + '</span>'; }).join('');
         var signals = (Array.isArray(item.signals) ? item.signals : [])
@@ -576,7 +580,7 @@
                     '<span class="opportunity-radar-code">' + utils.escapeHtml(item.code || '') + '</span>' +
                 '</div>' +
                 '<div class="opportunity-radar-score ' + scoreCls + '">' +
-                    '<strong>' + utils.escapeHtml(item.score == null ? '--' : String(item.score)) + '</strong>' +
+                    '<strong>' + utils.escapeHtml(visibleScore == null ? '--' : String(visibleScore)) + '</strong>' +
                     '<span>综合分</span>' +
                 '</div>' +
                 '<div class="opportunity-radar-pct ' + pctCls + '">' + utils.escapeHtml(pct) + '</div>' +

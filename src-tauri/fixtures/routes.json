@@ -45,6 +45,16 @@
     "data": {"017193": 1.08},
     "meta": {"degraded": false, "stale": false}
   },
+  "fund-diagnosis": {
+    "success": true,
+    "data": {"code": "017193", "diagnosis": {"fund_name": "示例基金", "smart_diagnosis": {"label": "稳健型", "label_text": "关注回撤与持有周期"}, "highlights": {"scale": {"title": "基金规模", "value": "当前53.8亿", "reason": "规模变化需结合策略容量观察"}}}, "nav": {"week_return": "6.36%", "return": "10.42%", "max_drawdown": "33.66%"}, "interaction": {"like": 0, "block": 0, "own": 0}, "realtime": 0.48},
+    "meta": {"degraded": false, "stale": false}
+  },
+  "fund-interaction": {
+    "success": true,
+    "data": {"like": 1, "block": 0, "own": 0},
+    "meta": {"degraded": false, "stale": false}
+  },
   "hot-rank": {
     "success": true,
     "data": {"source": "ths", "items": []},

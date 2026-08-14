@@ -12,6 +12,8 @@
     var intradayTimer = null;
     var intradayDate = '';
     var intradayPoints = {};
+    var intradayStates = {};
+    var sharedIntradayInflight = null;
     var utils = window.AppUtils;
     var uiState = window.AppUiState;
 
@@ -99,6 +101,7 @@
                 }).filter(function (point) {
                     return Number.isFinite(point.time) && point.value !== null;
                 }).slice(-242);
+                if (intradayPoints[code].length) intradayStates[code] = 'local-cache';
             });
         } catch (error) {
             intradayDate = today;
@@ -144,6 +147,7 @@
     }
 
     function normalizeIntradayValue(value) {
+        if (value === null || value === undefined || value === '') return null;
         var number = Number(value);
         return Number.isFinite(number) && Math.abs(number) <= 30 ? number : null;
     }
@@ -171,11 +175,72 @@
         return received > 0;
     }
 
+    function pointTimestamp(point) {
+        if (!point) return NaN;
+        if (Number.isFinite(Number(point.time))) return Number(point.time);
+        var parsed = Date.parse(point.time || point.minute || '');
+        return Number.isFinite(parsed) ? parsed : NaN;
+    }
+
+    function mergeIntradayPoints(localPoints, remotePoints) {
+        var byMinute = {};
+        (Array.isArray(localPoints) ? localPoints : []).forEach(function (point) {
+            var time = pointTimestamp(point);
+            var value = normalizeIntradayValue(point.value);
+            if (Number.isFinite(time) && value !== null) byMinute[Math.floor(time / 60000)] = { time: Math.floor(time / 60000) * 60000, value: value };
+        });
+        (Array.isArray(remotePoints) ? remotePoints : []).forEach(function (point) {
+            var time = pointTimestamp(point);
+            var value = normalizeIntradayValue(point.value);
+            if (Number.isFinite(time) && value !== null) byMinute[Math.floor(time / 60000)] = { time: Math.floor(time / 60000) * 60000, value: value };
+        });
+        return Object.keys(byMinute).map(function (key) { return byMinute[key]; })
+            .sort(function (a, b) { return a.time - b.time; }).slice(-242);
+    }
+
+    function applySharedFundIntraday(result, requestedCodes) {
+        if (!result || result.success === false || !result.data) return false;
+        resetIntradayIfNeeded();
+        var subscription = result.meta && result.meta.subscription || {};
+        var rejected = {};
+        (Array.isArray(subscription.rejectedCodes) ? subscription.rejectedCodes : []).forEach(function (entry) {
+            var code = typeof entry === 'string' ? entry : entry && entry.code;
+            if (code) rejected[code] = true;
+        });
+        var received = 0;
+        requestedCodes.forEach(function (code) {
+            var item = result.data[code];
+            if (item && Array.isArray(item.points) && item.points.length) {
+                intradayPoints[code] = mergeIntradayPoints(intradayPoints[code], item.points);
+                intradayStates[code] = 'shared';
+                received += 1;
+            } else if (rejected[code]) {
+                intradayStates[code] = 'rejected';
+            } else {
+                intradayStates[code] = (intradayPoints[code] || []).length ? 'local-cache' : 'empty';
+            }
+        });
+        persistIntraday();
+        renderFunds();
+        return received > 0;
+    }
+
+    function intradayMinuteOfDay(timestamp) {
+        var parts = shanghaiParts(new Date(timestamp));
+        return Number(parts.hour) * 60 + Number(parts.minute);
+    }
+
     function renderFundIntraday(code) {
         resetIntradayIfNeeded();
         var points = intradayPoints[code] || [];
-        if (!points.length) return '<div class="fund-watch-intraday is-empty" role="cell"><span>--</span><small>' +
-            (isMarketActive() ? '等待盘中估值' : '非交易时段') + '</small></div>';
+        var state = intradayStates[code] || '';
+        if (!points.length) {
+            var emptyText = state === 'rejected' ? '未纳入共享采集'
+                : state === 'empty' ? '今日尚无采样'
+                    : state === 'unavailable' ? '共享服务暂不可用'
+                        : (isMarketActive() ? '正在同步估值曲线' : '非交易时段');
+            return '<div class="fund-watch-intraday is-empty" role="cell"><span>--</span><small>' + escapeHtml(emptyText) + '</small></div>';
+        }
         var latest = points[points.length - 1].value;
         var tone = changeClass(latest);
         var chart = '';
@@ -183,15 +248,20 @@
             var width = 104;
             var height = 30;
             var padding = 2;
+            var startMinute = 9 * 60 + 15;
+            var endMinute = 15 * 60;
             var bound = Math.max(0.1, Math.max.apply(Math, points.map(function (point) { return Math.abs(point.value); })));
-            var xStep = (width - padding * 2) / Math.max(1, points.length - 1);
-            var coordinates = points.map(function (point, index) {
-                var x = padding + index * xStep;
+            var coordinates = points.map(function (point) {
+                var minute = Math.max(startMinute, Math.min(endMinute, intradayMinuteOfDay(point.time)));
+                var x = padding + (minute - startMinute) / (endMinute - startMinute) * (width - padding * 2);
                 var y = padding + (bound - point.value) / (bound * 2) * (height - padding * 2);
-                return [x, y];
+                return [x, y, minute];
             });
+            var previousMinute = null;
             var path = coordinates.map(function (point, index) {
-                return (index ? 'L' : 'M') + point[0].toFixed(2) + ',' + point[1].toFixed(2);
+                var command = !index || (previousMinute !== null && point[2] - previousMinute > 20) ? 'M' : 'L';
+                previousMinute = point[2];
+                return command + point[0].toFixed(2) + ',' + point[1].toFixed(2);
             }).join(' ');
             var last = coordinates[coordinates.length - 1];
             chart = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' +
@@ -201,8 +271,11 @@
         }
         var time = shanghaiParts(new Date(points[points.length - 1].time));
         var timeText = time.hour + ':' + time.minute;
-        return '<div class="fund-watch-intraday ' + tone + '" role="cell" title="盘中估值采样 ' + escapeHtml(timeText) + '">' +
-            chart + '<span>' + escapeHtml(formatChange(latest)) + '</span><small>' + escapeHtml(timeText) + '</small></div>';
+        var statusText = state === 'shared' ? '共享采集 ' + timeText
+            : state === 'local-cache' ? '本地缓存 ' + timeText
+                : state === 'rejected' ? '未纳入共享 ' + timeText : timeText;
+        return '<div class="fund-watch-intraday ' + tone + '" role="cell" title="盘中估值曲线 ' + escapeHtml(statusText) + '">' +
+            chart + '<span>' + escapeHtml(formatChange(latest)) + '</span><small>' + escapeHtml(statusText) + '</small></div>';
     }
 
     function renderFundRow(fund) {
@@ -282,14 +355,35 @@
         return receivedCount > 0;
     }
 
-    function loadFundIntraday(force) {
+    function loadSharedFundIntraday(force) {
         restoreFunds();
-        if (!funds.length || !window.AppDataClient) return Promise.resolve({ skipped: true });
-        resetIntradayIfNeeded();
-        if (!isMarketActive()) {
+        if (!window.AppDataClient) return Promise.resolve({ skipped: true });
+        if (sharedIntradayInflight) return sharedIntradayInflight;
+        var codes = getFundCodes();
+        sharedIntradayInflight = Promise.resolve(window.AppDataClient.fetchData('/fund-intraday', {
+            codes: codes.join(','),
+            date: currentDateKey(),
+        }, {
+            force: !!force,
+            cacheMode: force ? 'bypass_fresh' : 'normal',
+        })).then(function (result) {
+            applySharedFundIntraday(result, codes);
+            return result;
+        }).catch(function (error) {
+            codes.forEach(function (code) {
+                intradayStates[code] = (intradayPoints[code] || []).length ? 'local-cache' : 'unavailable';
+            });
             renderFunds();
-            return Promise.resolve({ skipped: true, reason: 'market_closed' });
-        }
+            throw error;
+        }).finally(function () {
+            sharedIntradayInflight = null;
+        });
+        return sharedIntradayInflight;
+    }
+
+    function loadLocalFundIntraday(force) {
+        restoreFunds();
+        if (!funds.length || !window.AppDataClient || !isMarketActive()) return Promise.resolve({ skipped: true });
         if (intradayInflight) return intradayInflight;
         var codes = getFundCodes();
         intradayInflight = Promise.resolve(window.AppDataClient.fetchData('/fund-board-realtime', {
@@ -304,6 +398,15 @@
             intradayInflight = null;
         });
         return intradayInflight;
+    }
+
+    function loadFundIntraday(force) {
+        resetIntradayIfNeeded();
+        return loadSharedFundIntraday(force).catch(function () { return { degraded: true }; }).then(function (sharedResult) {
+            return loadLocalFundIntraday(force).catch(function () { return { degraded: true }; }).then(function () {
+                return sharedResult;
+            });
+        });
     }
 
     function isFundWatchActive() {
@@ -415,6 +518,7 @@
             if (timeElement) timeElement.textContent = '';
         }
         showStatus('已移除基金');
+        loadSharedFundIntraday(true).catch(function () {});
     }
 
     function importFunds(entries) {
@@ -458,12 +562,14 @@
         addFund: addFund,
         applyFundIntraday: applyFundIntraday,
         applyFundQuotes: applyFundQuotes,
+        applySharedFundIntraday: applySharedFundIntraday,
         exportFunds: getFunds,
         getFundCodes: getFundCodes,
         importFunds: importFunds,
         initFunds: initFunds,
         loadFundIntraday: loadFundIntraday,
         loadFundQuotes: loadFundQuotes,
+        mergeIntradayPoints: mergeIntradayPoints,
         removeFund: removeFund,
         renderFunds: renderFunds,
         resolveFundInput: resolveFundInput,

@@ -22,6 +22,8 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
         "fund-board" => fund::board(gateway, query).await,
         "fund-board-trends" => fund::board_trends(gateway, query).await,
         "fund-board-realtime" => fund::board_realtime(gateway, query).await,
+        "fund-diagnosis" => fund::diagnosis(gateway, query).await,
+        "fund-interaction" => fund::interaction(gateway, query).await,
         "hot-rank" => market::hot_rank(gateway, query).await,
         "limit-up" => market::limit_up(gateway, query).await,
         "cls-news" => news::cls(gateway, query).await,

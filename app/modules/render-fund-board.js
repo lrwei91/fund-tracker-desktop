@@ -170,7 +170,7 @@
         var realtime = fundRealtime[fund.code];
         var fee = fund.redemptionFee
             ? '<span class="fund-board-tag fee">' + escapeHtml(fund.redemptionFee) + '</span>' : '';
-        return '<article class="fund-board-fund' + (getStarCount(fund.stars) >= 5 ? ' top-pick' : '') + '">' +
+        return '<article class="fund-board-fund' + (getStarCount(fund.stars) >= 5 ? ' top-pick' : '') + '" role="button" tabindex="0" data-fund-diagnosis="' + escapeHtml(fund.code) + '" aria-label="查看 ' + escapeHtml(fund.name) + ' 详情">' +
             '<div class="fund-board-fund-title"><strong title="' + escapeHtml(fund.name) + '">' + escapeHtml(fund.name) + '</strong>' + renderStars(fund.stars) + '</div>' +
             '<div class="fund-board-fund-meta"><button type="button" class="fund-board-copy" data-copy-code="' + escapeHtml(fund.code) + '" title="复制基金代码">' + escapeHtml(fund.code) + '</button>' +
             '<div class="fund-board-tags">' + renderTags(fund.tags) + fee + '</div>' +
@@ -317,6 +317,87 @@
         return inflight;
     }
 
+    function diagnosisMetric(label, value, tone) {
+        return '<div class="fund-diagnosis-metric"><small>' + escapeHtml(label) + '</small><strong class="' +
+            escapeHtml(tone || 'neutral') + '">' + escapeHtml(value || '--') + '</strong></div>';
+    }
+
+    function highlightCard(item, fallbackTitle) {
+        item = item && typeof item === 'object' ? item : {};
+        return '<section class="fund-diagnosis-highlight"><h4>' + escapeHtml(item.title || fallbackTitle) + '</h4>' +
+            '<strong>' + escapeHtml(item.value || '暂无数据') + '</strong>' +
+            (item.reason ? '<p>' + escapeHtml(item.reason) + '</p>' : '') + '</section>';
+    }
+
+    function renderDiagnosis(fund, result) {
+        var body = document.getElementById('fund-diagnosis-body');
+        var title = document.getElementById('fund-diagnosis-title');
+        if (!body) return;
+        var data = result && result.data || {};
+        var diagnosis = data.diagnosis || {};
+        var smart = diagnosis.smart_diagnosis || {};
+        var highlights = diagnosis.highlights || {};
+        var nav = data.nav || {};
+        var interaction = data.interaction || {};
+        var realtime = data.realtime;
+        var name = diagnosis.fund_name || fund.name;
+        if (title) title.innerHTML = escapeHtml(name) + '<small>' + escapeHtml(fund.code) + '</small>';
+        var metricRows = [
+            ['牛熊适应', smart.bull_bear_score], ['年度表现', smart.ytd_score],
+            ['抗压能力', smart.stress_score], ['隐性风险', smart.hidden_score],
+        ].filter(function (entry) { return entry[1]; });
+        body.innerHTML = '<div class="fund-diagnosis-summary">' +
+            '<div><span class="fund-diagnosis-label">' + escapeHtml(smart.label || '基金诊断') + '</span>' + renderStars(fund.stars) + '</div>' +
+            '<p>' + escapeHtml(smart.label_text || '结合收益、回撤、规模与持有结构查看基金特征。') + '</p>' +
+            '<div class="fund-diagnosis-tags">' + renderTags(fund.tags) + '</div></div>' +
+            '<div class="fund-diagnosis-metrics">' +
+            diagnosisMetric('今日实时', Number.isFinite(Number(realtime)) ? changeText(realtime) : '--', changeClass(realtime)) +
+            diagnosisMetric('近 1 周', nav.week_return || fund.weekReturn, changeClass(parseValue(nav.week_return || fund.weekReturn))) +
+            diagnosisMetric('1 年涨幅', nav.return || fund.yearReturn, changeClass(parseValue(nav.return || fund.yearReturn))) +
+            diagnosisMetric('最大回撤', nav.max_drawdown || fund.maxDrawdown, 'neutral') + '</div>' +
+            '<div class="fund-diagnosis-highlights">' +
+            highlightCard(highlights.scale, '基金规模') + highlightCard(highlights.institution, '机构持有') +
+            highlightCard(highlights.internal, '内部持有') + highlightCard(highlights.manager, '基金经理') + '</div>' +
+            (metricRows.length ? '<section class="fund-diagnosis-scores"><h4>综合诊断</h4><div>' + metricRows.map(function (entry) {
+                return '<span><small>' + escapeHtml(entry[0]) + '</small><b>' + escapeHtml(entry[1]) + '</b></span>';
+            }).join('') + '</div></section>' : '') +
+            '<div class="fund-diagnosis-actions" data-code="' + escapeHtml(fund.code) + '">' +
+            '<button type="button" data-fund-interaction="like">看好 <b>' + escapeHtml(interaction.like || 0) + '</b></button>' +
+            '<button type="button" data-fund-interaction="own">持有 <b>' + escapeHtml(interaction.own || 0) + '</b></button>' +
+            '<button type="button" data-fund-interaction="block">回避 <b>' + escapeHtml(interaction.block || 0) + '</b></button></div>' +
+            '<p class="fund-diagnosis-source">数据来源：DeepQ 基金诊断' + (result.meta && result.meta.degraded ? ' · 部分辅助数据暂缺' : '') + '</p>';
+    }
+
+    function showDiagnosis(code, trigger) {
+        var fund = funds.find(function (item) { return item.code === code; });
+        var panel = document.getElementById('fund-diagnosis-panel');
+        var overlay = document.getElementById('fund-diagnosis-overlay');
+        var body = document.getElementById('fund-diagnosis-body');
+        if (!fund || !panel || !body) return Promise.resolve(null);
+        body.innerHTML = uiState && typeof uiState.render === 'function'
+            ? uiState.render('loading', { title: '正在加载基金详情', detail: '收益、回撤与持有结构返回后会在这里更新。' })
+            : '<div class="ui-state">正在加载基金详情</div>';
+        if (window.AppDialog) window.AppDialog.open(panel, overlay, {
+            trigger: trigger,
+            hideOnClose: true,
+            focusTarget: document.getElementById('fund-diagnosis-close'),
+            restoreFocus: function () { return document.querySelector('[data-fund-diagnosis="' + code + '"]'); },
+        });
+        return window.AppDataClient.fetchData('/fund-diagnosis', { code: code }, {
+            force: false,
+            cacheMode: 'normal',
+        }).then(function (result) {
+            if (!result || result.success === false || !result.data) throw new Error('基金详情为空');
+            renderDiagnosis(fund, result);
+            return result;
+        }).catch(function (error) {
+            body.innerHTML = uiState && typeof uiState.render === 'function'
+                ? uiState.render('error', { title: '基金详情加载失败', detail: error.message || '请稍后重试' })
+                : '<div class="ui-state">基金详情加载失败</div>';
+            return null;
+        });
+    }
+
     function copyCode(code, button) {
         var done = function () {
             var old = button.textContent;
@@ -412,7 +493,20 @@
         if (grid) {
             grid.addEventListener('click', function (event) {
                 var button = event.target.closest('[data-copy-code]');
-                if (button) copyCode(button.getAttribute('data-copy-code'), button);
+                if (button) {
+                    event.stopPropagation();
+                    copyCode(button.getAttribute('data-copy-code'), button);
+                    return;
+                }
+                var card = event.target.closest('[data-fund-diagnosis]');
+                if (card) showDiagnosis(card.getAttribute('data-fund-diagnosis'), card);
+            });
+            grid.addEventListener('keydown', function (event) {
+                var card = event.target.closest('[data-fund-diagnosis]');
+                if (card && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    showDiagnosis(card.getAttribute('data-fund-diagnosis'), card);
+                }
             });
             if (uiState && typeof uiState.bindRetries === 'function') {
                 uiState.bindRetries(grid, function (scope) {
@@ -420,6 +514,31 @@
                 });
             }
         }
+        var diagnosisPanel = document.getElementById('fund-diagnosis-panel');
+        var diagnosisOverlay = document.getElementById('fund-diagnosis-overlay');
+        var diagnosisClose = document.getElementById('fund-diagnosis-close');
+        if (diagnosisClose && window.AppDialog) diagnosisClose.addEventListener('click', function () {
+            window.AppDialog.close(diagnosisPanel);
+        });
+        if (diagnosisOverlay && window.AppDialog) diagnosisOverlay.addEventListener('click', function () {
+            window.AppDialog.close(diagnosisPanel);
+        });
+        var diagnosisBody = document.getElementById('fund-diagnosis-body');
+        if (diagnosisBody) diagnosisBody.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-fund-interaction]');
+            var actions = event.target.closest('.fund-diagnosis-actions');
+            if (!button || !actions || button.disabled) return;
+            button.disabled = true;
+            window.AppDataClient.fetchData('/fund-interaction', {
+                code: actions.getAttribute('data-code'),
+                action: button.getAttribute('data-fund-interaction'),
+            }, { force: true, cacheMode: 'bypass_fresh' }).then(function (result) {
+                var value = result && result.data && result.data[button.getAttribute('data-fund-interaction')];
+                if (value !== undefined) button.querySelector('b').textContent = value;
+            }).catch(function () {
+                button.setAttribute('title', '更新失败，请稍后重试');
+            }).finally(function () { button.disabled = false; });
+        });
         var help = document.getElementById('fund-board-help');
         var modal = document.getElementById('fund-board-help-modal');
         var close = document.getElementById('fund-board-help-close');
@@ -457,6 +576,7 @@
         normalizeFunds: normalizeFunds,
         parseValue: parseValue,
         renderBoard: renderBoard,
+        showDiagnosis: showDiagnosis,
         selectView: selectView,
     };
 })();

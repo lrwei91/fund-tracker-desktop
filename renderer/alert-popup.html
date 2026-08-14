@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data:; media-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>自选股涨跌提醒</title>
   <script src="../theme.js"></script>
   <link rel="stylesheet" href="alert-popup.css">
 </head>
 <body>
   <section id="alert" aria-live="assertive">
-    <div id="mascot" aria-hidden="true">↑</div>
+    <div id="mascot" aria-hidden="true">🐂</div>
     <div>
       <strong id="alert-title">自选股上涨提醒</strong>
       <span id="alert-detail"></span>

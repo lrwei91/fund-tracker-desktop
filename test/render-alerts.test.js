@@ -68,12 +68,15 @@ describe('桌面提醒测试入口', () => {
         };
 
         window.AppAlerts.checkAlerts({
-            '600000': { name: '浦发银行', priceValue: 10.3, openPrice: 10 },
+            '600000': { name: '浦发银行', priceValue: 10.3, changePercent: 1.25, openPrice: 10 },
             '000001': { name: '平安银行', priceValue: 10.3, openPrice: 10 },
         });
 
         expect(showStockAlert).toHaveBeenCalledTimes(1);
-        expect(showStockAlert).toHaveBeenCalledWith(expect.objectContaining({ code: '600000' }));
+        expect(showStockAlert).toHaveBeenCalledWith(expect.objectContaining({
+            code: '600000',
+            marketChangePct: 1.25,
+        }));
         expect(window.AppState.watchAlertState['000001'].lastTriggerPrice).toBeNull();
     });
 });

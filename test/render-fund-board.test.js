@@ -20,7 +20,9 @@ function installDom() {
             <div id="fund-board-summary"></div>
             <div id="fund-board-grid"></div>
         </div>
-        <div id="fund-board-help-modal" hidden><button id="fund-board-help-close"></button></div>`;
+        <div id="fund-board-help-modal" hidden><button id="fund-board-help-close"></button></div>
+        <div id="fund-diagnosis-overlay" hidden></div>
+        <div id="fund-diagnosis-panel" hidden><h3 id="fund-diagnosis-title"></h3><button id="fund-diagnosis-close"></button><div id="fund-diagnosis-body"></div></div>`;
     Object.defineProperty(document.getElementById('fund-board-grid'), 'clientWidth', { value: 900 });
 }
 
@@ -57,11 +59,24 @@ function installGlobals() {
     window.pinyinPro = {
         pinyin: vi.fn((value, options) => options.pattern === 'first' ? 'wxnbjj ysjs' : 'wuxingneibujijin yousejinshu'),
     };
+    window.AppDialog = {
+        open: vi.fn((panel, overlay) => { panel.hidden = false; overlay.hidden = false; }),
+        close: vi.fn((panel) => { panel.hidden = true; }),
+    };
     window.AppDataClient = {
         fetchData: vi.fn((path) => {
             if (path === '/fund-board') return Promise.resolve(boardPayload());
             if (path === '/fund-board-trends') return Promise.resolve({ success: true, data: { 有色金属: 2.1, 半导体: -1.2 } });
             if (path === '/fund-board-realtime') return Promise.resolve({ success: true, data: { '017193': 1.08, '015596': -0.5 } });
+            if (path === '/fund-diagnosis') return Promise.resolve({
+                success: true,
+                data: {
+                    diagnosis: { fund_name: '五星内部基金', smart_diagnosis: { label: '自己养', label_text: '关注回撤' }, highlights: { scale: { title: '基金规模', value: '当前53.8亿', reason: '规模增加' } } },
+                    nav: { week_return: '6.36%', return: '-10.42%', max_drawdown: '33.66%' },
+                    interaction: { like: 3, own: 2, block: 1 }, realtime: 0.48,
+                }, meta: { degraded: false },
+            });
+            if (path === '/fund-interaction') return Promise.resolve({ success: true, data: { like: 4, own: 2, block: 1 } });
             throw new Error(`unexpected ${path}`);
         }),
     };
@@ -117,6 +132,22 @@ describe('AppFundBoard', () => {
         expect(document.getElementById('fund-board-grid').textContent).toContain('基金数据加载失败');
         document.querySelector('[data-ui-retry="fund-board"]').click();
         await vi.waitFor(() => expect(document.getElementById('fund-board-grid').textContent).toContain('有色金属'));
+        vi.useRealTimers();
+    });
+
+    it('点击基金卡片打开二级详情并支持互动更新', async () => {
+        vi.useFakeTimers();
+        window.AppFundBoard.initFundBoard();
+        await window.AppFundBoard.loadBoard(false);
+        const card = document.querySelector('[data-fund-diagnosis="017193"]');
+        card.click();
+        await vi.waitFor(() => expect(document.getElementById('fund-diagnosis-body').textContent).toContain('当前53.8亿'));
+
+        expect(window.AppDataClient.fetchData).toHaveBeenCalledWith('/fund-diagnosis', { code: '017193' }, { force: false, cacheMode: 'normal' });
+        expect(document.getElementById('fund-diagnosis-body').textContent).toContain('33.66%');
+        expect(window.AppDialog.open).toHaveBeenCalled();
+        document.querySelector('[data-fund-interaction="like"]').click();
+        await vi.waitFor(() => expect(document.querySelector('[data-fund-interaction="like"] b').textContent).toBe('4'));
         vi.useRealTimers();
     });
 

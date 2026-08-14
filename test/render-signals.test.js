@@ -156,7 +156,7 @@ describe('机会雷达风险提示', () => {
                     anomaly: true,
                     anomalyRule: '北交所10日内3次同向异常波动',
                 },
-                components: {},
+                components: { topic: 80, momentum: 70 },
                 signals: [],
             }],
         }, true);
@@ -165,6 +165,7 @@ describe('机会雷达风险提示', () => {
         expect(text).toContain('重点监控至 2026-08-14');
         expect(text).toContain('严重异动：北交所10日内3次同向异常波动');
         expect(text).toContain('回避');
+        expect(document.querySelector('.opportunity-radar-score strong').textContent).toBe('--');
     });
 });
 

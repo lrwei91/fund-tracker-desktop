@@ -11,6 +11,7 @@ use std::{
 
 const MAX_ENTRIES: usize = 200;
 const MAX_FILE_BYTES: u64 = 512 * 1024;
+const MAX_RETENTION: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 60 * 60);
 
 #[derive(Clone, Debug, Serialize)]
 pub struct DiagnosticEvent {
@@ -28,6 +29,10 @@ pub struct DiagnosticEvent {
     pub cycle_id: Option<u64>,
     #[serde(rename = "queueMs", skip_serializing_if = "Option::is_none")]
     pub queue_ms: Option<u128>,
+    #[serde(rename = "traceId")]
+    pub trace_id: String,
+    #[serde(rename = "tenantId")]
+    pub tenant_id: String,
 }
 
 #[derive(Clone)]
@@ -38,6 +43,7 @@ pub struct DiagnosticStore {
 
 impl DiagnosticStore {
     pub fn new(path: PathBuf) -> Arc<Self> {
+        purge_expired(&path);
         Arc::new(Self {
             entries: Arc::new(Mutex::new(VecDeque::with_capacity(MAX_ENTRIES))),
             path,
@@ -62,7 +68,8 @@ impl DiagnosticStore {
             entries.push_back(event.clone());
         }
         if let Err(error) = self.append(&event) {
-            eprintln!("[fund-tracker] diagnostics write failed: {error}");
+            let _ = error;
+            eprintln!("[fund-tracker] diagnostics write failed");
         }
     }
 
@@ -88,6 +95,7 @@ impl DiagnosticStore {
     }
 
     fn append(&self, event: &DiagnosticEvent) -> Result<(), String> {
+        purge_expired(&self.path);
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
@@ -104,6 +112,20 @@ impl DiagnosticStore {
             .open(&self.path)
             .map_err(|error| error.to_string())?;
         writeln!(file, "{body}").map_err(|error| error.to_string())
+    }
+}
+
+fn purge_expired(path: &Path) {
+    let now = SystemTime::now();
+    for candidate in [path.to_path_buf(), path.with_extension("log.1")] {
+        let expired = fs::metadata(&candidate)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > MAX_RETENTION);
+        if expired {
+            let _ = fs::remove_file(candidate);
+        }
     }
 }
 
@@ -153,6 +175,8 @@ mod tests {
             error_code: Some("upstream_5xx".into()),
             cycle_id: Some(1),
             queue_ms: Some(4),
+            trace_id: "trace-test".into(),
+            tenant_id: "local".into(),
         });
         assert_eq!(store.snapshot().len(), 1);
         assert!(path.exists());

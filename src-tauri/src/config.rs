@@ -21,6 +21,12 @@ const KEYS: &[&str] = &[
     "fund_tracker_holding_clown_mode",
     "fund_tracker_fund_watchlist",
 ];
+pub const SENSITIVE_KEYS: &[&str] = &[
+    "fund_tracker_watchlist_cost",
+    "fund_tracker_watchlist_remarks",
+    "fundIntradayCollectorToken",
+];
+const STORAGE_ENCODING: &str = "utf8-json";
 const JSON_KEYS: &[&str] = &[
     "fund_tracker_settings",
     "fund_tracker_collapse_state",
@@ -40,7 +46,7 @@ pub struct ConfigStore {
 }
 
 fn empty() -> Value {
-    json!({"version": 2, "updatedAt": null, "data": {}})
+    json!({"version": 2, "storageEncoding": STORAGE_ENCODING, "updatedAt": null, "data": {}, "private": {}})
 }
 
 impl ConfigStore {
@@ -85,27 +91,57 @@ impl ConfigStore {
                 data.remove(&key);
                 continue;
             }
-            let encoded = if JSON_KEYS.contains(&key.as_str()) {
-                match raw
-                    .as_str()
-                    .and_then(|text| serde_json::from_str::<Value>(text).ok())
-                {
-                    Some(parsed) => parsed,
-                    None => raw,
-                }
-            } else {
-                Value::String(
-                    raw.as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| raw.to_string()),
-                )
-            };
+            let encoded =
+                if SENSITIVE_KEYS.contains(&key.as_str()) || JSON_KEYS.contains(&key.as_str()) {
+                    match raw
+                        .as_str()
+                        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+                    {
+                        Some(parsed) => parsed,
+                        None => raw,
+                    }
+                } else {
+                    Value::String(
+                        raw.as_str()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| raw.to_string()),
+                    )
+                };
             data.insert(key, encoded);
         }
         value["version"] = json!(2);
+        value["storageEncoding"] = json!(STORAGE_ENCODING);
         value["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
         persist(&self.path, &value)?;
         Ok(snapshot(&value))
+    }
+
+    pub fn private_collector_token(&self) -> Option<String> {
+        self.value
+            .lock()
+            .ok()?
+            .get("private")?
+            .get("fundIntradayCollectorToken")?
+            .as_str()
+            .filter(|token| !token.is_empty())
+            .map(str::to_owned)
+    }
+
+    pub fn set_private_collector_token(&self, token: &str) -> Result<(), String> {
+        if !SENSITIVE_KEYS.contains(&"fundIntradayCollectorToken") {
+            return Err("私有配置键未登记".to_string());
+        }
+        let mut value = self.value.lock().map_err(|_| "配置锁不可用".to_string())?;
+        if !value.get("private").is_some_and(Value::is_object) {
+            value["private"] = json!({});
+        }
+        value["private"]["fundIntradayCollectorToken"] = json!(token);
+        value["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
+        persist(&self.path, &value)
+    }
+
+    pub fn clear_private_collector_token(&self) -> Result<(), String> {
+        self.set_private_collector_token("")
     }
 }
 
@@ -120,7 +156,12 @@ fn normalize(raw: Value) -> Value {
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    json!({"version": 2, "updatedAt": updated, "data": data})
+    let private = raw
+        .get("private")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    json!({"version": 2, "storageEncoding": STORAGE_ENCODING, "updatedAt": updated, "data": data, "private": private})
 }
 
 fn snapshot(value: &Value) -> Value {
@@ -138,7 +179,7 @@ fn snapshot(value: &Value) -> Value {
             data.insert(key.clone(), decoded);
         }
     }
-    json!({"version": 2, "updatedAt": value.get("updatedAt").cloned().unwrap_or(Value::Null), "data": data})
+    json!({"version": 2, "storageEncoding": value.get("storageEncoding").cloned().unwrap_or_else(|| json!(STORAGE_ENCODING)), "updatedAt": value.get("updatedAt").cloned().unwrap_or(Value::Null), "data": data})
 }
 
 fn persist(path: &PathBuf, value: &Value) -> Result<(), String> {
@@ -173,12 +214,51 @@ mod tests {
             store.load()["data"]["fund_tracker_active_main_tab"],
             "signals"
         );
+        assert_eq!(store.load()["storageEncoding"], STORAGE_ENCODING);
         store
             .patch(serde_json::from_value(json!({"fund_tracker_active_main_tab":null})).unwrap())
             .unwrap();
         assert!(store.load()["data"]
             .get("fund_tracker_active_main_tab")
             .is_none());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn legacy_values_are_migrated_without_exposing_unknown_keys() {
+        let path =
+            std::env::temp_dir().join(format!("fund-tracker-legacy-{}.json", uuid::Uuid::new_v4()));
+        fs::write(
+            &path,
+            r#"{"values":{"fund_tracker_active_main_tab":"market","unknown":"secret"}}"#,
+        )
+        .unwrap();
+        let store = ConfigStore::new(path.clone());
+        assert_eq!(
+            store.load()["data"]["fund_tracker_active_main_tab"],
+            "market"
+        );
+        assert!(store.load()["data"].get("unknown").is_none());
+        assert_eq!(store.load()["storageEncoding"], STORAGE_ENCODING);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn collector_token_is_persisted_but_not_exposed_in_snapshot() {
+        let path =
+            std::env::temp_dir().join(format!("fund-tracker-secret-{}.json", uuid::Uuid::new_v4()));
+        let store = ConfigStore::new(path.clone());
+        store.set_private_collector_token("TOKEN.secret").unwrap();
+        assert_eq!(
+            store.private_collector_token().as_deref(),
+            Some("TOKEN.secret")
+        );
+        assert!(store.load().get("private").is_none());
+        let restored = ConfigStore::new(path.clone());
+        assert_eq!(
+            restored.private_collector_token().as_deref(),
+            Some("TOKEN.secret")
+        );
         let _ = fs::remove_file(path);
     }
 }

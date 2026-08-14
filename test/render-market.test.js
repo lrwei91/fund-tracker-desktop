@@ -38,6 +38,7 @@ function installHarness(options) {
         liveSectorData: null,
     };
     window.AppUtils = { escapeHtml: (value) => String(value), setLastUpdated: vi.fn() };
+    window.AppDataStatus = { label: (meta, fallback) => meta && meta.stale ? '缓存数据' : fallback };
     window.AppStorage = { getItem: vi.fn(), setItem: vi.fn() };
     window.AppCache = {
         readJson: vi.fn().mockReturnValue(storedFilter),
@@ -140,7 +141,7 @@ describe('板块资金流筛选', () => {
 
     it('指数分时线横向铺满卡片并按昨收绘制零轴', () => {
         const svg = window.AppMarket.buildIndexSparklineSvg({
-            sparkline: [99, 101, 100.5],
+            sparkline: Array.from({ length: 242 }, (_, index) => 99 + index / 242),
             priceValue: 101,
             changePercent: 1,
         }, 'positive', null);
@@ -149,5 +150,13 @@ describe('板块资金流筛选', () => {
         expect(svg).toContain('class="index-sparkline-zero"');
         expect(svg).toContain('class="index-sparkline-path"');
         expect(svg).toContain('aria-label="当日走势"');
+    });
+
+    it('指数分时不足242个有效点时明确不可用且不绘制曲线', () => {
+        const data = { sparkline: [99, null, { price: 100 }] };
+        expect(window.AppMarket.indexSparklineStatus(data)).toEqual({
+            available: false, total: 3, valid: 2, reason: '分时点不足（2/242）',
+        });
+        expect(window.AppMarket.buildIndexSparklineSvg(data, 'neutral', null)).toBe('');
     });
 });

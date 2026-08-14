@@ -306,6 +306,84 @@ pub(crate) async fn board_trends(gateway: Arc<Gateway>, query: Query) -> Value {
     }
 }
 
+pub(crate) async fn diagnosis(gateway: Arc<Gateway>, query: Query) -> Value {
+    let code = query_value(&query, "code").trim();
+    if !is_fund_code(code) {
+        return fail("缺少有效基金代码", "基金代码必须是 6 位数字");
+    }
+    let diagnosis_request = RequestSpec::get(format!("{STAR_BASE_URL}/diagnosis/{code}"))
+        .cache(10 * 60)
+        .independent_circuit();
+    let nav_request = RequestSpec::get(format!("{STAR_BASE_URL}/nav/{code}"))
+        .cache(5 * 60)
+        .independent_circuit();
+    let interaction_request = RequestSpec::get(format!("{STAR_BASE_URL}/interaction/{code}"))
+        .cache(30)
+        .independent_circuit();
+    let realtime_request = RequestSpec::get(format!("{STAR_BASE_URL}/fund_realtime?codes={code}"))
+        .cache(60)
+        .independent_circuit();
+    let (diagnosis, nav, interaction, realtime) = tokio::join!(
+        gateway.json(diagnosis_request),
+        gateway.json(nav_request),
+        gateway.json(interaction_request),
+        gateway.json(realtime_request),
+    );
+    let diagnosis = match diagnosis {
+        Ok(value) if value.is_object() => value,
+        Ok(_) => return fail("基金诊断数据不可用", "返回字段无效"),
+        Err(error) => return fail_api("基金诊断数据不可用", &error),
+    };
+    let mut missing = Vec::new();
+    let nav = nav.ok().filter(Value::is_object).unwrap_or_else(|| {
+        missing.push("nav");
+        json!({})
+    });
+    let interaction = interaction
+        .ok()
+        .filter(Value::is_object)
+        .unwrap_or_else(|| {
+            missing.push("interaction");
+            json!({})
+        });
+    let realtime = realtime
+        .ok()
+        .and_then(|value| value.get(code).cloned())
+        .unwrap_or_else(|| {
+            missing.push("realtime");
+            Value::Null
+        });
+    json!({
+        "success": true,
+        "data": {"code": code, "diagnosis": diagnosis, "nav": nav, "interaction": interaction, "realtime": realtime},
+        "meta": {
+            "degraded": !missing.is_empty(), "stale": false, "missing": missing,
+            "sources": {"diagnosis": {"actual": "deepq-star", "actualLabel": "DeepQ 基金诊断"}}
+        }
+    })
+}
+
+pub(crate) async fn interaction(gateway: Arc<Gateway>, query: Query) -> Value {
+    let code = query_value(&query, "code").trim();
+    let action = query_value(&query, "action").trim();
+    if !is_fund_code(code) || !matches!(action, "like" | "block" | "own") {
+        return fail("基金互动参数无效", "基金代码或互动类型不符合要求");
+    }
+    let request = RequestSpec::get(format!("{STAR_BASE_URL}/interaction/{code}/{action}"))
+        .header("content-type", "application/json")
+        .body("{}".to_string())
+        .cache(0)
+        .independent_circuit();
+    match gateway.json(request).await {
+        Ok(data) if data.is_object() => json!({
+            "success": true, "data": data,
+            "meta": {"degraded": false, "stale": false, "sources": {"interaction": {"actual": "deepq-star", "actualLabel": "DeepQ 基金互动"}}}
+        }),
+        Ok(_) => fail("基金互动更新失败", "返回字段无效"),
+        Err(error) => fail_api("基金互动更新失败", &error),
+    }
+}
+
 pub(crate) async fn board_realtime(gateway: Arc<Gateway>, query: Query) -> Value {
     let codes = sanitize_board_codes(query_value(&query, "codes"));
     if codes.is_empty() {

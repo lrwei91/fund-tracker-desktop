@@ -4568,6 +4568,44 @@ html[data-theme="dark"] .electron-app {
     text-align: center;
 }
 
+.electron-app .fund-board-fund[role="button"] { cursor: pointer; }
+.electron-app .fund-board-fund[role="button"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.electron-app .fund-diagnosis-panel {
+    width: min(94vw, 720px);
+    height: min(88vh, 760px);
+    max-height: 760px;
+}
+
+.electron-app .fund-diagnosis-header h3 { display: flex; align-items: baseline; gap: 9px; }
+.electron-app .fund-diagnosis-header h3 small { color: var(--text-tertiary); font: 600 11px var(--mono); }
+.electron-app .fund-diagnosis-body { overflow: auto; overscroll-behavior: contain; }
+.electron-app .fund-diagnosis-summary { padding: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--amber-soft-bg); }
+.electron-app .fund-diagnosis-summary > div { display: flex; align-items: center; gap: 9px; }
+.electron-app .fund-diagnosis-summary p { margin: 8px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.electron-app .fund-diagnosis-label { padding: 3px 8px; border: 1px solid var(--amber-soft); border-radius: 999px; color: var(--amber); font-size: 11px; font-weight: 750; }
+.electron-app .fund-diagnosis-tags { margin-top: 9px; }
+.electron-app .fund-diagnosis-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--color-surface); }
+.electron-app .fund-diagnosis-metric { display: flex; min-height: 76px; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.electron-app .fund-diagnosis-metric + .fund-diagnosis-metric { border-left: 1px solid var(--border); }
+.electron-app .fund-diagnosis-metric small { color: var(--text-tertiary); font-size: 10px; }
+.electron-app .fund-diagnosis-metric strong { font: 800 18px var(--mono); }
+.electron-app .fund-diagnosis-highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.electron-app .fund-diagnosis-highlight { padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg-row-alt); }
+.electron-app .fund-diagnosis-highlight h4,
+.electron-app .fund-diagnosis-scores h4 { margin: 0 0 7px; color: var(--text-tertiary); font-size: 10px; }
+.electron-app .fund-diagnosis-highlight strong { color: var(--text-primary); font-size: 12px; }
+.electron-app .fund-diagnosis-highlight p { margin: 6px 0 0; color: var(--text-secondary); font-size: 10px; line-height: 1.55; }
+.electron-app .fund-diagnosis-scores { margin-top: 10px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; }
+.electron-app .fund-diagnosis-scores > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.electron-app .fund-diagnosis-scores span { display: flex; flex-direction: column; gap: 4px; padding: 7px; border-radius: 6px; background: var(--bg-row-alt); }
+.electron-app .fund-diagnosis-scores small { color: var(--text-tertiary); font-size: 9px; }
+.electron-app .fund-diagnosis-scores b { color: var(--text-primary); font-size: 11px; }
+.electron-app .fund-diagnosis-actions { display: flex; gap: 8px; margin-top: 10px; }
+.electron-app .fund-diagnosis-actions button { flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--color-surface); color: var(--text-secondary); cursor: pointer; }
+.electron-app .fund-diagnosis-actions button:hover { border-color: var(--amber); background: var(--amber-soft-bg); color: var(--text-primary); }
+.electron-app .fund-diagnosis-source { margin: 10px 0 0; color: var(--text-tertiary); font-size: 9px; text-align: center; }
+
 .electron-app .fund-board-help-modal {
     position: fixed;
     z-index: 1200;
@@ -4608,6 +4646,11 @@ html[data-theme="dark"] .electron-app {
 
 @media (max-width: 760px) {
     .electron-app .fund-board-toolbar { grid-template-columns: 1fr; }
+    .electron-app .fund-diagnosis-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .electron-app .fund-diagnosis-metric:nth-child(3) { border-left: 0; border-top: 1px solid var(--border); }
+    .electron-app .fund-diagnosis-metric:nth-child(4) { border-top: 1px solid var(--border); }
+    .electron-app .fund-diagnosis-highlights { grid-template-columns: 1fr; }
+    .electron-app .fund-diagnosis-scores > div { grid-template-columns: repeat(2, 1fr); }
     .electron-app .fund-board-search-wrap,
     .electron-app .fund-board-filter-row,
     .electron-app .fund-board-status { grid-column: 1; }
@@ -4617,4 +4660,12 @@ html[data-theme="dark"] .electron-app {
 .electron-app .fund-board-grid.is-realtime-stale .fund-board-sector-header > strong,
 .electron-app .fund-board-grid.is-realtime-stale .fund-board-realtime {
     opacity: .62;
+}
+
+.index-sparkline.is-unavailable {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted, #6b7280);
+    font-size: 11px;
 }

@@ -24,6 +24,37 @@ const MAX_ENDPOINT_CACHE_ENTRIES: usize = 128;
 const MAX_ENDPOINT_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
+const ALLOWED_UPSTREAM_HOSTS: &[&str] = &[
+    "sq.deepq.tech",
+    "fundsuggest.eastmoney.com",
+    "hq.sinajs.cn",
+    "web.ifzq.gtimg.cn",
+    "qt.gtimg.cn",
+    "push2.eastmoney.com",
+    "vip.stock.finance.sina.com.cn",
+    "data.hexin.cn",
+    "www.hkex.com.hk",
+    "push2his.eastmoney.com",
+    "searchapi.eastmoney.com",
+    "dq.10jqka.com.cn",
+    "emappdata.eastmoney.com",
+    "push2ex.eastmoney.com",
+    "www.cls.cn",
+    "np-weblist.eastmoney.com",
+    "flash-api.jin10.com",
+    "search-api-web.eastmoney.com",
+    "so.eastmoney.com",
+    "datacenter-web.eastmoney.com",
+    "www.szse.cn",
+    "disc.static.szse.cn",
+    "np-anotice-stock.eastmoney.com",
+    "pdf.dfcfw.com",
+    "query.sse.com.cn",
+    "mobappconfig.securities.eastmoney.com",
+    "dycalchis.eastmoney.com",
+    "portfolio.lrwei91.cn",
+    "raw.githubusercontent.com",
+];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CacheMode {
@@ -95,6 +126,7 @@ pub struct RequestSpec {
     pub eastmoney: bool,
     pub shared_circuit: bool,
     pub cache_mode: CacheMode,
+    pub allowed_host: Option<String>,
 }
 impl RequestSpec {
     pub fn get(url: impl Into<String>) -> Self {
@@ -108,6 +140,7 @@ impl RequestSpec {
             eastmoney: false,
             shared_circuit: true,
             cache_mode: CacheMode::Normal,
+            allowed_host: None,
         }
     }
     pub fn header(mut self, key: &str, value: impl Into<String>) -> Self {
@@ -117,6 +150,10 @@ impl RequestSpec {
     pub fn body(mut self, body: String) -> Self {
         self.method = Method::POST;
         self.body = Some(body);
+        self
+    }
+    pub fn method(mut self, method: Method) -> Self {
+        self.method = method;
         self
     }
     pub fn timeout(mut self, seconds: u64) -> Self {
@@ -136,6 +173,10 @@ impl RequestSpec {
         self.shared_circuit = false;
         self
     }
+    pub fn allow_host(mut self, host: &str) -> Self {
+        self.allowed_host = Some(host.to_ascii_lowercase());
+        self
+    }
 }
 
 #[derive(Default)]
@@ -143,6 +184,7 @@ struct Circuit {
     failures: u8,
     until: Option<Instant>,
     last_started: Option<Instant>,
+    half_open_probe: bool,
 }
 type SharedRequest = Shared<BoxFuture<'static, Result<Arc<Vec<u8>>, ApiError>>>;
 type RawResponseCache = Arc<Mutex<HashMap<String, RawCacheEntry>>>;
@@ -162,6 +204,7 @@ pub struct Gateway {
     route: String,
     cache_mode: CacheMode,
     cycle_id: Option<u64>,
+    trace_id: String,
 }
 
 impl Gateway {
@@ -169,6 +212,13 @@ impl Gateway {
         Arc::new(Self {
             client: Client::builder()
                 .user_agent(BROWSER_USER_AGENT)
+                .redirect(reqwest::redirect::Policy::custom(|attempt| {
+                    if validate_upstream_url(attempt.url().as_str(), None).is_ok() {
+                        attempt.follow()
+                    } else {
+                        attempt.error("redirect target rejected by upstream policy")
+                    }
+                }))
                 .build()
                 .expect("HTTP client"),
             inflight: Arc::new(AsyncMutex::new(HashMap::new())),
@@ -183,6 +233,7 @@ impl Gateway {
             route: "unknown".into(),
             cache_mode: CacheMode::Normal,
             cycle_id: None,
+            trace_id: uuid::Uuid::new_v4().to_string(),
         })
     }
 
@@ -201,6 +252,7 @@ impl Gateway {
             route: route.trim_start_matches('/').to_string(),
             cache_mode: self.cache_mode,
             cycle_id: self.cycle_id,
+            trace_id: uuid::Uuid::new_v4().to_string(),
         })
     }
 
@@ -223,11 +275,16 @@ impl Gateway {
             route: self.route.clone(),
             cache_mode,
             cycle_id,
+            trace_id: self.trace_id.clone(),
         })
     }
 
     pub fn diagnostics(&self) -> Arc<DiagnosticStore> {
         self.diagnostics.clone()
+    }
+
+    pub fn trace_id(&self) -> &str {
+        &self.trace_id
     }
 
     pub fn clear_diagnostics(&self) -> Result<(), String> {
@@ -326,6 +383,8 @@ impl Gateway {
             error_code: error_code.map(str::to_owned),
             cycle_id: self.cycle_id,
             queue_ms,
+            trace_id: self.trace_id.clone(),
+            tenant_id: "local".to_string(),
         });
     }
 
@@ -384,10 +443,7 @@ impl Gateway {
         spec: RequestSpec,
         key: String,
     ) -> Result<Arc<Vec<u8>>, ApiError> {
-        let host = url::Url::parse(&spec.url)
-            .ok()
-            .and_then(|u| u.host_str().map(str::to_owned))
-            .unwrap_or_default();
+        let host = validate_upstream_url(&spec.url, spec.allowed_host.as_deref())?;
         let provider = if spec.eastmoney || host.ends_with("eastmoney.com") {
             "eastmoney"
         } else if host.ends_with("gtimg.cn") || host.ends_with("qq.com") {
@@ -413,7 +469,8 @@ impl Gateway {
         if provider == "eastmoney" {
             let mut circuits = self.circuits.lock().await;
             let circuit = circuits.entry(host.clone()).or_default();
-            if use_eastmoney_circuit && circuit.until.is_some_and(|until| until > Instant::now()) {
+            let now = Instant::now();
+            if use_eastmoney_circuit && circuit.until.is_some_and(|until| until > now) {
                 let error = ApiError::new("eastmoney 数据源熔断中");
                 let (code, _) = error.error_code();
                 self.record_marker_with_queue(
@@ -426,6 +483,23 @@ impl Gateway {
                     queue_ms,
                 );
                 return Err(error);
+            }
+            if use_eastmoney_circuit && circuit.until.is_some() {
+                if circuit.half_open_probe {
+                    let error = ApiError::new("eastmoney 数据源半开探测中");
+                    let (code, _) = error.error_code();
+                    self.record_marker_with_queue(
+                        provider,
+                        "half_open",
+                        "miss",
+                        None,
+                        Some(code),
+                        started.elapsed().as_millis(),
+                        queue_ms,
+                    );
+                    return Err(error);
+                }
+                circuit.half_open_probe = true;
             }
             if let Some(last) = circuit.last_started {
                 let target = Duration::from_millis(1000 + rand::rng().random_range(0..=300));
@@ -486,6 +560,7 @@ impl Gateway {
                         let c = circuits.entry(host.clone()).or_default();
                         c.failures = 0;
                         c.until = None;
+                        c.half_open_probe = false;
                     }
                     if !spec.cache_ttl.is_zero() {
                         let mut cache = self.cache.lock().expect("cache");
@@ -533,6 +608,7 @@ impl Gateway {
         if use_eastmoney_circuit {
             let mut circuits = self.circuits.lock().await;
             let c = circuits.entry(host).or_default();
+            c.half_open_probe = false;
             if last.status == Some(403) {
                 c.failures = 3;
             } else if last.status.is_none()
@@ -570,6 +646,24 @@ impl Gateway {
     pub async fn gbk(self: &Arc<Self>, spec: RequestSpec) -> Result<String, ApiError> {
         Ok(GBK.decode(&self.bytes(spec).await?).0.into_owned())
     }
+}
+
+fn validate_upstream_url(raw: &str, allowed_host: Option<&str>) -> Result<String, ApiError> {
+    let parsed = url::Url::parse(raw).map_err(|_| ApiError::new("上游地址无效"))?;
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    #[cfg(any(test, debug_assertions))]
+    if parsed.scheme() == "http" && matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1") {
+        return Ok(host);
+    }
+    if parsed.scheme() != "https" || parsed.port().is_some() {
+        return Err(ApiError::new("上游地址未通过 HTTPS 与端口策略"));
+    }
+    if host.parse::<std::net::IpAddr>().is_ok()
+        || !(ALLOWED_UPSTREAM_HOSTS.contains(&host.as_str()) || allowed_host == Some(host.as_str()))
+    {
+        return Err(ApiError::new("上游地址未登记"));
+    }
+    Ok(host)
 }
 
 fn normalize_query_value(key: &str, value: &str) -> String {
@@ -666,6 +760,40 @@ mod tests {
             }
         });
         (format!("http://{address}/fixture"), calls)
+    }
+
+    #[test]
+    fn upstream_policy_rejects_unregistered_and_insecure_targets() {
+        assert_eq!(
+            validate_upstream_url("https://push2.eastmoney.com/api", None).unwrap(),
+            "push2.eastmoney.com"
+        );
+        assert!(validate_upstream_url("http://push2.eastmoney.com/api", None).is_err());
+        assert!(validate_upstream_url("https://push2.eastmoney.com:8443/api", None).is_err());
+        assert!(validate_upstream_url("https://evil.example/api", None).is_err());
+        assert!(validate_upstream_url("https://127.0.0.1/api", None).is_err());
+    }
+
+    #[tokio::test]
+    async fn expired_circuit_allows_only_one_half_open_probe() {
+        let (url, calls) = fixture_server(200, b"ok".to_vec(), Duration::ZERO);
+        let host = url::Url::parse(&url)
+            .unwrap()
+            .host_str()
+            .unwrap()
+            .to_string();
+        let gateway = Gateway::new();
+        gateway.circuits.lock().await.insert(
+            host,
+            Circuit {
+                until: Some(Instant::now() - Duration::from_millis(1)),
+                half_open_probe: true,
+                ..Default::default()
+            },
+        );
+        let error = gateway.bytes(RequestSpec::get(url).em()).await.unwrap_err();
+        assert!(error.message.contains("半开探测"));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

@@ -22,11 +22,11 @@
     }
 
     function formatQuotePrice(value, fallback, code, name) {
-        if (value === null || value === undefined || value === '') {
-            return fallback === null || fallback === undefined ? '--' : String(fallback);
-        }
-        var number = Number(value);
-        if (!Number.isFinite(number)) return fallback === null || fallback === undefined ? '--' : String(fallback);
+        var source = value;
+        if (source === null || source === undefined || source === '') source = fallback;
+        if (source === null || source === undefined || source === '') return '--';
+        var number = Number(source);
+        if (!Number.isFinite(number)) return String(source);
         return number.toFixed(isEtf(code, name) ? 3 : 2);
     }
 

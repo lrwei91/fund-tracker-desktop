@@ -8,6 +8,7 @@ mod market;
 mod minute;
 mod policy;
 mod routes;
+mod shared_intraday;
 mod symbol;
 
 use serde::{Deserialize, Serialize};
@@ -63,11 +64,18 @@ pub fn diagnostics_clear(state: tauri::State<'_, ApiState>) -> Result<(), String
 #[tauri::command]
 pub async fn fetch_data(
     state: tauri::State<'_, ApiState>,
+    config: tauri::State<'_, crate::config::ConfigStore>,
     path: String,
     query: HashMap<String, String>,
     options: Option<FetchOptions>,
 ) -> Result<Value, String> {
     let gateway = state.gateway.clone();
+    if path.trim_start_matches('/') == "fund-intraday" {
+        let scoped = gateway.scoped("fund-intraday");
+        let mut value = shared_intraday::fetch(scoped.clone(), &config, query).await;
+        policy::finalize_response(&mut value, scoped.trace_id());
+        return Ok(value);
+    }
     Ok(routes::dispatch_with_options(
         gateway,
         &path,
@@ -108,6 +116,7 @@ mod tests {
             ("fund-board", vec![]),
             ("fund-board-trends", vec![("sectors", "有色金属,半导体")]),
             ("fund-board-realtime", vec![("codes", "017193,015596")]),
+            ("fund-diagnosis", vec![("code", "017193")]),
             ("hot-rank", vec![("source", "ths"), ("limit", "5")]),
             ("limit-up", vec![("type", "zt"), ("limit", "5")]),
             ("cls-news", vec![("limit", "3")]),
@@ -190,6 +199,10 @@ mod tests {
                 }
                 "fund-board-trends" => result["data"]["有色金属"].is_number(),
                 "fund-board-realtime" => result["data"].is_object(),
+                "fund-diagnosis" => {
+                    result["data"]["diagnosis"]["fund_name"].is_string()
+                        && result["data"]["nav"].is_object()
+                }
                 "global-news" => {
                     result["data"]["data"]
                         .as_array()

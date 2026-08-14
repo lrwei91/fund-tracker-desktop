@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "0.1.36",
+  "version": "1.0.0",
   "description": "恭喜发财本地 Tauri 桌面应用",
   "private": true,
   "engines": {
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "npm run frontend:prepare && tauri dev",
     "frontend:prepare": "node scripts/prepare-tauri-frontend.js",
-    "check": "node --check app/config-schema.js && node --check app/theme.js && node --check app/tauri-shell.js && for f in renderer/*.js app/app.js app/modules/*.js app/modules/watchlist/*.js; do node --check \"$f\"; done && cargo check --manifest-path src-tauri/Cargo.toml",
+    "check": "node --check app/config-schema.js && node --check app/theme.js && node --check app/tauri-shell.js && node scripts/check-js.js && node scripts/check-rust.js",
     "smoke": "node scripts/smoke-watchlist.js",
     "smoke:refresh": "vitest run test/refresh-coordinator.test.js",
     "smoke:data": "cargo test --manifest-path src-tauri/Cargo.toml live_data_smoke -- --nocapture",
@@ -24,7 +24,11 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker:dev": "wrangler dev --config services/fund-intraday-collector/wrangler.toml",
+    "worker:test": "vitest run test/fund-intraday-collector.test.js",
+    "worker:deploy:dry": "wrangler deploy --dry-run --config services/fund-intraday-collector/wrangler.toml",
+    "artifact:verify": "node scripts/check-artifact-size.js --verify"
   },
   "overrides": {
     "form-data": "^4.0.6"
@@ -37,6 +41,7 @@
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
     "prettier": "^3.9.4",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.123.0"
   }
 }
