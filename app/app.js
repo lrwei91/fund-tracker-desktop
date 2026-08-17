@@ -401,13 +401,21 @@
             var oldText = btn.textContent;
             btn.disabled = true;
             btn.textContent = '打开中';
+            var coordinator = window.AppRefreshCoordinator;
+            var refreshPromise = coordinator && typeof coordinator.setHoldingVisible === 'function'
+                ? coordinator.setHoldingVisible(true)
+                : Promise.resolve();
             try {
                 var result = await window.shell.openHoldingWindow();
                 if (!result || !result.ok) throw new Error(result && result.error ? result.error : 'open failed');
-                if (window.AppRefreshCoordinator && typeof window.AppRefreshCoordinator.syncCurrentHoldingWidget === 'function') {
-                    await window.AppRefreshCoordinator.syncCurrentHoldingWidget();
+                await refreshPromise;
+                if (coordinator && typeof coordinator.syncCurrentHoldingWidget === 'function') {
+                    await coordinator.syncCurrentHoldingWidget();
                 }
             } catch (e) {
+                if (coordinator && typeof coordinator.setHoldingVisible === 'function') {
+                    coordinator.setHoldingVisible(false);
+                }
                 btn.textContent = '失败';
                 setTimeout(function () { btn.textContent = oldText; }, 1200);
             } finally {

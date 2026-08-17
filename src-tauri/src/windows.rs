@@ -179,6 +179,12 @@ fn screen_position(
     PhysicalPosition::new(x, y)
 }
 
+fn emit_holding_visibility(app: &tauri::AppHandle, visible: bool) {
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.emit("holding-widget-visibility", json!({"visible": visible}));
+    }
+}
+
 pub fn create_auxiliary_windows(app: &tauri::AppHandle) -> tauri::Result<()> {
     let holding = WebviewWindowBuilder::new(
         app,
@@ -270,6 +276,10 @@ fn restore_from_tray(app: &tauri::AppHandle) {
         "main"
     };
     if let Some(window) = app.get_webview_window(label) {
+        if label == "holding" {
+            emit_holding_visibility(app, true);
+            let _ = window.emit("holding-widget-refresh", ());
+        }
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
@@ -285,6 +295,7 @@ pub fn open_holding_window(app: tauri::AppHandle) -> Value {
         app.get_webview_window("holding"),
     ) {
         let _ = holding.set_position(screen_position(&main, HOLDING_W, HOLDING_H, false));
+        emit_holding_visibility(&app, true);
         let _ = holding.emit("holding-widget-refresh", ());
         let _ = holding.show();
         if !cfg!(windows) {
@@ -302,6 +313,7 @@ pub fn minimize_holding_window(app: tauri::AppHandle) -> Value {
     if let Some(window) = app.get_webview_window("holding") {
         let _ = window.hide();
     }
+    emit_holding_visibility(&app, false);
     json!({"ok": true})
 }
 
@@ -312,6 +324,7 @@ pub fn maximize_holding_window(app: tauri::AppHandle) -> Value {
     if let Some(holding) = app.get_webview_window("holding") {
         let _ = holding.hide();
     }
+    emit_holding_visibility(&app, false);
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.unminimize();
         let _ = main.show();
@@ -327,6 +340,7 @@ pub fn close_holding_window(app: tauri::AppHandle) -> Value {
     if let Some(window) = app.get_webview_window("holding") {
         let _ = window.hide();
     }
+    emit_holding_visibility(&app, false);
     json!({"ok": true})
 }
 

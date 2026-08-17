@@ -35,6 +35,7 @@
         },
         onHoldingWidgetRefresh: function (callback) { return subscribe('holding-widget-refresh', callback); },
         onHoldingWidgetState: function (callback) { return subscribe('holding-widget-state', callback); },
+        onHoldingWidgetVisibility: function (callback) { return subscribe('holding-widget-visibility', callback); },
         onStockAlert: function (callback) { return subscribe('stock-alert', callback); },
     };
 })();

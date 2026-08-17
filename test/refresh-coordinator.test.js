@@ -1,10 +1,22 @@
 /**
  * @vitest-environment jsdom
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 function makeCodes(count) {
     return Array.from({ length: count }, (_, index) => String(600000 + index).padStart(6, '0'));
+}
+
+function mockVisibility(initial) {
+    let current = initial || 'visible';
+    Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => current,
+    });
+    return function setVisibility(next) {
+        current = next;
+        document.dispatchEvent(new Event('visibilitychange'));
+    };
 }
 
 function installHarness() {
@@ -62,7 +74,10 @@ function installHarness() {
         hasLoaded: () => false,
         loadBoard: vi.fn().mockResolvedValue(undefined),
     };
-    window.shell = { syncHoldingWidget: vi.fn().mockResolvedValue({ ok: true }) };
+    window.shell = {
+        syncHoldingWidget: vi.fn().mockResolvedValue({ ok: true }),
+        onHoldingWidgetVisibility: vi.fn(),
+    };
     document.body.innerHTML = '<button id="refresh-btn"></button><div id="refresh-status"></div>';
     return { watchCodes };
 }
@@ -70,7 +85,13 @@ function installHarness() {
 describe('AppRefreshCoordinator', () => {
     beforeEach(() => {
         vi.resetModules();
+        mockVisibility('visible');
         installHarness();
+    });
+
+    afterEach(() => {
+        if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.stop();
+        vi.useRealTimers();
     });
 
     it('把跨分组的 50 只自选股合并为一次行情请求并去重', async () => {
@@ -188,5 +209,87 @@ describe('AppRefreshCoordinator', () => {
 
         expect(maxActive).toBeLessThanOrEqual(3);
         expect(results.map((item) => item.value)).toEqual([0, 1, 2, 3, 4]);
+    });
+
+    it('主窗口隐藏但持仓浮窗可见时继续按主行情周期只刷新持仓', async () => {
+        vi.useFakeTimers();
+        const setVisibility = mockVisibility('visible');
+        const { watchCodes } = installHarness();
+        const holdingCodes = watchCodes.slice(0, 2);
+        window.AppState.isAutoRefresh = true;
+        window.AppDataClient.fetchData.mockResolvedValue({
+            success: true,
+            data: Object.fromEntries(holdingCodes.map((code) => [code, {
+                code,
+                name: code,
+                price: '10.00',
+                priceValue: 10,
+                changePercent: 1,
+                change: 0.1,
+            }])),
+            time: '09:30:00',
+            meta: { stale: false },
+        });
+        await import('../app/modules/refresh-coordinator.js');
+
+        window.AppRefreshCoordinator.start();
+        await window.AppRefreshCoordinator.setHoldingVisible(true);
+        setVisibility('hidden');
+        window.AppDataClient.fetchData.mockClear();
+        window.AppMarket.loadIndexData.mockClear();
+        window.AppWatchlist.loadWatchMarketWarnings.mockClear();
+
+        await vi.advanceTimersByTimeAsync(10000);
+
+        expect(window.AppDataClient.fetchData).toHaveBeenCalledTimes(1);
+        expect(window.AppDataClient.fetchData.mock.calls[0][1].codes).toBe(holdingCodes.join(','));
+        expect(window.AppMarket.loadIndexData).not.toHaveBeenCalled();
+        expect(window.AppWatchlist.loadWatchMarketWarnings).not.toHaveBeenCalled();
+        expect(window.shell.syncHoldingWidget).toHaveBeenLastCalledWith(expect.objectContaining({
+            status: 'fresh',
+        }));
+    });
+
+    it('浮窗隐藏后主窗口仍隐藏时停止持仓行情刷新', async () => {
+        vi.useFakeTimers();
+        const setVisibility = mockVisibility('visible');
+        installHarness();
+        window.AppState.isAutoRefresh = true;
+        await import('../app/modules/refresh-coordinator.js');
+
+        window.AppRefreshCoordinator.start();
+        await window.AppRefreshCoordinator.setHoldingVisible(true);
+        setVisibility('hidden');
+        await window.AppRefreshCoordinator.setHoldingVisible(false);
+        window.AppDataClient.fetchData.mockClear();
+
+        await vi.advanceTimersByTimeAsync(30000);
+
+        expect(window.AppDataClient.fetchData).not.toHaveBeenCalled();
+        expect(window.AppRefreshCoordinator.isHoldingVisible()).toBe(false);
+    });
+
+    it('启动缓存没有本轮接收时间时不会把旧行情标记为 fresh', async () => {
+        const { watchCodes } = installHarness();
+        const holdingCodes = watchCodes.slice(0, 2);
+        window.AppState.watchQuoteCache = Object.fromEntries(holdingCodes.map((code) => [code, {
+            code,
+            name: code,
+            price: '10.00',
+            priceValue: 10,
+            changePercent: 1,
+            change: 0.1,
+        }]));
+        window.AppState.watchQuoteFreshCodes = Object.fromEntries(holdingCodes.map((code) => [code, true]));
+        window.AppState.watchQuoteUpdateTime = '09:30:00';
+        await import('../app/modules/refresh-coordinator.js');
+
+        await window.AppRefreshCoordinator.syncCurrentHoldingWidget();
+
+        expect(window.shell.syncHoldingWidget).toHaveBeenLastCalledWith(expect.objectContaining({
+            status: 'stale',
+            updatedAt: '09:30:00',
+        }));
+        expect(window.shell.onHoldingWidgetVisibility).toHaveBeenCalledTimes(1);
     });
 });

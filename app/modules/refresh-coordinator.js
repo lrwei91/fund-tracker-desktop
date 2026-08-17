@@ -8,6 +8,8 @@
     var running = null;
     var cycleId = 0;
     var visible = document.visibilityState !== 'hidden';
+    var holdingVisible = false;
+    var lastQuoteReceivedAt = 0;
     var started = false;
     var detailTail = Promise.resolve();
     var nextDue = { main: 0, signals: 0, funds: 0, news: 0, daily: 0 };
@@ -126,10 +128,15 @@
                 change: quote.change,
             };
         });
+        var complete = Object.keys(quotes).length === holdingCodes.length && holdingCodes.length > 0;
+        var freshFor = Math.max(30000, Number(state.refreshSecondsMain || 10) * 2000);
+        var cacheIsFresh = complete && lastQuoteReceivedAt > 0 && now() - lastQuoteReceivedAt <= freshFor;
         return window.shell.syncHoldingWidget({
             quotes: quotes,
-            status: Object.keys(quotes).length === holdingCodes.length && holdingCodes.length ? 'fresh' : 'unavailable',
-            updatedAt: state.watchQuoteUpdateTime || new Date().toISOString(),
+            status: cacheIsFresh ? 'fresh' : (Object.keys(quotes).length ? 'stale' : 'unavailable'),
+            updatedAt: lastQuoteReceivedAt
+                ? new Date(lastQuoteReceivedAt).toISOString()
+                : (state.watchQuoteUpdateTime || new Date().toISOString()),
         }).catch(function () {});
     }
 
@@ -137,24 +144,34 @@
         options = options || {};
         var tasks = [];
         var quoteContext = null;
-        if (kind === 'all' || kind === 'main') {
-            var watchCodes = window.AppWatchlist && typeof window.AppWatchlist.getAllWatchCodes === 'function'
-                ? uniqueCodes(window.AppWatchlist.getAllWatchCodes()) : [];
-            var customCodes = uniqueCodes(state.customIndexCodes || []);
+        if (kind === 'all' || kind === 'main' || kind === 'holding') {
+            var holdingOnly = kind === 'holding';
+            var watchCodes = window.AppWatchlist && typeof window.AppWatchlist[
+                holdingOnly ? 'getHoldingCodes' : 'getAllWatchCodes'
+            ] === 'function'
+                ? uniqueCodes(window.AppWatchlist[holdingOnly ? 'getHoldingCodes' : 'getAllWatchCodes']()) : [];
+            var customCodes = holdingOnly ? [] : uniqueCodes(state.customIndexCodes || []);
             var quoteCodes = uniqueCodes(watchCodes.concat(customCodes));
             var batches = chunk(quoteCodes, QUOTE_BATCH_SIZE);
-            quoteContext = { watchCodes: watchCodes, customCodes: customCodes, batchCount: batches.length };
+            quoteContext = {
+                watchCodes: watchCodes,
+                customCodes: customCodes,
+                batchCount: batches.length,
+                holdingOnly: holdingOnly,
+            };
             batches.forEach(function (batch) {
                 tasks.push(buildQuotesTask(!!options.force, id, batch));
             });
-            if (watchCodes.length && window.AppWatchlist && typeof window.AppWatchlist.loadWatchMarketWarnings === 'function') {
+            if (!holdingOnly && watchCodes.length && window.AppWatchlist && typeof window.AppWatchlist.loadWatchMarketWarnings === 'function') {
                 tasks.push({ name: '市场异动', priority: 88, run: function () {
                     return window.AppWatchlist.loadWatchMarketWarnings(watchCodes, !!options.force);
                 } });
             }
-            tasks.push({ name: '大盘指数', priority: 90, run: function () {
-                return window.AppMarket ? window.AppMarket.loadIndexData(!!options.force) : null;
-            } });
+            if (!holdingOnly) {
+                tasks.push({ name: '大盘指数', priority: 90, run: function () {
+                    return window.AppMarket ? window.AppMarket.loadIndexData(!!options.force) : null;
+                } });
+            }
         }
         if (kind === 'all' || kind === 'signals') {
             tasks.push({ name: '资金流', priority: 60, run: function () {
@@ -265,6 +282,15 @@
         return promise;
     }
 
+    function requestAfterCurrent(kind, options) {
+        var active = running ? running.promise.catch(function () {}) : Promise.resolve();
+        return active.then(function () { return request(kind, options || {}); });
+    }
+
+    function refreshHolding(options) {
+        return requestAfterCurrent('holding', options || {});
+    }
+
     function applyQuoteResults(context, results, id) {
         if (!context || id !== cycleId) return;
         var data = {};
@@ -288,6 +314,7 @@
             time: latest && latest.time,
             meta: Object.assign(meta, { degraded: failed || !!meta.degraded, stale: false }),
         };
+        if (Object.keys(data).length > 0) lastQuoteReceivedAt = now();
         if (window.AppWatchlist && typeof window.AppWatchlist.applyWatchQuoteBatch === 'function') {
             window.AppWatchlist.applyWatchQuoteBatch(combined, context.watchCodes);
         }
@@ -332,34 +359,46 @@
     function schedule() {
         if (timer) clearTimeout(timer);
         if (!started) return;
-        var dueValues = Object.keys(nextDue).map(function (key) { return nextDue[key] || now() + 60000; });
+        var dueKeys = !visible && holdingVisible ? ['main'] : Object.keys(nextDue);
+        var dueValues = dueKeys.map(function (key) { return nextDue[key] || now() + 60000; });
         var delay = Math.max(250, Math.min.apply(Math, dueValues) - now());
         timer = setTimeout(tick, delay);
     }
 
     function tick() {
         timer = null;
-        if (started && state.isAutoRefresh && visible) {
+        if (started && state.isAutoRefresh && (visible || holdingVisible)) {
             var current = now();
-            var dueMain = current >= nextDue.main && utils.isIntradayRefreshWindow();
-            var dueSignals = current >= nextDue.signals && utils.isIntradayRefreshWindow();
-            var dueFunds = current >= nextDue.funds && state.currentTab === 'funds';
-            var dueNews = current >= nextDue.news && state.currentTab === 'news';
-            var dueDaily = current >= nextDue.daily && utils.isAfterCloseDailyWindow();
-            if (dueMain) {
+            var intraday = utils.isIntradayRefreshWindow();
+            var reachedMain = current >= nextDue.main;
+            var reachedSignals = current >= nextDue.signals;
+            var reachedFunds = current >= nextDue.funds;
+            var reachedNews = current >= nextDue.news;
+            var reachedDaily = current >= nextDue.daily;
+            var dueMain = reachedMain && intraday;
+            var dueSignals = reachedSignals && intraday;
+            var dueFunds = reachedFunds && state.currentTab === 'funds';
+            var dueNews = reachedNews && state.currentTab === 'news';
+            var dueDaily = reachedDaily && utils.isAfterCloseDailyWindow();
+            if (reachedMain) {
                 nextDue.main = current + state.refreshSecondsMain * 1000;
             }
-            if (dueSignals) {
+            if (reachedSignals) {
                 nextDue.signals = current + state.refreshSecondsSignal * 1000;
             }
-            if (current >= nextDue.funds) {
+            if (reachedFunds) {
                 nextDue.funds = current + FUND_REFRESH_SECONDS * 1000;
             }
-            if (dueNews) {
+            if (reachedNews) {
                 nextDue.news = current + state.refreshSecondsNews * 1000;
             }
-            if (dueDaily) {
+            if (reachedDaily) {
                 nextDue.daily = current + 30 * 60 * 1000;
+            }
+            if (!visible && holdingVisible) {
+                if (dueMain) refreshHolding();
+                schedule();
+                return;
             }
             var dueCount = [dueMain, dueSignals, dueFunds, dueNews, dueDaily].filter(Boolean).length;
             if (dueCount > 1) {
@@ -411,6 +450,28 @@
         return request('main');
     }
 
+    function setHoldingVisible(value) {
+        var next = !!value;
+        if (holdingVisible === next) {
+            if (started && (visible || holdingVisible)) schedule();
+            return Promise.resolve();
+        }
+        holdingVisible = next;
+        if (holdingVisible) {
+            nextDue.main = now() + state.refreshSecondsMain * 1000;
+            var refresh = refreshHolding({ force: true });
+            if (started) schedule();
+            return refresh;
+        }
+        if (!visible && timer) {
+            clearTimeout(timer);
+            timer = null;
+        } else if (started) {
+            schedule();
+        }
+        return Promise.resolve();
+    }
+
     document.addEventListener('visibilitychange', function () {
         visible = document.visibilityState !== 'hidden';
         if (visible) {
@@ -421,11 +482,19 @@
             nextDue.news = current + state.refreshSecondsNews * 1000;
             refreshTab(state.currentTab);
             schedule();
+        } else if (holdingVisible) {
+            schedule();
         } else if (timer) {
             clearTimeout(timer);
             timer = null;
         }
     });
+
+    if (window.shell && typeof window.shell.onHoldingWidgetVisibility === 'function') {
+        window.shell.onHoldingWidgetVisibility(function (payload) {
+            setHoldingVisible(payload && payload.visible);
+        });
+    }
 
     window.AppRefreshCoordinator = {
         start: start,
@@ -436,10 +505,13 @@
         refreshSignals: function (options) { return request('signals', options || {}); },
         refreshFunds: function (options) { return request('funds', options || {}); },
         refreshNews: function (options) { return request('news', options || {}); },
+        refreshHolding: refreshHolding,
         runDetail: runDetail,
         refreshTab: refreshTab,
+        setHoldingVisible: setHoldingVisible,
         syncCurrentHoldingWidget: syncCurrentHoldingWidget,
         isRunning: function () { return !!running; },
         isVisible: function () { return visible; },
+        isHoldingVisible: function () { return holdingVisible; },
     };
 })();
