@@ -230,6 +230,36 @@
         return Number(parts.hour) * 60 + Number(parts.minute);
     }
 
+    function tradingMinuteOffset(minute) {
+        var startMinute = 9 * 60 + 15;
+        var morningEndMinute = 11 * 60 + 30;
+        var afternoonStartMinute = 13 * 60;
+        var endMinute = 15 * 60;
+        var morningSpan = morningEndMinute - startMinute;
+        if (minute <= morningEndMinute) {
+            return Math.max(0, Math.min(morningSpan, minute - startMinute));
+        }
+        if (minute < afternoonStartMinute) return morningSpan;
+        return morningSpan + Math.max(0, Math.min(endMinute - afternoonStartMinute, minute - afternoonStartMinute));
+    }
+
+    function smoothIntradayPath(coordinates) {
+        var path = '';
+        var previous = null;
+        coordinates.forEach(function (point) {
+            if (!previous || point[2] - previous[2] > 20) {
+                path += (path ? ' ' : '') + 'M' + point[0].toFixed(2) + ',' + point[1].toFixed(2);
+            } else {
+                var controlOffset = (point[0] - previous[0]) * 0.35;
+                path += ' C' + (previous[0] + controlOffset).toFixed(2) + ',' + previous[1].toFixed(2) +
+                    ' ' + (point[0] - controlOffset).toFixed(2) + ',' + point[1].toFixed(2) +
+                    ' ' + point[0].toFixed(2) + ',' + point[1].toFixed(2);
+            }
+            previous = point;
+        });
+        return path;
+    }
+
     function renderFundIntraday(code) {
         resetIntradayIfNeeded();
         var points = intradayPoints[code] || [];
@@ -246,26 +276,20 @@
         var chart = '';
         if (points.length > 1) {
             var width = 104;
-            var height = 30;
-            var padding = 2;
-            var startMinute = 9 * 60 + 15;
-            var endMinute = 15 * 60;
+            var height = 36;
+            var padding = 3;
+            var tradingSpan = tradingMinuteOffset(15 * 60);
             var bound = Math.max(0.1, Math.max.apply(Math, points.map(function (point) { return Math.abs(point.value); })));
             var coordinates = points.map(function (point) {
-                var minute = Math.max(startMinute, Math.min(endMinute, intradayMinuteOfDay(point.time)));
-                var x = padding + (minute - startMinute) / (endMinute - startMinute) * (width - padding * 2);
+                var tradingMinute = tradingMinuteOffset(intradayMinuteOfDay(point.time));
+                var x = padding + tradingMinute / tradingSpan * (width - padding * 2);
                 var y = padding + (bound - point.value) / (bound * 2) * (height - padding * 2);
-                return [x, y, minute];
+                return [x, y, tradingMinute];
             });
-            var previousMinute = null;
-            var path = coordinates.map(function (point, index) {
-                var command = !index || (previousMinute !== null && point[2] - previousMinute > 20) ? 'M' : 'L';
-                previousMinute = point[2];
-                return command + point[0].toFixed(2) + ',' + point[1].toFixed(2);
-            }).join(' ');
+            var path = smoothIntradayPath(coordinates);
             var last = coordinates[coordinates.length - 1];
-            chart = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" aria-hidden="true">' +
-                '<line class="fund-watch-intraday-base" x1="2" y1="15" x2="102" y2="15"></line>' +
+            chart = '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" shape-rendering="geometricPrecision" aria-hidden="true">' +
+                '<line class="fund-watch-intraday-base" x1="3" y1="18" x2="101" y2="18"></line>' +
                 '<path class="fund-watch-intraday-line" d="' + path + '" vector-effect="non-scaling-stroke"></path>' +
                 '<path class="fund-watch-intraday-dot" d="M' + last[0].toFixed(2) + ',' + last[1].toFixed(2) + 'l0.01,0" vector-effect="non-scaling-stroke"></path></svg>';
         }

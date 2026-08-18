@@ -103,21 +103,24 @@ describe('AppFunds', () => {
         const intraday = document.querySelector('.fund-watch-intraday');
         expect(intraday.textContent).toContain('+0.28%');
         expect(intraday.textContent).toContain('09:32');
-        expect(intraday.querySelector('.fund-watch-intraday-line').getAttribute('vector-effect')).toBe('non-scaling-stroke');
+        const line = intraday.querySelector('.fund-watch-intraday-line');
+        expect(line.getAttribute('vector-effect')).toBe('non-scaling-stroke');
+        expect(line.getAttribute('d')).toContain('C');
+        expect(intraday.querySelector('svg').getAttribute('shape-rendering')).toBe('geometricPrecision');
         expect(intraday.querySelector('.fund-watch-intraday-dot').tagName).toBe('path');
         expect(intraday.querySelector('.fund-watch-intraday-dot').getAttribute('vector-effect')).toBe('non-scaling-stroke');
     });
 
-    it('合并共享全天曲线并按固定交易时间轴渲染缺口', async () => {
+    it('合并共享全天曲线并压缩午间休市时段', async () => {
         await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
         window.AppFunds.applyFundIntraday(
             { success: true, data: { 110022: 0.1 } }, ['110022'],
-            new Date('2026-08-13T09:31:00+08:00').getTime(),
+            new Date('2026-08-13T11:30:00+08:00').getTime(),
         );
         window.AppFunds.applySharedFundIntraday({
             success: true,
             data: { 110022: { points: [
-                { time: new Date('2026-08-13T09:31:00+08:00').getTime(), value: 0.2 },
+                { time: new Date('2026-08-13T11:30:00+08:00').getTime(), value: 0.2 },
                 { time: new Date('2026-08-13T13:01:00+08:00').getTime(), value: 0.3 },
             ] } },
             meta: { subscription: { acceptedCodes: ['110022'] } },
@@ -126,11 +129,33 @@ describe('AppFunds', () => {
         const intraday = document.querySelector('.fund-watch-intraday');
         expect(intraday.textContent).toContain('+0.30%');
         expect(intraday.textContent).toContain('共享采集');
-        expect(intraday.querySelector('path').getAttribute('d').match(/M/g)).toHaveLength(2);
+        const path = intraday.querySelector('.fund-watch-intraday-line').getAttribute('d');
+        expect(path.match(/M/g)).toHaveLength(1);
+        expect(path).toContain('C');
+        const coordinatePairs = path.match(/-?\d+\.\d+,-?\d+\.\d+/g);
+        const firstX = Number(coordinatePairs[0].split(',')[0]);
+        const lastX = Number(coordinatePairs[coordinatePairs.length - 1].split(',')[0]);
+        expect(lastX - firstX).toBeLessThan(1);
         expect(window.AppFunds.mergeIntradayPoints(
             [{ time: 1_000_000, value: 0.1 }],
             [{ time: 1_000_000, value: 0.2 }],
         )[0].value).toBe(0.2);
+    });
+
+    it('盘中真实缺采样超过二十分钟时仍保留断线', async () => {
+        await installModule([{ code: '110022', name: '易方达消费行业股票', type: '股票型' }]);
+        window.AppFunds.applySharedFundIntraday({
+            success: true,
+            data: { 110022: { points: [
+                { time: new Date('2026-08-13T10:00:00+08:00').getTime(), value: 0.2 },
+                { time: new Date('2026-08-13T10:25:00+08:00').getTime(), value: 0.3 },
+            ] } },
+            meta: { subscription: { acceptedCodes: ['110022'] } },
+        }, ['110022']);
+
+        const path = document.querySelector('.fund-watch-intraday-line').getAttribute('d');
+        expect(path.match(/M/g)).toHaveLength(2);
+        expect(path).not.toContain('C');
     });
 
     it('共享采集池满时明确标记未纳入', async () => {
