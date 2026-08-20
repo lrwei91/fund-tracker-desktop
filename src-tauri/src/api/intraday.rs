@@ -9,34 +9,28 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 const PORTFOLIO_URL: &str = "https://portfolio.lrwei91.cn/";
-const GITHUB_RAW_URL: &str =
-    "https://raw.githubusercontent.com/lrwei91/v9-sim-portfolio/main/index.html";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PublicSource {
     Portfolio,
-    GithubRaw,
 }
 
 impl PublicSource {
     fn key(self) -> &'static str {
         match self {
             Self::Portfolio => "portfolio",
-            Self::GithubRaw => "github-raw",
         }
     }
 
     fn label(self) -> &'static str {
         match self {
             Self::Portfolio => "公开报告",
-            Self::GithubRaw => "GitHub Raw",
         }
     }
 
     fn url(self) -> &'static str {
         match self {
             Self::Portfolio => PORTFOLIO_URL,
-            Self::GithubRaw => GITHUB_RAW_URL,
         }
     }
 }
@@ -348,26 +342,13 @@ fn attempts_json(today: &str, probes: &[SourceProbe]) -> Vec<Value> {
         .collect()
 }
 
-fn fallback_reason(today: &str, probes: &[SourceProbe], selected_index: usize) -> String {
-    if selected_index == 0 {
-        return String::new();
-    }
-    match probes.first().map(|probe| &probe.result) {
-        Some(ProbeResult::Parsed(snapshot)) => {
-            format!("公开报告快照日期 {} 不是上海当天 {today}", snapshot.date)
-        }
-        Some(ProbeResult::Failed { reason, .. }) => format!("公开报告不可用：{reason}"),
-        None => "公开报告未请求".into(),
-    }
-}
-
 fn source_meta(today: &str, probes: &[SourceProbe], selected_index: usize, status: &str) -> Value {
     let selected = &probes[selected_index];
-    let degraded = selected.source != PublicSource::Portfolio || status != "ready";
+    let degraded = status != "ready";
     let fallback = if status == "not_ready" {
         "尚未发布上海当天盘中筛选快照".to_string()
     } else {
-        fallback_reason(today, probes, selected_index)
+        String::new()
     };
     let mut source = json!({
         "actual": selected.source.key(),
@@ -391,7 +372,6 @@ fn response_for(today: &str, probes: &[SourceProbe]) -> Value {
             let ProbeResult::Parsed(snapshot) = &probe.result else {
                 unreachable!("ready source must be parsed")
             };
-            let degraded = probe.source != PublicSource::Portfolio;
             json!({
                 "success": true,
                 "data": {
@@ -405,7 +385,7 @@ fn response_for(today: &str, probes: &[SourceProbe]) -> Value {
                 },
                 "meta": {
                     "asOf": now_iso(),
-                    "degraded": degraded,
+                    "degraded": false,
                     "stale": false,
                     "sources": {
                         "intradayScreening": source_meta(today, probes, index, "ready")
@@ -476,11 +456,7 @@ fn response_for(today: &str, probes: &[SourceProbe]) -> Value {
 
 pub async fn handle(gateway: Arc<Gateway>) -> Value {
     let today = shanghai_today();
-    let primary = probe_source(&gateway, PublicSource::Portfolio).await;
-    let mut probes = vec![primary];
-    if choose_source(&today, &probes) != SourceDecision::Ready(0) {
-        probes.push(probe_source(&gateway, PublicSource::GithubRaw).await);
-    }
+    let probes = vec![probe_source(&gateway, PublicSource::Portfolio).await];
     response_for(&today, &probes)
 }
 
@@ -542,49 +518,18 @@ mod tests {
     }
 
     #[test]
-    fn stale_primary_falls_back_to_same_day_raw() {
-        let probes = vec![
-            parsed(PublicSource::Portfolio, "2026-08-11", "14:30"),
-            parsed(PublicSource::GithubRaw, "2026-08-12", "14:31"),
-        ];
+    fn old_portfolio_snapshot_is_not_ready_without_html() {
+        let probes = vec![parsed(PublicSource::Portfolio, "2026-08-11", "14:30")];
         let response = response_for("2026-08-12", &probes);
-        assert_eq!(response["data"]["status"], "ready");
-        assert_eq!(response["data"]["source"], "github-raw");
+        assert_eq!(response["data"]["status"], "not_ready");
+        assert_eq!(response["data"]["source"], "portfolio");
+        assert_eq!(response["data"]["moduleHtml"], "");
         assert_eq!(response["meta"]["degraded"], true);
     }
 
     #[test]
-    fn two_old_snapshots_return_latest_as_not_ready_without_html() {
-        let probes = vec![
-            parsed(PublicSource::Portfolio, "2026-08-10", "14:30"),
-            parsed(PublicSource::GithubRaw, "2026-08-11", "14:31"),
-        ];
-        let response = response_for("2026-08-12", &probes);
-        assert_eq!(response["success"], true);
-        assert_eq!(response["data"]["status"], "not_ready");
-        assert_eq!(response["data"]["latestPublishedAt"], "2026-08-11 14:31");
-        assert_eq!(response["data"]["moduleHtml"], "");
-        assert!(response["data"].get("snapshotAt").is_none());
-    }
-
-    #[test]
-    fn malformed_primary_can_fall_back_to_same_day_raw() {
-        let probes = vec![
-            failed(PublicSource::Portfolio, ProbeFailureKind::Structure),
-            parsed(PublicSource::GithubRaw, "2026-08-12", "14:30"),
-        ];
-        assert_eq!(
-            choose_source("2026-08-12", &probes),
-            SourceDecision::Ready(1)
-        );
-    }
-
-    #[test]
-    fn no_parseable_source_is_an_error() {
-        let probes = vec![
-            failed(PublicSource::Portfolio, ProbeFailureKind::Network),
-            failed(PublicSource::GithubRaw, ProbeFailureKind::Structure),
-        ];
+    fn malformed_portfolio_snapshot_is_an_error() {
+        let probes = vec![failed(PublicSource::Portfolio, ProbeFailureKind::Structure)];
         let response = response_for("2026-08-12", &probes);
         assert_eq!(response["success"], false);
         assert_eq!(response["meta"]["stale"], false);
@@ -595,11 +540,8 @@ mod tests {
     }
 
     #[test]
-    fn two_network_failures_return_an_error() {
-        let probes = vec![
-            failed(PublicSource::Portfolio, ProbeFailureKind::Network),
-            failed(PublicSource::GithubRaw, ProbeFailureKind::Network),
-        ];
+    fn portfolio_network_failure_returns_an_error() {
+        let probes = vec![failed(PublicSource::Portfolio, ProbeFailureKind::Network)];
         let response = response_for("2026-08-12", &probes);
         assert_eq!(response["success"], false);
         assert_eq!(response["errorCode"], "upstream_error");
@@ -608,8 +550,10 @@ mod tests {
             "network_error"
         );
         assert_eq!(
-            response["meta"]["sources"]["intradayScreening"]["attempts"][1]["status"],
-            "network_error"
+            response["meta"]["sources"]["intradayScreening"]["attempts"]
+                .as_array()
+                .map(Vec::len),
+            Some(1)
         );
     }
 

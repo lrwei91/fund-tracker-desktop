@@ -53,7 +53,6 @@ const ALLOWED_UPSTREAM_HOSTS: &[&str] = &[
     "mobappconfig.securities.eastmoney.com",
     "dycalchis.eastmoney.com",
     "portfolio.lrwei91.cn",
-    "raw.githubusercontent.com",
 ];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
