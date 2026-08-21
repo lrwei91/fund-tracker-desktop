@@ -909,7 +909,8 @@ html[data-theme="dark"] .electron-app {
 .electron-app #tab-dashboard .watchlist-section { order: 2; }
 .electron-app #tab-dashboard .custom-index-section { order: 3; }
 .electron-app #tab-dashboard .capital-section { order: 4; }
-.electron-app #tab-dashboard .sector-section { order: 5; }
+.electron-app #tab-dashboard .market-breadth-section { order: 5; }
+.electron-app #tab-dashboard .sector-section { order: 6; }
 
 .electron-app .card {
     min-width: 0;
@@ -951,11 +952,11 @@ html[data-theme="dark"] .electron-app {
     display: none;
 }
 
-.electron-app :where(.index-section, .watchlist-section, .capital-section).is-stale {
+.electron-app :where(.index-section, .watchlist-section, .capital-section, .market-breadth-section).is-stale {
     border-color: var(--color-accent-ink);
 }
 
-.electron-app :where(.index-section, .capital-section).is-stale .card-header::after {
+.electron-app :where(.index-section, .capital-section, .market-breadth-section).is-stale .card-header::after {
     content: '显示上次结果';
     margin-left: auto;
     color: var(--color-status-warning);
@@ -1578,6 +1579,83 @@ html[data-theme="dark"] .electron-app {
     margin-top: 6px;
     font-size: 16px;
     font-weight: 700;
+}
+
+.electron-app .market-breadth-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.electron-app .market-breadth-item {
+    min-width: 0;
+    min-height: 66px;
+    padding: 10px 12px;
+    border-right: 1px solid var(--border);
+    background: var(--color-surface);
+}
+
+.electron-app .market-breadth-item:last-child {
+    border-right: 0;
+}
+
+.electron-app .market-breadth-label {
+    display: block;
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.electron-app .market-breadth-value {
+    display: block;
+    margin-top: 5px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 21px;
+    font-weight: 740;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+}
+
+.electron-app .market-breadth-track {
+    display: flex;
+    width: 100%;
+    height: 8px;
+    margin-top: 11px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-input);
+}
+
+.electron-app .market-breadth-segment {
+    display: block;
+    width: 0;
+    height: 100%;
+    transition: width 180ms ease;
+}
+
+.electron-app .market-breadth-segment.is-up { background: var(--red); }
+.electron-app .market-breadth-segment.is-flat { background: var(--text-tertiary); }
+.electron-app .market-breadth-segment.is-down { background: var(--green); }
+
+.electron-app .market-breadth-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 8px;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.electron-app #market-breadth-status {
+    flex: 0 0 auto;
+    text-align: right;
 }
 
 .electron-app .sector-filter-row {
@@ -3843,7 +3921,8 @@ html[data-theme="dark"] .electron-app {
         grid-column: 1 / -1;
     }
 
-    .electron-app #tab-dashboard .capital-section { grid-column: 1; }
+    .electron-app #tab-dashboard .capital-section,
+    .electron-app #tab-dashboard .market-breadth-section { grid-column: 1; }
     .electron-app #tab-dashboard .sector-section { grid-column: 2; }
 
     .electron-app .news-summary {
@@ -4238,13 +4317,14 @@ html[data-theme="dark"] .electron-app {
     .electron-app #tab-dashboard .watchlist-section,
     .electron-app #tab-dashboard .custom-index-section,
     .electron-app #tab-dashboard .capital-section,
+    .electron-app #tab-dashboard .market-breadth-section,
     .electron-app #tab-dashboard .sector-section {
         grid-column: auto;
         order: initial;
     }
 
     .electron-app .dashboard-flow-column {
-        grid-template-rows: auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
     }
 
     .electron-app #tab-signals.active,

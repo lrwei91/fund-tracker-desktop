@@ -238,7 +238,40 @@
             </div>
         </section>
 
-        <!-- 4. 板块排行 (diverging bar chart) -->
+        <!-- 4. 市场涨跌家数 -->
+        <section class="card market-breadth-section" data-collapsible="true">
+            <div class="card-header" role="button" tabindex="0">
+                <h2>市场涨跌家数</h2>
+                <span class="collapse-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="market-breadth-grid" role="group" aria-label="沪深京市场涨跌家数">
+                    <div class="market-breadth-item">
+                        <span class="market-breadth-label">上涨</span>
+                        <strong class="market-breadth-value positive" id="market-breadth-up">--</strong>
+                    </div>
+                    <div class="market-breadth-item">
+                        <span class="market-breadth-label">平盘</span>
+                        <strong class="market-breadth-value neutral" id="market-breadth-flat">--</strong>
+                    </div>
+                    <div class="market-breadth-item">
+                        <span class="market-breadth-label">下跌</span>
+                        <strong class="market-breadth-value negative" id="market-breadth-down">--</strong>
+                    </div>
+                </div>
+                <div class="market-breadth-track" id="market-breadth-track" role="img" aria-label="市场涨跌比例暂不可用">
+                    <span class="market-breadth-segment is-up" data-breadth-segment="up"></span>
+                    <span class="market-breadth-segment is-flat" data-breadth-segment="flat"></span>
+                    <span class="market-breadth-segment is-down" data-breadth-segment="down"></span>
+                </div>
+                <div class="market-breadth-meta">
+                    <span id="market-breadth-summary">等待有效行情</span>
+                    <span id="market-breadth-status" aria-live="polite">正在同步</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. 板块排行 (diverging bar chart) -->
         <section class="card sector-section" data-collapsible="true">
             <div class="card-header" role="button" tabindex="0">
                 <h2>板块排行</h2>
@@ -734,7 +767,7 @@
 <script src="modules/data-client.js"></script>
 <script src="modules/data-status.js"></script>
 <script src="modules/render-alerts.js"></script>
-<script src="modules/render-market.js?rev=10002"></script>
+<script src="modules/render-market.js?rev=10003"></script>
 <script src="modules/render-signals.js"></script>
 <script src="vendor/pinyin-pro.min.js"></script>
 <script src="modules/render-funds.js?rev=10003"></script>
@@ -749,7 +782,7 @@
 <script src="modules/watchlist/custom-index.js"></script>
 <script src="modules/watchlist/watchlist.js"></script>
 <script src="modules/render-news.js"></script>
-<script src="modules/refresh-coordinator.js"></script>
+<script src="modules/refresh-coordinator.js?rev=10001"></script>
 <script src="app.js"></script>
 </body>
 </html>

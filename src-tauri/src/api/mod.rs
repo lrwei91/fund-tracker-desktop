@@ -131,6 +131,7 @@ mod tests {
             ("fund-flow-120d", vec![("codes", "600519"), ("days", "60")]),
             ("market-data", vec![("type", "index")]),
             ("market-data", vec![("type", "capital")]),
+            ("market-data", vec![("type", "breadth")]),
             (
                 "market-data",
                 vec![
@@ -239,6 +240,15 @@ mod tests {
                 ),
                 "market-data" if pairs.iter().any(|pair| pair == &("type", "capital")) => {
                     result["data"]["mainFund"]["available"] == true
+                }
+                "market-data" if pairs.iter().any(|pair| pair == &("type", "breadth")) => {
+                    result["data"]["available"] == true
+                        && result["data"]["up"].as_u64().is_some()
+                        && result["data"]["down"].as_u64().is_some()
+                        && result["data"]["flat"].as_u64().is_some()
+                        && result["data"]["covered"]
+                            .as_u64()
+                            .is_some_and(|count| count > 0)
                 }
                 "market-data" if pairs.iter().any(|pair| pair == &("type", "sector")) => {
                     result["data"]["inflow"]

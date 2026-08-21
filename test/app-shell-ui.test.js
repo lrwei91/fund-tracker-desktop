@@ -188,6 +188,19 @@ describe('主界面信息架构', () => {
         expect(styles).not.toMatch(/\.desktop-sidebar-footer\s*\{/);
     });
 
+    it('市场涨跌家数紧跟资金流向并复用行情卡片视觉契约', () => {
+        const doc = parseIndex();
+        const capital = doc.querySelector('.capital-section');
+        const breadth = doc.querySelector('.market-breadth-section');
+        expect(capital.nextElementSibling).toBe(breadth);
+        expect(breadth.querySelector('.card-header h2').textContent).toBe('市场涨跌家数');
+        expect(breadth.querySelectorAll('.market-breadth-item')).toHaveLength(3);
+        expect(breadth.querySelector('#market-breadth-track')).not.toBeNull();
+        expect(styles).toMatch(/\.market-breadth-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3,/);
+        expect(styles).toMatch(/\.market-breadth-segment\.is-up\s*\{[\s\S]*?var\(--red\)/);
+        expect(styles).toMatch(/\.market-breadth-segment\.is-down\s*\{[\s\S]*?var\(--green\)/);
+    });
+
     it('基金 Tab 紧跟信号，并提供独立自选基金表格', () => {
         const doc = parseIndex();
         const desktopTabs = Array.from(doc.querySelectorAll('.desktop-nav > .tab-btn'))

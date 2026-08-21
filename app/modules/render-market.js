@@ -345,6 +345,37 @@
         renderCapitalUI(state.liveCapitalData || {});
     }
 
+    function validBreadthData(value) {
+        return value && value.available === true && ['up', 'down', 'flat'].every(function (key) {
+            return typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0;
+        });
+    }
+
+    async function loadMarketBreadthData(force) {
+        var newData = state.liveMarketBreadthData;
+        var statusText = newData ? '' : '正在同步';
+        var updated = false;
+        var stale = false;
+        if (!newData) renderMarketBreadthUI(null, statusText);
+
+        try {
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'breadth' }, requestOptions(force));
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var result = await res.json();
+            if (!result.success || !validBreadthData(result.data)) throw new Error('数据异常');
+            newData = result.data;
+            updated = true;
+            stale = !!(result.meta && result.meta.stale);
+            statusText = (result.data.sourceLabel || '行情来源') + ' · ' + dataStatus.label(result.meta, '实时');
+        } catch (e) {
+            statusText = newData ? '接口不可用 · 显示上次结果' : '接口暂不可用';
+        }
+
+        state.liveMarketBreadthData = newData;
+        setSectionStale('.market-breadth-section', stale || (!updated && !!newData));
+        renderMarketBreadthUI(state.liveMarketBreadthData, statusText);
+    }
+
     async function loadSectorData(force) {
         var cached = cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.sector, KEYS.SHORT_CACHE_TTL.sector);
         var matches = function (value) {
@@ -377,8 +408,48 @@
     }
 
     // ============================================================
-    // 资金流 / 板块 UI 渲染
+    // 资金流 / 市场涨跌家数 / 板块 UI 渲染
     // ============================================================
+
+    function renderMarketBreadthUI(breadth, statusText) {
+        var valid = validBreadthData(breadth);
+        var values = valid ? {
+            up: Math.round(breadth.up),
+            flat: Math.round(breadth.flat),
+            down: Math.round(breadth.down),
+        } : { up: null, flat: null, down: null };
+        [
+            { key: 'up', id: 'market-breadth-up', tone: 'positive' },
+            { key: 'flat', id: 'market-breadth-flat', tone: 'neutral' },
+            { key: 'down', id: 'market-breadth-down', tone: 'negative' },
+        ].forEach(function (item) {
+            var el = document.getElementById(item.id);
+            if (!el) return;
+            el.textContent = values[item.key] === null ? '--' : values[item.key].toLocaleString('zh-CN');
+            el.className = 'market-breadth-value ' + (values[item.key] === null ? 'neutral' : item.tone);
+        });
+
+        var covered = valid ? values.up + values.flat + values.down : 0;
+        var track = document.getElementById('market-breadth-track');
+        ['up', 'flat', 'down'].forEach(function (key) {
+            var segment = track && track.querySelector('[data-breadth-segment="' + key + '"]');
+            if (segment) segment.style.width = covered ? (values[key] / covered * 100).toFixed(2) + '%' : '0%';
+        });
+        if (track) {
+            track.setAttribute('aria-label', covered
+                ? '上涨' + values.up + '家，平盘' + values.flat + '家，下跌' + values.down + '家'
+                : '市场涨跌比例暂不可用');
+        }
+
+        var summary = document.getElementById('market-breadth-summary');
+        if (summary) {
+            summary.textContent = covered
+                ? '有效统计 ' + covered.toLocaleString('zh-CN') + ' 家 · 上涨占比 ' + (values.up / covered * 100).toFixed(1) + '%'
+                : '暂无有效统计';
+        }
+        var status = document.getElementById('market-breadth-status');
+        if (status) status.textContent = statusText || (valid ? '实时数据' : '等待行情');
+    }
 
     // 6 格子: 资金 4 档 + 沪股通盘中参考 + HKEX 北向官方日成交额
     function renderCapitalUI(cap) {
@@ -480,12 +551,14 @@
         // 指数 UI / load
         updateIndexUI: updateIndexUI,
         loadIndexData: loadIndexData,
-        // 资金 / 板块
+        // 资金 / 市场涨跌家数 / 板块
         loadCapitalData: loadCapitalData,
+        loadMarketBreadthData: loadMarketBreadthData,
         loadSectorData: loadSectorData,
         initSectorFilters: initSectorFilters,
         setSectorFilter: setSectorFilter,
         renderCapitalUI: renderCapitalUI,
+        renderMarketBreadthUI: renderMarketBreadthUI,
         renderSectorUI: renderSectorUI,
     };
 })();

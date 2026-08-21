@@ -171,6 +171,9 @@
                 tasks.push({ name: '大盘指数', priority: 90, run: function () {
                     return window.AppMarket ? window.AppMarket.loadIndexData(!!options.force) : null;
                 } });
+                tasks.push({ name: '市场涨跌家数', priority: 85, run: function () {
+                    return window.AppMarket ? window.AppMarket.loadMarketBreadthData(!!options.force) : null;
+                } });
             }
         }
         if (kind === 'all' || kind === 'signals') {

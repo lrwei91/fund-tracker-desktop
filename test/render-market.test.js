@@ -25,7 +25,19 @@ function installHarness(options) {
         </div>
         <span id="sector-flow-status"></span>
         <div id="sector-bars-inflow"></div>
-        <div id="sector-bars-outflow"></div>`;
+        <div id="sector-bars-outflow"></div>
+        <section class="market-breadth-section">
+            <strong id="market-breadth-up"></strong>
+            <strong id="market-breadth-flat"></strong>
+            <strong id="market-breadth-down"></strong>
+            <div id="market-breadth-track">
+                <span data-breadth-segment="up"></span>
+                <span data-breadth-segment="flat"></span>
+                <span data-breadth-segment="down"></span>
+            </div>
+            <span id="market-breadth-summary"></span>
+            <span id="market-breadth-status"></span>
+        </section>`;
     const storedFilter = options.storedFilter || { boardType: 'industry', period: 'today' };
     window.AppState = {
         KEYS: {
@@ -35,6 +47,7 @@ function installHarness(options) {
             INDEX_PREV_KEY: 'index-prev',
             INDEX_REFRESH_SECONDS: 300,
         },
+        liveMarketBreadthData: null,
         liveSectorData: null,
     };
     window.AppUtils = { escapeHtml: (value) => String(value), setLastUpdated: vi.fn() };
@@ -95,6 +108,53 @@ describe('板块资金流筛选', () => {
 
         expect(document.getElementById('sector-bars-inflow').textContent).toContain('地域缓存');
         expect(document.getElementById('sector-flow-status').textContent).toBe('接口不可用 · 显示缓存');
+    });
+
+    it('请求沪深京市场宽度并渲染涨跌家数与比例', async () => {
+        window.AppDataClient.fetch = vi.fn().mockResolvedValue(response({
+            available: true,
+            up: 2535,
+            down: 2841,
+            flat: 167,
+            covered: 5543,
+            source: 'eastmoney',
+            sourceLabel: '东方财富',
+            markets: [],
+        }));
+
+        await window.AppMarket.loadMarketBreadthData(true);
+
+        expect(window.AppDataClient.fetch).toHaveBeenCalledWith(
+            '/market-data',
+            { type: 'breadth' },
+            { force: true, cacheMode: 'bypass_fresh' },
+        );
+        expect(document.getElementById('market-breadth-up').textContent).toBe('2,535');
+        expect(document.getElementById('market-breadth-down').textContent).toBe('2,841');
+        expect(document.getElementById('market-breadth-flat').textContent).toBe('167');
+        expect(document.getElementById('market-breadth-summary').textContent)
+            .toContain('有效统计 5,543 家');
+        expect(document.querySelector('[data-breadth-segment="up"]').style.width).toBe('45.73%');
+        expect(document.getElementById('market-breadth-status').textContent).toBe('东方财富 · 实时');
+    });
+
+    it('市场宽度刷新失败时保留会话结果并明确标记陈旧', async () => {
+        window.AppState.liveMarketBreadthData = {
+            available: true,
+            up: 1200,
+            down: 900,
+            flat: 100,
+            covered: 2200,
+        };
+        window.AppMarket.renderMarketBreadthUI(window.AppState.liveMarketBreadthData, '实时数据');
+        window.AppDataClient.fetch = vi.fn().mockRejectedValue(new Error('offline'));
+
+        await window.AppMarket.loadMarketBreadthData(false);
+
+        expect(document.getElementById('market-breadth-up').textContent).toBe('1,200');
+        expect(document.getElementById('market-breadth-status').textContent)
+            .toBe('接口不可用 · 显示上次结果');
+        expect(document.querySelector('.market-breadth-section').classList.contains('is-stale')).toBe(true);
     });
 
     it('按备用资金源返回的真实口径更新格子标签', () => {

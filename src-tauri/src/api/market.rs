@@ -19,6 +19,80 @@ fn pct(v: Option<f64>) -> String {
     v.map(|x| format!("{}{x:.2}%", if x > 0.0 { "+" } else { "" }))
         .unwrap_or_else(|| "--".into())
 }
+
+fn breadth_count(v: &Value) -> Option<u64> {
+    let value = num(v)?;
+    if value.is_finite() && value >= 0.0 && value.fract() == 0.0 {
+        Some(value as u64)
+    } else {
+        None
+    }
+}
+
+fn parse_market_breadth(value: &Value) -> Result<Value, ApiError> {
+    let rows = value
+        .pointer("/data/diff")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ApiError::new("东财市场涨跌家数为空"))?;
+    let expected = [
+        ("000002", "上证A股"),
+        ("399107", "深证A股"),
+        ("899050", "北交所"),
+    ];
+    let mut markets = Vec::with_capacity(expected.len());
+    let (mut up, mut down, mut flat) = (0_u64, 0_u64, 0_u64);
+    for (code, fallback_name) in expected {
+        let row = rows
+            .iter()
+            .find(|row| row["f12"].as_str() == Some(code))
+            .ok_or_else(|| ApiError::new(format!("东财市场涨跌家数缺少 {code}")))?;
+        let market_up = breadth_count(&row["f104"])
+            .ok_or_else(|| ApiError::new(format!("东财上涨家数字段无效 {code}")))?;
+        let market_down = breadth_count(&row["f105"])
+            .ok_or_else(|| ApiError::new(format!("东财下跌家数字段无效 {code}")))?;
+        let market_flat = breadth_count(&row["f106"])
+            .ok_or_else(|| ApiError::new(format!("东财平盘家数字段无效 {code}")))?;
+        up += market_up;
+        down += market_down;
+        flat += market_flat;
+        markets.push(json!({
+            "code":code,
+            "name":row["f14"].as_str().unwrap_or(fallback_name),
+            "up":market_up,
+            "down":market_down,
+            "flat":market_flat,
+            "covered":market_up + market_down + market_flat
+        }));
+    }
+    let covered = up + down + flat;
+    if covered == 0 {
+        return Err(ApiError::new("东财市场涨跌家数无有效样本"));
+    }
+    Ok(json!({
+        "available":true,
+        "up":up,
+        "down":down,
+        "flat":flat,
+        "covered":covered,
+        "markets":markets,
+        "source":"eastmoney",
+        "sourceLabel":"东方财富"
+    }))
+}
+
+async fn market_breadth(g: &Arc<Gateway>) -> Result<Value, ApiError> {
+    let url = "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&secids=1.000002%2C0.399107%2C0.899050&fields=f12%2Cf14%2Cf104%2Cf105%2Cf106";
+    let value = g
+        .json(
+            RequestSpec::get(url)
+                .em()
+                .header("referer", "https://quote.eastmoney.com/")
+                .cache(30)
+                .timeout(15),
+        )
+        .await?;
+    parse_market_breadth(&value)
+}
 async fn minute(g: &Arc<Gateway>, s: &str) -> Result<(String, Vec<f64>), ApiError> {
     let v = g
         .json(
@@ -467,6 +541,19 @@ pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str)
             Ok(v) => json!({"success":true,"data":v,"meta":{"degraded":false,"stale":false}}),
             Err(e) => policy::failure("真实行情接口不可用", &e.to_string(), e.status),
         },
+        "breadth" => match market_breadth(&g).await {
+            Ok(v) => json!({
+                "success":true,
+                "data":v,
+                "meta":{
+                    "asOf":Utc::now().to_rfc3339(),
+                    "degraded":false,
+                    "stale":false,
+                    "sources":{"marketBreadth":{"actual":"eastmoney","actualLabel":"东方财富","status":"live"}}
+                }
+            }),
+            Err(e) => policy::failure("市场涨跌家数暂不可用", &e.to_string(), e.status),
+        },
         "capital" => {
             let (a, b, c) = tokio::join!(main_fund(&g), north_intraday(&g), hkex(&g));
             let degraded = a["available"] != true
@@ -491,6 +578,33 @@ pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn market_breadth_aggregates_shanghai_shenzhen_and_beijing() {
+        let fixture = json!({"data":{"diff":[
+            {"f12":"000002","f14":"Ａ股指数","f104":1000,"f105":"1200","f106":60},
+            {"f12":"399107","f14":"深证Ａ指","f104":1400,"f105":1300,"f106":90},
+            {"f12":"899050","f14":"北证50","f104":100,"f105":200,"f106":10}
+        ]}});
+        let result = parse_market_breadth(&fixture).unwrap();
+        assert_eq!(result["up"], 2500);
+        assert_eq!(result["down"], 2700);
+        assert_eq!(result["flat"], 160);
+        assert_eq!(result["covered"], 5360);
+        assert_eq!(result["markets"].as_array().map(Vec::len), Some(3));
+        assert_eq!(result["source"], "eastmoney");
+    }
+
+    #[test]
+    fn market_breadth_rejects_missing_or_invalid_market_counts() {
+        assert!(parse_market_breadth(&json!({"data":{"diff":[]}})).is_err());
+        assert!(parse_market_breadth(&json!({"data":{"diff":[
+            {"f12":"000002","f104":1,"f105":2,"f106":3},
+            {"f12":"399107","f104":1,"f105":2,"f106":3},
+            {"f12":"899050","f104":-1,"f105":2,"f106":3}
+        ]}}))
+        .is_err());
+    }
 
     #[test]
     fn sector_sides_keep_only_the_requested_sign_and_contract_fields() {

@@ -121,6 +121,7 @@
     // 实时数据缓存
     var liveIndexData = null;
     var liveCapitalData = null;
+    var liveMarketBreadthData = null;
     var liveSectorData = null;
 
     // 自选股 / 自选指数 (从 localStorage 还原)
@@ -352,6 +353,7 @@
         activeWatchTabId: activeWatchTabId,
         liveIndexData: liveIndexData,
         liveCapitalData: liveCapitalData,
+        liveMarketBreadthData: liveMarketBreadthData,
         liveSectorData: liveSectorData,
         watchQuoteCache: watchQuoteCache,
         watchQuoteUpdateTime: watchQuoteUpdateTime,

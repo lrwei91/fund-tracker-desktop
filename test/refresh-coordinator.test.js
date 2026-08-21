@@ -55,6 +55,7 @@ function installHarness() {
     };
     window.AppMarket = {
         loadIndexData: vi.fn().mockResolvedValue(undefined),
+        loadMarketBreadthData: vi.fn().mockResolvedValue(undefined),
         loadCapitalData: vi.fn().mockResolvedValue(undefined),
         loadSectorData: vi.fn().mockResolvedValue(undefined),
     };
@@ -146,6 +147,16 @@ describe('AppRefreshCoordinator', () => {
         expect(window.AppRefreshCoordinator.isRunning()).toBe(false);
     });
 
+    it('行情 Tab 刷新时市场涨跌家数与指数同周期更新', async () => {
+        await import('../app/modules/refresh-coordinator.js');
+
+        await window.AppRefreshCoordinator.refreshTab('dashboard');
+
+        expect(window.AppMarket.loadIndexData).toHaveBeenCalledWith(false);
+        expect(window.AppMarket.loadMarketBreadthData).toHaveBeenCalledWith(false);
+        expect(window.AppMarket.loadCapitalData).not.toHaveBeenCalled();
+    });
+
     it('切到基金 Tab 只刷新基金净值，且进入全量刷新任务', async () => {
         installHarness();
         window.AppFunds.getFundCodes = () => ['110022'];
@@ -182,6 +193,7 @@ describe('AppRefreshCoordinator', () => {
         };
         window.AppDataClient.fetchData.mockImplementation(enter);
         window.AppMarket.loadIndexData.mockImplementation(enter);
+        window.AppMarket.loadMarketBreadthData.mockImplementation(enter);
         window.AppMarket.loadCapitalData.mockImplementation(enter);
         window.AppMarket.loadSectorData.mockImplementation(enter);
         window.AppSignals.loadHotRankData.mockImplementation(enter);
