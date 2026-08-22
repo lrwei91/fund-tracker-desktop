@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "恭喜发财本地 Tauri 桌面应用",
   "private": true,
   "engines": {
