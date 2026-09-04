@@ -303,6 +303,22 @@
                 </div>
             </div>
         </section>
+
+        <!-- 6. 行业全景 -->
+        <section class="card sector-panorama-section" data-collapsible="true">
+            <div class="card-header" role="button" tabindex="0">
+                <h2>行业全景</h2>
+                <span class="sector-panorama-status" id="sector-panorama-status" aria-live="polite">正在同步</span>
+                <span class="collapse-icon">▼</span>
+            </div>
+            <div class="card-body">
+                <div class="sector-panorama-grid" id="sector-panorama-grid" role="list" aria-label="重点行业实时涨跌幅">
+                    <div class="ui-state ui-state--loading" data-ui-state="loading" role="status">
+                        <strong class="ui-state-title">正在同步行业行情</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
         </div>
 
     </div>
@@ -762,12 +778,12 @@
 <script src="modules/utils.js"></script>
 <script src="modules/ui-state.js"></script>
 <script src="modules/dialog.js"></script>
-<script src="modules/state.js"></script>
+<script src="modules/state.js?rev=10001"></script>
 <script src="modules/cache.js"></script>
 <script src="modules/data-client.js"></script>
 <script src="modules/data-status.js"></script>
 <script src="modules/render-alerts.js"></script>
-<script src="modules/render-market.js?rev=10003"></script>
+<script src="modules/render-market.js?rev=10004"></script>
 <script src="modules/render-signals.js"></script>
 <script src="vendor/pinyin-pro.min.js"></script>
 <script src="modules/render-funds.js?rev=10003"></script>
@@ -782,7 +798,7 @@
 <script src="modules/watchlist/custom-index.js"></script>
 <script src="modules/watchlist/watchlist.js"></script>
 <script src="modules/render-news.js"></script>
-<script src="modules/refresh-coordinator.js?rev=10001"></script>
+<script src="modules/refresh-coordinator.js?rev=10002"></script>
 <script src="app.js"></script>
 </body>
 </html>

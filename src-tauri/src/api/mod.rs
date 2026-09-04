@@ -132,6 +132,7 @@ mod tests {
             ("market-data", vec![("type", "index")]),
             ("market-data", vec![("type", "capital")]),
             ("market-data", vec![("type", "breadth")]),
+            ("market-data", vec![("type", "sector-panorama")]),
             (
                 "market-data",
                 vec![
@@ -249,6 +250,19 @@ mod tests {
                         && result["data"]["covered"]
                             .as_u64()
                             .is_some_and(|count| count > 0)
+                }
+                "market-data"
+                    if pairs
+                        .iter()
+                        .any(|pair| pair == &("type", "sector-panorama")) =>
+                {
+                    result["data"]["available"] == true
+                        && result["data"]["items"]
+                            .as_array()
+                            .is_some_and(|rows| rows.len() == 25)
+                        && result["data"]["items"]
+                            .as_array()
+                            .is_some_and(|rows| rows.iter().any(|row| row["changePct"].is_number()))
                 }
                 "market-data" if pairs.iter().any(|pair| pair == &("type", "sector")) => {
                     result["data"]["inflow"]

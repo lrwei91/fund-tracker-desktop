@@ -376,6 +376,36 @@
         renderMarketBreadthUI(state.liveMarketBreadthData, statusText);
     }
 
+    function validSectorPanoramaData(value) {
+        return value && value.available === true && Array.isArray(value.items) && value.items.some(function (item) {
+            return item && typeof item.name === 'string' && typeof item.changePct === 'number' && Number.isFinite(item.changePct);
+        });
+    }
+
+    async function loadSectorPanoramaData(force) {
+        var newData = state.liveSectorPanoramaData;
+        var statusText = newData ? '' : '正在同步';
+        var updated = false;
+        var stale = false;
+
+        try {
+            var res = await window.AppDataClient.fetch('/market-data', { type: 'sector-panorama' }, requestOptions(force));
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            var result = await res.json();
+            if (!result.success || !validSectorPanoramaData(result.data)) throw new Error('数据异常');
+            newData = result.data;
+            updated = true;
+            stale = !!(result.meta && result.meta.stale);
+            statusText = (result.data.sourceLabel || '行情来源') + ' · ' + dataStatus.label(result.meta, '实时');
+        } catch (e) {
+            statusText = newData ? '接口不可用 · 显示上次结果' : '接口暂不可用';
+        }
+
+        state.liveSectorPanoramaData = newData;
+        setSectionStale('.sector-panorama-section', stale || (!updated && !!newData));
+        renderSectorPanoramaUI(state.liveSectorPanoramaData, statusText);
+    }
+
     async function loadSectorData(force) {
         var cached = cache.readTimedCache(KEYS.SHORT_CACHE_KEYS.sector, KEYS.SHORT_CACHE_TTL.sector);
         var matches = function (value) {
@@ -408,7 +438,7 @@
     }
 
     // ============================================================
-    // 资金流 / 市场涨跌家数 / 板块 UI 渲染
+    // 资金流 / 市场涨跌家数 / 行业全景 / 板块 UI 渲染
     // ============================================================
 
     function renderMarketBreadthUI(breadth, statusText) {
@@ -449,6 +479,31 @@
         }
         var status = document.getElementById('market-breadth-status');
         if (status) status.textContent = statusText || (valid ? '实时数据' : '等待行情');
+    }
+
+    function renderSectorPanoramaUI(panorama, statusText) {
+        var container = document.getElementById('sector-panorama-grid');
+        var status = document.getElementById('sector-panorama-status');
+        if (status) status.textContent = statusText || (validSectorPanoramaData(panorama) ? '实时数据' : '等待行情');
+        if (!container) return;
+        var items = panorama && Array.isArray(panorama.items) ? panorama.items : [];
+        if (!items.length) {
+            container.innerHTML = uiState.render('empty', {
+                title: '暂无行业行情',
+                detail: '行情恢复后将自动更新。',
+            });
+            return;
+        }
+        var rows = items.map(function (item) {
+            var change = typeof item.changePct === 'number' && Number.isFinite(item.changePct) ? item.changePct : null;
+            var tone = change === null ? 'neutral' : change > 0 ? 'positive' : change < 0 ? 'negative' : 'neutral';
+            var text = change === null ? '--' : (change > 0 ? '+' : '') + change.toFixed(2) + '%';
+            return '<div class="sector-panorama-item" role="listitem">' +
+                '<span class="sector-panorama-name">' + utils.escapeHtml(item.name || '') + '</span>' +
+                '<strong class="sector-panorama-change ' + tone + '">' + utils.escapeHtml(text) + '</strong>' +
+                '</div>';
+        }).join('');
+        container.innerHTML = rows + (items.length % 2 ? '<span class="sector-panorama-spacer" aria-hidden="true"></span>' : '');
     }
 
     // 6 格子: 资金 4 档 + 沪股通盘中参考 + HKEX 北向官方日成交额
@@ -554,11 +609,13 @@
         // 资金 / 市场涨跌家数 / 板块
         loadCapitalData: loadCapitalData,
         loadMarketBreadthData: loadMarketBreadthData,
+        loadSectorPanoramaData: loadSectorPanoramaData,
         loadSectorData: loadSectorData,
         initSectorFilters: initSectorFilters,
         setSectorFilter: setSectorFilter,
         renderCapitalUI: renderCapitalUI,
         renderMarketBreadthUI: renderMarketBreadthUI,
+        renderSectorPanoramaUI: renderSectorPanoramaUI,
         renderSectorUI: renderSectorUI,
     };
 })();

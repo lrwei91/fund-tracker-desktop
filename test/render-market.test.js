@@ -37,6 +37,10 @@ function installHarness(options) {
             </div>
             <span id="market-breadth-summary"></span>
             <span id="market-breadth-status"></span>
+        </section>
+        <section class="sector-panorama-section">
+            <span id="sector-panorama-status"></span>
+            <div id="sector-panorama-grid"></div>
         </section>`;
     const storedFilter = options.storedFilter || { boardType: 'industry', period: 'today' };
     window.AppState = {
@@ -48,6 +52,7 @@ function installHarness(options) {
             INDEX_REFRESH_SECONDS: 300,
         },
         liveMarketBreadthData: null,
+        liveSectorPanoramaData: null,
         liveSectorData: null,
     };
     window.AppUtils = { escapeHtml: (value) => String(value), setLastUpdated: vi.fn() };
@@ -155,6 +160,51 @@ describe('板块资金流筛选', () => {
         expect(document.getElementById('market-breadth-status').textContent)
             .toBe('接口不可用 · 显示上次结果');
         expect(document.querySelector('.market-breadth-section').classList.contains('is-stale')).toBe(true);
+    });
+
+    it('请求行业全景并按固定顺序渲染板块与实时涨跌幅', async () => {
+        window.AppDataClient.fetch = vi.fn().mockResolvedValue(response({
+            available: true,
+            sourceLabel: '东方财富',
+            items: [
+                { code: 'BK1128', name: 'CPO', changePct: 1.25 },
+                { code: 'BK0459', name: '电子元件', changePct: -0.35 },
+                { code: 'BK1036', name: '半导体', changePct: 0 },
+            ],
+        }));
+
+        await window.AppMarket.loadSectorPanoramaData(true);
+
+        expect(window.AppDataClient.fetch).toHaveBeenCalledWith(
+            '/market-data',
+            { type: 'sector-panorama' },
+            { force: true, cacheMode: 'bypass_fresh' },
+        );
+        const rows = Array.from(document.querySelectorAll('.sector-panorama-item'));
+        expect(rows.map((row) => row.querySelector('.sector-panorama-name').textContent))
+            .toEqual(['CPO', '电子元件', '半导体']);
+        expect(rows[0].querySelector('.sector-panorama-change').textContent).toBe('+1.25%');
+        expect(rows[0].querySelector('.sector-panorama-change').classList.contains('positive')).toBe(true);
+        expect(rows[1].querySelector('.sector-panorama-change').textContent).toBe('-0.35%');
+        expect(rows[1].querySelector('.sector-panorama-change').classList.contains('negative')).toBe(true);
+        expect(rows[2].querySelector('.sector-panorama-change').textContent).toBe('0.00%');
+        expect(document.getElementById('sector-panorama-status').textContent).toBe('东方财富 · 实时');
+    });
+
+    it('行业全景刷新失败时保留会话结果并标记陈旧', async () => {
+        window.AppState.liveSectorPanoramaData = {
+            available: true,
+            items: [{ code: 'BK1128', name: 'CPO', changePct: 0.88 }],
+        };
+        window.AppDataClient.fetch = vi.fn().mockRejectedValue(new Error('offline'));
+
+        await window.AppMarket.loadSectorPanoramaData(false);
+
+        expect(document.getElementById('sector-panorama-grid').textContent).toContain('CPO');
+        expect(document.getElementById('sector-panorama-grid').textContent).toContain('+0.88%');
+        expect(document.getElementById('sector-panorama-status').textContent)
+            .toBe('接口不可用 · 显示上次结果');
+        expect(document.querySelector('.sector-panorama-section').classList.contains('is-stale')).toBe(true);
     });
 
     it('按备用资金源返回的真实口径更新格子标签', () => {

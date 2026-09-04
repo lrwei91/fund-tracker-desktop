@@ -201,6 +201,17 @@ describe('主界面信息架构', () => {
         expect(styles).toMatch(/\.market-breadth-segment\.is-down\s*\{[\s\S]*?var\(--green\)/);
     });
 
+    it('行业全景位于行情区域最底部并使用双列紧凑行情网格', () => {
+        const doc = parseIndex();
+        const sector = doc.querySelector('.sector-section');
+        const panorama = doc.querySelector('.sector-panorama-section');
+        expect(sector.nextElementSibling).toBe(panorama);
+        expect(panorama.querySelector('.card-header h2').textContent).toBe('行业全景');
+        expect(panorama.querySelector('#sector-panorama-grid')).not.toBeNull();
+        expect(styles).toMatch(/\.sector-panorama-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,/);
+        expect(styles).toMatch(/\.sector-panorama-change\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
+    });
+
     it('基金 Tab 紧跟信号，并提供独立自选基金表格', () => {
         const doc = parseIndex();
         const desktopTabs = Array.from(doc.querySelectorAll('.desktop-nav > .tab-btn'))

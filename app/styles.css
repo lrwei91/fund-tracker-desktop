@@ -911,6 +911,7 @@ html[data-theme="dark"] .electron-app {
 .electron-app #tab-dashboard .capital-section { order: 4; }
 .electron-app #tab-dashboard .market-breadth-section { order: 5; }
 .electron-app #tab-dashboard .sector-section { order: 6; }
+.electron-app #tab-dashboard .sector-panorama-section { order: 7; }
 
 .electron-app .card {
     min-width: 0;
@@ -952,11 +953,11 @@ html[data-theme="dark"] .electron-app {
     display: none;
 }
 
-.electron-app :where(.index-section, .watchlist-section, .capital-section, .market-breadth-section).is-stale {
+.electron-app :where(.index-section, .watchlist-section, .capital-section, .market-breadth-section, .sector-panorama-section).is-stale {
     border-color: var(--color-accent-ink);
 }
 
-.electron-app :where(.index-section, .capital-section, .market-breadth-section).is-stale .card-header::after {
+.electron-app :where(.index-section, .capital-section, .market-breadth-section, .sector-panorama-section).is-stale .card-header::after {
     content: '显示上次结果';
     margin-left: auto;
     color: var(--color-status-warning);
@@ -1656,6 +1657,62 @@ html[data-theme="dark"] .electron-app {
 .electron-app #market-breadth-status {
     flex: 0 0 auto;
     text-align: right;
+}
+
+.electron-app .sector-panorama-section > .card-body {
+    padding: 0;
+}
+
+.electron-app .sector-panorama-status {
+    margin-left: auto;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+
+.electron-app .sector-panorama-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--border);
+}
+
+.electron-app .sector-panorama-grid > .ui-state {
+    grid-column: 1 / -1;
+    background: var(--color-surface);
+}
+
+.electron-app .sector-panorama-spacer {
+    background: var(--color-surface);
+}
+
+.electron-app .sector-panorama-item {
+    display: flex;
+    min-width: 0;
+    min-height: 38px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 11px;
+    background: var(--color-surface);
+}
+
+.electron-app .sector-panorama-name {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-app .sector-panorama-change {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 720;
 }
 
 .electron-app .sector-filter-row {
@@ -3924,6 +3981,7 @@ html[data-theme="dark"] .electron-app {
     .electron-app #tab-dashboard .capital-section,
     .electron-app #tab-dashboard .market-breadth-section { grid-column: 1; }
     .electron-app #tab-dashboard .sector-section { grid-column: 2; }
+    .electron-app #tab-dashboard .sector-panorama-section { grid-column: 1 / -1; }
 
     .electron-app .news-summary {
         -webkit-line-clamp: 2;
@@ -4318,13 +4376,14 @@ html[data-theme="dark"] .electron-app {
     .electron-app #tab-dashboard .custom-index-section,
     .electron-app #tab-dashboard .capital-section,
     .electron-app #tab-dashboard .market-breadth-section,
-    .electron-app #tab-dashboard .sector-section {
+    .electron-app #tab-dashboard .sector-section,
+    .electron-app #tab-dashboard .sector-panorama-section {
         grid-column: auto;
         order: initial;
     }
 
     .electron-app .dashboard-flow-column {
-        grid-template-rows: auto auto minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
     }
 
     .electron-app #tab-signals.active,

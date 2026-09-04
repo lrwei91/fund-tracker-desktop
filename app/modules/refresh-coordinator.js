@@ -174,6 +174,9 @@
                 tasks.push({ name: '市场涨跌家数', priority: 85, run: function () {
                     return window.AppMarket ? window.AppMarket.loadMarketBreadthData(!!options.force) : null;
                 } });
+                tasks.push({ name: '行业全景', priority: 82, run: function () {
+                    return window.AppMarket ? window.AppMarket.loadSectorPanoramaData(!!options.force) : null;
+                } });
             }
         }
         if (kind === 'all' || kind === 'signals') {

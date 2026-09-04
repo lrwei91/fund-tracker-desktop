@@ -56,6 +56,7 @@ function installHarness() {
     window.AppMarket = {
         loadIndexData: vi.fn().mockResolvedValue(undefined),
         loadMarketBreadthData: vi.fn().mockResolvedValue(undefined),
+        loadSectorPanoramaData: vi.fn().mockResolvedValue(undefined),
         loadCapitalData: vi.fn().mockResolvedValue(undefined),
         loadSectorData: vi.fn().mockResolvedValue(undefined),
     };
@@ -147,13 +148,14 @@ describe('AppRefreshCoordinator', () => {
         expect(window.AppRefreshCoordinator.isRunning()).toBe(false);
     });
 
-    it('行情 Tab 刷新时市场涨跌家数与指数同周期更新', async () => {
+    it('行情 Tab 刷新时市场涨跌家数、行业全景与指数同周期更新', async () => {
         await import('../app/modules/refresh-coordinator.js');
 
         await window.AppRefreshCoordinator.refreshTab('dashboard');
 
         expect(window.AppMarket.loadIndexData).toHaveBeenCalledWith(false);
         expect(window.AppMarket.loadMarketBreadthData).toHaveBeenCalledWith(false);
+        expect(window.AppMarket.loadSectorPanoramaData).toHaveBeenCalledWith(false);
         expect(window.AppMarket.loadCapitalData).not.toHaveBeenCalled();
     });
 

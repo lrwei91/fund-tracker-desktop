@@ -93,6 +93,91 @@ async fn market_breadth(g: &Arc<Gateway>) -> Result<Value, ApiError> {
         .await?;
     parse_market_breadth(&value)
 }
+
+const SECTOR_PANORAMA_TARGETS: [(&str, &str); 25] = [
+    ("BK1128", "CPO"),
+    ("BK0459", "电子元件"),
+    ("BK1036", "半导体"),
+    ("BK1137", "存储"),
+    ("BK0922", "数据中心"),
+    ("BK0579", "云计算"),
+    ("BK1111", "AIGC"),
+    ("BK0963", "商业航天"),
+    ("BK1408", "机器人"),
+    ("BK0802", "无人驾驶"),
+    ("BK0457", "电网"),
+    ("BK0577", "核电"),
+    ("BK0428", "电力"),
+    ("BK1031", "光伏"),
+    ("BK1303", "锂电池"),
+    ("BK1204", "军工"),
+    ("BK0464", "石油"),
+    ("BK0843", "天然气"),
+    ("BK0478", "有色"),
+    ("BK1617", "黄金"),
+    ("BK0475", "银行"),
+    ("BK0474", "保险"),
+    ("BK1216", "生物医药"),
+    ("BK1711", "消费"),
+    ("BK1037", "消费电子"),
+];
+
+fn parse_sector_panorama(value: &Value) -> Result<Value, ApiError> {
+    let rows = value
+        .pointer("/data/diff")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ApiError::new("东财行业全景数据为空"))?;
+    let items = SECTOR_PANORAMA_TARGETS
+        .iter()
+        .map(|(code, display_name)| {
+            let row = rows.iter().find(|row| row["f12"].as_str() == Some(code));
+            let change_pct = row
+                .and_then(|row| num(&row["f3"]))
+                .filter(|value| value.is_finite());
+            json!({
+                "code":code,
+                "name":display_name,
+                "sourceName":row.and_then(|row|row["f14"].as_str()).unwrap_or(""),
+                "changePct":change_pct
+            })
+        })
+        .collect::<Vec<_>>();
+    let available_count = items
+        .iter()
+        .filter(|item| item["changePct"].is_number())
+        .count();
+    if available_count == 0 {
+        return Err(ApiError::new("东财行业全景无有效行情"));
+    }
+    Ok(json!({
+        "available":true,
+        "availableCount":available_count,
+        "items":items,
+        "source":"eastmoney",
+        "sourceLabel":"东方财富"
+    }))
+}
+
+async fn sector_panorama(g: &Arc<Gateway>) -> Result<Value, ApiError> {
+    let secids = SECTOR_PANORAMA_TARGETS
+        .iter()
+        .map(|(code, _)| format!("90.{code}"))
+        .collect::<Vec<_>>()
+        .join("%2C");
+    let url = format!(
+        "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2&secids={secids}&fields=f12%2Cf14%2Cf3"
+    );
+    let value = g
+        .json(
+            RequestSpec::get(url)
+                .em()
+                .header("referer", "https://quote.eastmoney.com/")
+                .cache(30)
+                .timeout(15),
+        )
+        .await?;
+    parse_sector_panorama(&value)
+}
 async fn minute(g: &Arc<Gateway>, s: &str) -> Result<(String, Vec<f64>), ApiError> {
     let v = g
         .json(
@@ -554,6 +639,19 @@ pub async fn handle(g: Arc<Gateway>, kind: &str, board_type: &str, period: &str)
             }),
             Err(e) => policy::failure("市场涨跌家数暂不可用", &e.to_string(), e.status),
         },
+        "sector-panorama" => match sector_panorama(&g).await {
+            Ok(v) => json!({
+                "success":true,
+                "data":v,
+                "meta":{
+                    "asOf":Utc::now().to_rfc3339(),
+                    "degraded":false,
+                    "stale":false,
+                    "sources":{"sectorPanorama":{"actual":"eastmoney","actualLabel":"东方财富","status":"live"}}
+                }
+            }),
+            Err(e) => policy::failure("行业全景暂不可用", &e.to_string(), e.status),
+        },
         "capital" => {
             let (a, b, c) = tokio::join!(main_fund(&g), north_intraday(&g), hkex(&g));
             let degraded = a["available"] != true
@@ -604,6 +702,28 @@ mod tests {
             {"f12":"899050","f104":-1,"f105":2,"f106":3}
         ]}}))
         .is_err());
+    }
+
+    #[test]
+    fn sector_panorama_keeps_requested_labels_and_order() {
+        let fixture = json!({"data":{"diff":[
+            {"f12":"BK0459","f14":"元件","f3":"-0.35"},
+            {"f12":"BK1128","f14":"CPO概念","f3":1.25}
+        ]}});
+        let result = parse_sector_panorama(&fixture).unwrap();
+        assert_eq!(result["availableCount"], 2);
+        assert_eq!(result["items"][0]["name"], "CPO");
+        assert_eq!(result["items"][0]["changePct"], 1.25);
+        assert_eq!(result["items"][1]["name"], "电子元件");
+        assert_eq!(result["items"][1]["sourceName"], "元件");
+        assert_eq!(result["items"][1]["changePct"], -0.35);
+        assert!(result["items"][2]["changePct"].is_null());
+    }
+
+    #[test]
+    fn sector_panorama_rejects_payload_without_valid_quotes() {
+        assert!(parse_sector_panorama(&json!({"data":{"diff":[]}})).is_err());
+        assert!(parse_sector_panorama(&json!({"data":null})).is_err());
     }
 
     #[test]

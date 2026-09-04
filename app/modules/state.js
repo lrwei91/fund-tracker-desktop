@@ -122,6 +122,7 @@
     var liveIndexData = null;
     var liveCapitalData = null;
     var liveMarketBreadthData = null;
+    var liveSectorPanoramaData = null;
     var liveSectorData = null;
 
     // 自选股 / 自选指数 (从 localStorage 还原)
@@ -354,6 +355,7 @@
         liveIndexData: liveIndexData,
         liveCapitalData: liveCapitalData,
         liveMarketBreadthData: liveMarketBreadthData,
+        liveSectorPanoramaData: liveSectorPanoramaData,
         liveSectorData: liveSectorData,
         watchQuoteCache: watchQuoteCache,
         watchQuoteUpdateTime: watchQuoteUpdateTime,
