@@ -99,7 +99,7 @@
         </div>
     </div>
     <div class="header-right" data-tauri-drag-region="false">
-        <span class="api-status" aria-label="本地 API 已连接" title="本地 API 已连接"><span class="api-status-icon"></span><span>API</span></span>
+        <button class="storage-status" id="storage-status" type="button" aria-live="polite" title="配置保存状态">配置状态未知</button>
         <button class="header-btn electron-only" id="holding-window-btn" aria-label="打开持仓浮窗" title="持仓浮窗" hidden>浮窗</button>
         <button class="header-btn" id="refresh-btn" aria-label="刷新" title="刷新全部数据">刷新</button>
     </div>
@@ -466,6 +466,7 @@
                     <input type="text" id="fund-input" autocomplete="off" placeholder="输入基金代码或名称，如 110022 / 易方达消费" aria-label="基金代码或名称">
                     <button type="button" id="add-fund-btn" class="add-btn">添加基金</button>
                 </div>
+                <div class="fund-search-candidates" id="fund-search-candidates" role="listbox" aria-label="基金搜索候选" hidden></div>
                 <div class="fund-watch-status" id="fund-watch-status" role="status" aria-live="polite"></div>
                 <div class="fund-watch-table-head" role="row">
                     <span role="columnheader">基金</span><span role="columnheader">类型</span><span role="columnheader">估值分时</span>
@@ -707,12 +708,14 @@
         <div class="data-action">
             <div>
                 <div class="data-action-title">导入自选数据</div>
-                <div class="data-action-desc">导入 JSON 后会覆盖文件中包含的自选股、自选指数和基金列表。</div>
+                <div class="data-action-desc">导入 JSON 前会预览新增、冲突和移除数量，可选择合并或替换；未包含的类别会保留。</div>
             </div>
             <button class="data-action-btn secondary" id="import-watchlist-btn" type="button">导入</button>
             <input type="file" id="import-watchlist-file" accept="application/json,.json" hidden>
         </div>
         <div class="watchlist-status data-status" id="data-status"></div>
+        <div class="settings-storage-status" id="settings-storage-status" role="status" aria-live="polite"></div>
+        <button class="data-action-btn secondary" id="retry-storage-btn" type="button" hidden>重试保存</button>
         </section>
         <section class="settings-view settings-about-view" data-settings-panel="about" hidden>
         <div class="settings-about-identity">

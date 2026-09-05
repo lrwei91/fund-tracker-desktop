@@ -178,21 +178,28 @@
             var collapsed = typeof collState[key] === 'boolean'
                 ? collState[key]
                 : card.getAttribute('data-collapsed') === 'true';
-            card.setAttribute('data-collapsed', collapsed ? 'true' : 'false');
-            body.style.display = collapsed ? 'none' : '';
+            if (!header.hasAttribute('role')) header.setAttribute('role', 'button');
+            if (!header.hasAttribute('tabindex')) header.tabIndex = 0;
+            if (!body.id) body.id = key + '-body';
+            header.setAttribute('aria-controls', body.id);
+
+            function setCollapsed(next) {
+                card.setAttribute('data-collapsed', next ? 'true' : 'false');
+                header.setAttribute('aria-expanded', next ? 'false' : 'true');
+                body.style.display = next ? 'none' : '';
+                saveCollapsibleState(card, next);
+            }
+            setCollapsed(collapsed);
 
             header.addEventListener('click', function (event) {
                 if (event.target.closest('button, input, select, textarea, a')) return;
                 var isCollapsed = card.getAttribute('data-collapsed') === 'true';
-                if (isCollapsed) {
-                    card.setAttribute('data-collapsed', 'false');
-                    body.style.display = '';
-                    saveCollapsibleState(card, false);
-                } else {
-                    card.setAttribute('data-collapsed', 'true');
-                    body.style.display = 'none';
-                    saveCollapsibleState(card, true);
-                }
+                setCollapsed(!isCollapsed);
+            });
+            header.addEventListener('keydown', function (event) {
+                if (event.target !== header || (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar')) return;
+                event.preventDefault();
+                setCollapsed(card.getAttribute('data-collapsed') !== 'true');
             });
         });
     }
@@ -361,6 +368,45 @@
         if (fileInput) fileInput.addEventListener('change', function (e) {
             if (window.AppWatchlist) window.AppWatchlist.importWatchlistData(e);
         });
+    }
+
+    function initStorageStatus() {
+        var headerStatus = document.getElementById('storage-status');
+        var panelStatus = document.getElementById('settings-storage-status');
+        var retryButton = document.getElementById('retry-storage-btn');
+
+        function sync(detail) {
+            detail = detail || (window.AppStorage && typeof window.AppStorage.getStatus === 'function'
+                ? window.AppStorage.getStatus() : { state: 'idle' });
+            var state = detail.state || 'idle';
+            var labels = {
+                idle: '配置状态未知',
+                saving: '正在保存配置',
+                unsaved: '配置未保存',
+                saved: '配置已保存',
+                error: '保存失败 · 点击重试',
+            };
+            var label = labels[state] || labels.idle;
+            [headerStatus, panelStatus].forEach(function (element) {
+                if (!element) return;
+                element.textContent = label;
+                element.dataset.state = state;
+                if (state === 'error') element.title = detail.error || '配置保存失败';
+            });
+            if (retryButton) retryButton.hidden = state !== 'error' && state !== 'unsaved';
+        }
+        document.addEventListener('fund-tracker-storage-status', function (event) { sync(event.detail); });
+        if (headerStatus) headerStatus.addEventListener('click', function () {
+            if (window.AppStorage && typeof window.AppStorage.flush === 'function') {
+                window.AppStorage.flush().catch(function () {});
+            }
+        });
+        if (retryButton) retryButton.addEventListener('click', function () {
+            if (!window.AppStorage || typeof window.AppStorage.flush !== 'function') return;
+            retryButton.disabled = true;
+            window.AppStorage.flush().catch(function () {}).finally(function () { retryButton.disabled = false; });
+        });
+        sync();
     }
 
     function initAboutActions() {
@@ -684,6 +730,7 @@
         initSettings();
         syncSettingsControls();
         initDataActions();
+        initStorageStatus();
         initAboutActions();
         initHoldingWindowButton();
         bindEvents();

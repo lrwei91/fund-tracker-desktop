@@ -135,6 +135,74 @@
         return tabs[0].id;
     }
 
+    function mergeWatchTabs(current, incoming) {
+        var result = current.map(function (tab) {
+            return { id: tab.id, name: tab.name, codes: W.sanitizeCodes(tab.codes) };
+        });
+        incoming.forEach(function (tab) {
+            var existing = result.find(function (item) { return item.id === tab.id; });
+            if (!existing) {
+                result.push({ id: tab.id, name: tab.name, codes: W.sanitizeCodes(tab.codes) });
+                return;
+            }
+            existing.codes = W.sanitizeCodes(existing.codes.concat(tab.codes));
+            if (!existing.name) existing.name = tab.name;
+        });
+        return result;
+    }
+
+    function mergeObject(existing, incoming) {
+        var result = Object.assign({}, incoming || {});
+        Object.keys(existing || {}).forEach(function (key) { result[key] = existing[key]; });
+        return result;
+    }
+
+    function codeSet(tabs) {
+        var result = {};
+        tabs.forEach(function (tab) { W.sanitizeCodes(tab.codes).forEach(function (code) { result[code] = true; }); });
+        return result;
+    }
+
+    function countPreview(currentTabs, incomingTabs, replace) {
+        var current = codeSet(currentTabs);
+        var incoming = codeSet(incomingTabs);
+        var currentGroups = {};
+        var incomingGroups = {};
+        currentTabs.forEach(function (tab) { W.sanitizeCodes(tab.codes).forEach(function (code) {
+            (currentGroups[code] || (currentGroups[code] = {}))[tab.id] = true;
+        }); });
+        incomingTabs.forEach(function (tab) { W.sanitizeCodes(tab.codes).forEach(function (code) {
+            (incomingGroups[code] || (incomingGroups[code] = {}))[tab.id] = true;
+        }); });
+        var counts = { added: 0, retained: 0, conflicts: 0, removed: 0 };
+        Object.keys(incoming).forEach(function (code) {
+            if (current[code]) {
+                var sameGroup = Object.keys(incomingGroups[code]).some(function (id) { return currentGroups[code] && currentGroups[code][id]; });
+                if (sameGroup) counts.retained += 1;
+                else counts.conflicts += 1;
+            }
+            else counts.added += 1;
+        });
+        if (replace) Object.keys(current).forEach(function (code) { if (!incoming[code]) counts.removed += 1; });
+        return counts;
+    }
+
+    function chooseImportMode(summary, trigger) {
+        if (window.AppDialog && typeof window.AppDialog.choose === 'function') {
+            return window.AppDialog.choose({
+                title: '导入自选数据',
+                body: summary,
+                trigger: trigger,
+                actions: [
+                    { value: 'merge', label: '合并导入' },
+                    { value: 'replace', label: '替换导入' },
+                    { value: 'cancel', label: '取消', secondary: true },
+                ],
+            });
+        }
+        return Promise.resolve(window.confirm(summary + '\n\n确定合并导入？') ? 'merge' : 'cancel');
+    }
+
     function getExportPayload() {
         var tabs = W.getWatchTabs();
         var activeWatchTabId = getImportedActiveWatchTabId(state.activeWatchTabId, tabs);
@@ -174,49 +242,101 @@
         reader.onload = function () {
             try {
                 var json = JSON.parse(String(reader.result || ''));
+                if (!json || typeof json !== 'object') throw new Error('导入文件格式错误');
                 var rawTabs = getRawWatchTabsFromJson(json);
-                var tabs = normalizeImportedWatchTabs(rawTabs);
+                if (rawTabs !== undefined && !Array.isArray(rawTabs)) throw new Error('自选股分组格式错误');
+                var hasTabs = Array.isArray(rawTabs);
+                var importedTabs = hasTabs ? normalizeImportedWatchTabs(rawTabs) : [];
+                var currentTabs = W.getWatchTabs();
                 var rawCost = json.watchlistCost || json.holdingCosts || json.costs || json.costMap || json.positions || json.holdings || collectWatchlistCostFromTabs(rawTabs);
-                var watchlistCost = normalizeImportedWatchlistCost(rawCost, tabs);
+                var hasCost = W.hasOwn(json, 'watchlistCost') || W.hasOwn(json, 'holdingCosts') || W.hasOwn(json, 'costs') || Object.keys(collectWatchlistCostFromTabs(rawTabs)).length > 0;
                 var rawRemarks = json.watchlistRemarks || json.holdingRemarks || json.remarks || json.aliases || json.aliasMap;
-                var watchlistRemarks = normalizeImportedWatchlistRemarks(rawRemarks, tabs);
-                var activeWatchTabId = getImportedActiveWatchTabId(json.activeWatchTabId, tabs);
+                var hasRemarks = W.hasOwn(json, 'watchlistRemarks') || W.hasOwn(json, 'holdingRemarks') || W.hasOwn(json, 'remarks') || W.hasOwn(json, 'aliases') || W.hasOwn(json, 'aliasMap');
                 var rawCustomIndexCodes = getRawCustomIndexCodesFromJson(json);
-                var customIndexCodes = rawCustomIndexCodes ? normalizeImportedCustomIndexCodes(rawCustomIndexCodes) : null;
+                var hasCustomIndices = rawCustomIndexCodes !== null;
                 var rawFunds = W.hasOwn(json, 'funds') ? json.funds : json.fundWatchlist;
-                W.saveWatchTabs(tabs);
-                state.watchlistCost = watchlistCost;
-                W.saveWatchlistCost();
-                state.watchlistRemarks = watchlistRemarks;
-                W.saveWatchlistRemarks();
-                state.activeWatchTabId = activeWatchTabId;
-                window.AppStorage.setItem(KEYS.ACTIVE_WATCH_TAB_KEY, state.activeWatchTabId);
-                if (customIndexCodes) {
-                    state.customIndexCodes = customIndexCodes;
-                    state.customIndexCache = {};
-                    state.customIndexUpdateTime = '';
-                    W.saveCustomIndices();
-                    W.persistCustomIndexCache();
-                    W.persistCustomIndexUpdateTime('');
-                }
-                var importedFundCount = null;
-                if (Array.isArray(rawFunds) && window.AppFunds && typeof window.AppFunds.importFunds === 'function') {
-                    importedFundCount = window.AppFunds.importFunds(rawFunds);
-                }
-                state.watchQuoteCache = {};
-                state.watchQuoteUpdateTime = '';
-                state.watchAlertState = {};
-                W.persistWatchQuoteCache();
-                W.persistWatchQuoteUpdateTime('');
-                if (window.AppAlerts) window.AppAlerts.saveWatchAlertState();
-                W.renderWatchTabs();
-                W.renderWatchlist();
-                W.renderCustomIndex();
-                W.loadWatchlistData();
-                if (customIndexCodes) W.loadCustomIndexData();
-                W.showDataStatus('已导入 ' + tabs.length + ' 个分组' +
-                    (customIndexCodes ? '、' + customIndexCodes.length + ' 个自选指数' : '') +
-                    (importedFundCount !== null ? '、' + importedFundCount + ' 只基金' : ''));
+                var hasFunds = W.hasOwn(json, 'funds') || W.hasOwn(json, 'fundWatchlist');
+                if (hasFunds && !Array.isArray(rawFunds)) throw new Error('基金列表格式错误');
+                var replace = false;
+                var preview = countPreview(currentTabs, importedTabs, false);
+                var replacePreview = countPreview(currentTabs, importedTabs, true);
+                var summary = '新增 ' + preview.added + ' 项，保留 ' + preview.retained + ' 项，冲突 ' + preview.conflicts + ' 项';
+                if (hasTabs) summary += '\n替换模式将移除 ' + replacePreview.removed + ' 项';
+                if (hasTabs) summary += '\n文件包含 ' + importedTabs.length + ' 个分组';
+                if (hasCustomIndices) summary += '\n自选指数：' + normalizeImportedCustomIndexCodes(rawCustomIndexCodes).length + ' 个';
+                if (hasFunds) summary += '\n基金：' + (Array.isArray(rawFunds) ? rawFunds.length : 0) + ' 只';
+                chooseImportMode(summary, document.activeElement).then(function (mode) {
+                    if (mode === 'cancel') return;
+                    replace = mode === 'replace';
+                    var tabs = hasTabs ? (replace ? importedTabs : mergeWatchTabs(currentTabs, importedTabs)) : currentTabs;
+                    var watchlistCost = hasCost
+                        ? normalizeImportedWatchlistCost(rawCost, tabs)
+                        : (replace ? {} : Object.assign({}, state.watchlistCost || {}));
+                    if (!replace && hasCost) watchlistCost = mergeObject(state.watchlistCost || {}, watchlistCost);
+                    var watchlistRemarks = hasRemarks
+                        ? normalizeImportedWatchlistRemarks(rawRemarks, tabs)
+                        : (replace ? {} : Object.assign({}, state.watchlistRemarks || {}));
+                    if (!replace && hasRemarks) watchlistRemarks = mergeObject(state.watchlistRemarks || {}, watchlistRemarks);
+                    var activeWatchTabId = hasTabs
+                        ? getImportedActiveWatchTabId(json.activeWatchTabId, tabs)
+                        : state.activeWatchTabId;
+                    var customIndexCodes = hasCustomIndices
+                        ? normalizeImportedCustomIndexCodes(rawCustomIndexCodes)
+                        : state.customIndexCodes;
+                    if (hasCustomIndices && !replace) customIndexCodes = W.sanitizeCodes((state.customIndexCodes || []).concat(customIndexCodes)).slice(0, KEYS.CUSTOM_INDEX_MAX);
+                    var normalizedFunds = hasFunds && window.AppFunds && typeof window.AppFunds.normalizeFunds === 'function'
+                        ? window.AppFunds.normalizeFunds(rawFunds)
+                        : (hasFunds ? [] : null);
+                    if (hasFunds && !replace && window.AppFunds && typeof window.AppFunds.exportFunds === 'function') {
+                        var existingFunds = window.AppFunds.exportFunds();
+                        var byCode = {};
+                        existingFunds.concat(normalizedFunds).forEach(function (fund) { if (!byCode[fund.code]) byCode[fund.code] = fund; });
+                        normalizedFunds = Object.keys(byCode).map(function (code) { return byCode[code]; }).slice(0, 30);
+                    }
+                    var changes = {};
+                    changes[KEYS.WATCH_TABS_KEY] = JSON.stringify(tabs);
+                    changes[KEYS.STORAGE_KEY] = JSON.stringify(tabs[0] ? tabs[0].codes : []);
+                    changes[KEYS.ACTIVE_WATCH_TAB_KEY] = activeWatchTabId;
+                    if (hasCost || replace) changes[KEYS.WATCHLIST_COST_KEY] = JSON.stringify(watchlistCost);
+                    if (hasRemarks || replace) changes[KEYS.WATCHLIST_REMARKS_KEY] = JSON.stringify(watchlistRemarks);
+                    if (hasCustomIndices) changes[KEYS.CUSTOM_INDICES_KEY] = JSON.stringify(customIndexCodes);
+                    if (hasFunds) changes.fund_tracker_fund_watchlist = JSON.stringify(normalizedFunds);
+                    changes[KEYS.WATCH_ALERT_STATE_KEY] = JSON.stringify({ __v: KEYS.WATCH_ALERT_SCHEMA_VERSION });
+                    var commit = window.AppStorage && typeof window.AppStorage.commit === 'function'
+                        ? window.AppStorage.commit(changes)
+                        : Promise.resolve().then(function () { Object.keys(changes).forEach(function (key) { window.AppStorage.setItem(key, changes[key]); }); });
+                    return commit.then(function () {
+                        if (hasTabs) {
+                            state.activeWatchTabId = activeWatchTabId;
+                        }
+                        if (hasCost || replace) state.watchlistCost = watchlistCost;
+                        if (hasRemarks || replace) state.watchlistRemarks = watchlistRemarks;
+                        if (hasCustomIndices) {
+                            state.customIndexCodes = customIndexCodes;
+                            state.customIndexCache = {};
+                            state.customIndexUpdateTime = '';
+                        }
+                        if (hasFunds && window.AppFunds && typeof window.AppFunds.importFunds === 'function') {
+                            window.AppFunds.importFunds(normalizedFunds, { persist: false, refresh: false });
+                        }
+                        state.watchQuoteCache = {};
+                        state.watchQuoteUpdateTime = '';
+                        state.watchAlertState = {};
+                        W.persistWatchQuoteCache();
+                        W.persistWatchQuoteUpdateTime('');
+                        W.renderWatchTabs();
+                        W.renderWatchlist();
+                        W.renderCustomIndex();
+                        if (hasFunds && window.AppFunds && normalizedFunds.length) window.AppFunds.loadFundQuotes(true).catch(function () {});
+                        W.loadWatchlistData();
+                        if (hasCustomIndices) W.loadCustomIndexData();
+                        W.showDataStatus('已' + (replace ? '替换' : '合并') + '导入 ' + tabs.length + ' 个分组' +
+                            (hasCustomIndices ? '、' + customIndexCodes.length + ' 个自选指数' : '') +
+                            (hasFunds ? '、' + normalizedFunds.length + ' 只基金' : ''));
+                    });
+                }).catch(function (err) {
+                    W.showDataStatus(err && err.message ? err.message : '导入保存失败，原数据未修改', 'error');
+                });
             } catch (err) {
                 W.showDataStatus(err.message || '导入失败', 'error');
             } finally {

@@ -14,6 +14,7 @@
     var intradayPoints = {};
     var intradayStates = {};
     var sharedIntradayInflight = null;
+    var searchSequence = 0;
     var utils = window.AppUtils;
     var uiState = window.AppUiState;
 
@@ -339,6 +340,24 @@
         element.classList.toggle('loading', kind === 'loading');
     }
 
+    function clearFundCandidates() {
+        var element = document.getElementById('fund-search-candidates');
+        if (!element) return;
+        element.hidden = true;
+        element.innerHTML = '';
+    }
+
+    function renderFundCandidates(items) {
+        var element = document.getElementById('fund-search-candidates');
+        if (!element) return;
+        element.innerHTML = items.map(function (fund, index) {
+            return '<button type="button" class="fund-search-candidate" role="option" data-fund-candidate="' + index + '">' +
+                '<strong>' + escapeHtml(fund.name) + '</strong><span>' + escapeHtml(fund.code) + '</span><small>' + escapeHtml(fund.type || '基金') + '</small></button>';
+        }).join('');
+        element.hidden = !items.length;
+        element.__items = items;
+    }
+
     function updateStoredNames(data) {
         var changed = false;
         funds.forEach(function (fund) {
@@ -477,22 +496,38 @@
     }
 
     function resolveFundInput(rawValue) {
-        return window.AppDataClient.fetchData('/fund-search', { q: rawValue }, {
+        var query = String(rawValue || '').trim();
+        var requestId = ++searchSequence;
+        return window.AppDataClient.fetchData('/fund-search', { q: query }, {
             cacheMode: 'normal',
         }).then(function (result) {
+            if (requestId !== searchSequence) {
+                var stale = new Error('查询已过期');
+                stale.code = 'STALE_SEARCH';
+                throw stale;
+            }
             var items = Array.isArray(result.data) ? result.data : [];
-            var exact = items.find(function (item) { return item.code === rawValue; });
-            var match = exact || items[0];
-            if (!match) throw new Error('未找到匹配基金');
-            return normalizeFund(match);
+            var normalized = items.map(normalizeFund).filter(Boolean);
+            if (/^\d{6}$/.test(query)) {
+                var exact = normalized.find(function (item) { return item.code === query; });
+                if (!exact) throw new Error('未找到精确匹配的基金代码');
+                return exact;
+            }
+            if (!normalized.length) throw new Error('未找到匹配基金');
+            if (normalized.length === 1) return normalized[0];
+            var candidates = new Error('找到多个基金，请选择份额类别');
+            candidates.candidates = normalized.slice(0, 12);
+            throw candidates;
         });
     }
 
-    async function addFund() {
+    async function addFund(selectedFund) {
         restoreFunds();
         var input = document.getElementById('fund-input');
         var button = document.getElementById('add-fund-btn');
         var rawValue = input ? input.value.trim() : '';
+        if (button && button.disabled) return;
+        if (selectedFund && input) rawValue = selectedFund.code;
         if (!rawValue) {
             showStatus('请输入基金代码或名称', 'error');
             return;
@@ -503,9 +538,10 @@
         }
         button.disabled = true;
         button.textContent = '查询中';
+        clearFundCandidates();
         var addedFund = null;
         try {
-            var fund = await resolveFundInput(rawValue);
+            var fund = selectedFund ? normalizeFund(selectedFund) : await resolveFundInput(rawValue);
             if (!fund) throw new Error('未找到匹配基金');
             if (funds.some(function (item) { return item.code === fund.code; })) {
                 throw new Error('该基金已在列表中');
@@ -513,12 +549,19 @@
             funds.push(fund);
             addedFund = fund;
             persistFunds();
+            clearFundCandidates();
             input.value = '';
             renderFunds();
             showStatus(fund.name + ' 已添加');
             await loadFundQuotes(true);
             if (!quotes[fund.code]) await loadFundQuotes(true);
         } catch (error) {
+            if (error && error.code === 'STALE_SEARCH') return;
+            if (error && Array.isArray(error.candidates)) {
+                renderFundCandidates(error.candidates);
+                showStatus(error.message, 'error');
+                return;
+            }
             showStatus(addedFund
                 ? addedFund.name + ' 已添加，净值稍后自动刷新'
                 : (error && error.message ? error.message : '基金添加失败'), 'error');
@@ -545,17 +588,20 @@
         loadSharedFundIntraday(true).catch(function () {});
     }
 
-    function importFunds(entries) {
+    function importFunds(entries, options) {
+        options = options || {};
         loaded = true;
         funds = normalizeFunds(entries);
         quotes = {};
         freshCodes = {};
         intradayPoints = {};
         intradayDate = currentDateKey();
-        persistFunds();
-        persistIntraday();
+        if (options.persist !== false) {
+            persistFunds();
+            persistIntraday();
+        }
         renderFunds();
-        if (funds.length) loadFundQuotes(true).catch(function () {});
+        if (options.refresh !== false && funds.length) loadFundQuotes(true).catch(function () {});
         return funds.length;
     }
 
@@ -565,13 +611,20 @@
         var addButton = document.getElementById('add-fund-btn');
         var input = document.getElementById('fund-input');
         var list = document.getElementById('fund-watch-list');
-        if (addButton) addButton.addEventListener('click', addFund);
+        if (addButton) addButton.addEventListener('click', function () { addFund(); });
         if (input) input.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') addFund();
         });
         if (list) list.addEventListener('click', function (event) {
             var button = event.target.closest('[data-remove-fund]');
             if (button) removeFund(button.getAttribute('data-remove-fund'));
+        });
+        var candidates = document.getElementById('fund-search-candidates');
+        if (candidates) candidates.addEventListener('click', function (event) {
+            var button = event.target.closest('[data-fund-candidate]');
+            if (!button || !candidates.__items) return;
+            var item = candidates.__items[Number(button.getAttribute('data-fund-candidate'))];
+            if (item) addFund(item);
         });
         if (!intradayTimer) {
             intradayTimer = window.setInterval(function () {
@@ -594,6 +647,7 @@
         loadFundIntraday: loadFundIntraday,
         loadFundQuotes: loadFundQuotes,
         mergeIntradayPoints: mergeIntradayPoints,
+        normalizeFunds: normalizeFunds,
         removeFund: removeFund,
         renderFunds: renderFunds,
         resolveFundInput: resolveFundInput,

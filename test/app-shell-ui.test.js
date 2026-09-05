@@ -102,6 +102,22 @@ describe('主界面信息架构', () => {
         }
     });
 
+    it('折叠卡片支持 Enter 与空格，并同步 aria 状态', async () => {
+        const dom = await bootstrapApp();
+        try {
+            const header = dom.window.document.querySelector('.watchlist-section .card-header');
+            const body = dom.window.document.querySelector('.watchlist-section .card-body');
+            header.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            expect(header.getAttribute('aria-expanded')).toBe('false');
+            expect(body.style.display).toBe('none');
+            header.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+            expect(header.getAttribute('aria-expanded')).toBe('true');
+            expect(body.style.display).toBe('');
+        } finally {
+            dom.window.close();
+        }
+    });
+
     it('进入基金主 Tab 时独立确保已恢复的基金筛选子页完成首次加载', async () => {
         let ensureCount = 0;
         let refreshCount = 0;

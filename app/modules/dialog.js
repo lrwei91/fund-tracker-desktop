@@ -101,5 +101,59 @@
         target.focus();
     }
 
-    window.AppDialog = { close: close, open: open };
+    function choose(options) {
+        options = options || {};
+        var overlay = document.createElement('div');
+        var panel = document.createElement('section');
+        overlay.className = 'app-choice-overlay';
+        panel.className = 'app-choice-panel';
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        var titleId = 'app-choice-title-' + Date.now().toString(36);
+        panel.setAttribute('aria-labelledby', titleId);
+        panel.tabIndex = -1;
+        panel.innerHTML = '<div class="app-choice-header"><h3 id="' + titleId + '">' + (options.title || '请选择操作') + '</h3></div>' +
+            '<div class="app-choice-body">' + (options.body || '') + '</div>' +
+            '<div class="app-choice-actions"></div>';
+        var actions = panel.querySelector('.app-choice-actions');
+        var settled = false;
+        var resolve;
+        function finish(value) {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+            window.setTimeout(function () { overlay.remove(); panel.remove(); }, 0);
+        }
+        (options.actions || [{ value: 'cancel', label: '取消', secondary: true }]).forEach(function (item) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'data-action-btn' + (item.secondary ? ' secondary' : '');
+            button.textContent = item.label;
+            button.addEventListener('click', function () {
+                finish(item.value);
+                close(panel);
+            });
+            actions.appendChild(button);
+        });
+        document.body.appendChild(overlay);
+        document.body.appendChild(panel);
+        var promise = new Promise(function (done) { resolve = done; });
+        open(panel, overlay, {
+            trigger: options.trigger || document.activeElement,
+            openClass: 'open',
+            hideOnClose: true,
+            focusTarget: actions.querySelector('button'),
+            onClose: function () {
+                finish('cancel');
+                if (options.onClose) options.onClose();
+            },
+        });
+        overlay.addEventListener('click', function () {
+            finish('cancel');
+            close(panel);
+        });
+        return promise;
+    }
+
+    window.AppDialog = { choose: choose, close: close, open: open };
 })();

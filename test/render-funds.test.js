@@ -7,6 +7,7 @@ function installDom() {
     document.body.innerHTML = `
         <input id="fund-input">
         <button id="add-fund-btn">添加基金</button>
+        <div id="fund-search-candidates"></div>
         <div id="fund-watch-status"></div>
         <span id="fund-watch-update-time"></span>
         <div id="fund-watch-list"></div>
@@ -195,6 +196,42 @@ describe('AppFunds', () => {
             { code: '110022', name: '易方达消费行业股票', type: '股票型' },
         ]);
         expect(window.AppDataClient.fetchData.mock.calls[0][0]).toBe('/fund-search');
+    });
+
+    it('名称命中多个份额时先展示候选，选择后再添加', async () => {
+        const { storage } = await installModule();
+        window.AppDataClient.fetchData.mockImplementation((path) => path === '/fund-search'
+            ? Promise.resolve({ data: [
+                { code: '110022', name: '易方达消费行业股票 A', type: '股票型' },
+                { code: '110023', name: '易方达消费行业股票 C', type: '股票型' },
+            ] })
+            : Promise.resolve(quoteResult()));
+        document.getElementById('fund-input').value = '易方达消费行业股票';
+        document.getElementById('add-fund-btn').click();
+        await vi.waitFor(() => expect(document.querySelectorAll('.fund-search-candidate')).toHaveLength(2));
+        expect(document.querySelector('[data-fund-code="110022"]')).toBeNull();
+        document.querySelector('.fund-search-candidate').click();
+        await vi.waitFor(() => expect(document.querySelector('[data-fund-code="110022"]')).not.toBeNull());
+        expect(JSON.parse(storage.get('fund_tracker_fund_watchlist'))[0].code).toBe('110022');
+    });
+
+    it('六位代码只接受精确匹配，不回退到第一条结果', async () => {
+        await installModule();
+        window.AppDataClient.fetchData.mockResolvedValue({ data: [{ code: '110023', name: '其他基金' }] });
+        await expect(window.AppFunds.resolveFundInput('110022')).rejects.toThrow('精确');
+    });
+
+    it('乱序查询的旧结果不会覆盖新查询', async () => {
+        await installModule();
+        let resolveOld;
+        window.AppDataClient.fetchData.mockImplementation((_path, params) => params.q === '旧查询'
+            ? new Promise((resolve) => { resolveOld = resolve; })
+            : Promise.resolve({ data: [{ code: '110022', name: '新基金' }] }));
+        const old = window.AppFunds.resolveFundInput('旧查询');
+        const current = window.AppFunds.resolveFundInput('新查询');
+        expect((await current).code).toBe('110022');
+        resolveOld({ data: [{ code: '110023', name: '旧基金' }] });
+        await expect(old).rejects.toMatchObject({ code: 'STALE_SEARCH' });
     });
 
     it('不伪造货币基金日涨跌，远端名称按纯文本转义', async () => {

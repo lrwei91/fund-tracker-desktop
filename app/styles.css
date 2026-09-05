@@ -824,22 +824,24 @@ html[data-theme="dark"] .electron-app {
     gap: 6px;
 }
 
-.electron-app .api-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+.electron-app .storage-status {
+    min-width: 0;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
     color: var(--text-tertiary);
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: 10px;
+    cursor: pointer;
 }
 
-.electron-app .api-status-icon {
-    width: 6px;
-    height: 6px;
-    margin: 0;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: none;
+.electron-app .storage-status[data-state="unsaved"],
+.electron-app .storage-status[data-state="saving"] {
+    color: var(--amber);
+}
+
+.electron-app .storage-status[data-state="error"] {
+    color: var(--red);
 }
 
 .electron-app .header-btn {
@@ -1251,6 +1253,44 @@ html[data-theme="dark"] .electron-app {
 .electron-app .fund-watch-add input:focus {
     border-color: var(--focus);
     box-shadow: 0 0 0 2px var(--color-focus-soft);
+}
+
+.electron-app .fund-search-candidates {
+    display: grid;
+    gap: 4px;
+    margin: -4px 0 10px;
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg-elevated);
+}
+
+.electron-app .fund-search-candidate {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 34px;
+    padding: 5px 8px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+.electron-app .fund-search-candidate:hover,
+.electron-app .fund-search-candidate:focus-visible {
+    background: var(--bg-row-alt);
+    outline: none;
+}
+
+.electron-app .fund-search-candidate span,
+.electron-app .fund-search-candidate small {
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
 }
 
 .electron-app .fund-watch-status {
@@ -3192,6 +3232,65 @@ html[data-theme="dark"] .electron-app {
     line-height: 1.5;
 }
 
+.electron-app .settings-storage-status {
+    min-height: 18px;
+    margin: 8px 0;
+    color: var(--text-tertiary);
+    font-family: var(--mono);
+    font-size: 10px;
+}
+
+.electron-app .settings-storage-status[data-state="unsaved"],
+.electron-app .settings-storage-status[data-state="saving"] {
+    color: var(--amber);
+}
+
+.electron-app .settings-storage-status[data-state="error"] {
+    color: var(--color-status-error);
+}
+
+.electron-app .app-choice-overlay {
+    position: fixed;
+    z-index: 90;
+    inset: 0;
+    background: var(--color-overlay);
+}
+
+.electron-app .app-choice-panel {
+    position: fixed;
+    z-index: 91;
+    top: 50%;
+    left: 50%;
+    width: min(92vw, 520px);
+    transform: translate(-50%, -50%);
+    padding: 18px;
+    border: 1px solid var(--desktop-border);
+    border-radius: 12px;
+    background: var(--desktop-panel);
+    color: var(--text-primary);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+
+.electron-app .app-choice-header h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.electron-app .app-choice-body {
+    margin-top: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.electron-app .app-choice-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
 /* Stock research dialog */
 .electron-app .modal-overlay {
     background: var(--color-overlay);
@@ -3968,24 +4067,35 @@ html[data-theme="dark"] .electron-app {
 
 @media (min-width: 760px) {
     .electron-app #tab-dashboard.active {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
         align-items: start;
     }
 
-    .electron-app #tab-dashboard .index-section,
-    .electron-app #tab-dashboard .watchlist-section,
-    .electron-app #tab-dashboard .custom-index-section {
-        grid-column: 1 / -1;
+    .electron-app #tab-dashboard .dashboard-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--desktop-gap);
     }
 
-    .electron-app #tab-dashboard .capital-section,
-    .electron-app #tab-dashboard .market-breadth-section { grid-column: 1; }
-    .electron-app #tab-dashboard .sector-section { grid-column: 2; }
-    .electron-app #tab-dashboard .sector-panorama-section { grid-column: 1 / -1; }
+    .electron-app #tab-dashboard .dashboard-market-column { grid-column: 2; grid-row: 1; }
+    .electron-app #tab-dashboard .dashboard-holdings-column { grid-column: 1; grid-row: 1 / span 2; }
+    .electron-app #tab-dashboard .dashboard-flow-column { grid-column: 2; grid-row: 2; }
 
     .electron-app .news-summary {
         -webkit-line-clamp: 2;
     }
+}
+
+@media (max-width: 759px) {
+    .electron-app #tab-dashboard .dashboard-column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--desktop-gap);
+    }
+
+    .electron-app #tab-dashboard .dashboard-holdings-column { order: 1; }
+    .electron-app #tab-dashboard .dashboard-market-column { order: 2; }
+    .electron-app #tab-dashboard .dashboard-flow-column { order: 3; }
 }
 
 @media (max-width: 600px) {
@@ -4028,10 +4138,6 @@ html[data-theme="dark"] .electron-app {
     .electron-app .fund-watch-date {
         align-self: center;
         font-size: 10px;
-    }
-
-    .electron-app .api-status span:last-child {
-        display: none;
     }
 
     .electron-app .header {
