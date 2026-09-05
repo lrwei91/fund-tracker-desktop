@@ -22,12 +22,10 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Unit tests
+      - name: Unit tests (all Vitest suites)
         run: npm test
       - name: Watchlist split smoke test
         run: npm run smoke
-      - name: Refresh coordinator 50-code fixture smoke
-        run: npm run smoke:refresh
       - name: Dependency audit
         run: npm audit --audit-level=high
 
@@ -40,8 +38,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Collector unit tests
-        run: npm run worker:test
       - name: Validate Worker bundle
         run: npm run worker:deploy:dry
 
