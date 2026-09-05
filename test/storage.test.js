@@ -5,7 +5,23 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 async function installStorage() {
     vi.resetModules();
-    window.localStorage.clear();
+    let storage;
+    try {
+        storage = window.localStorage;
+    } catch (error) {
+        storage = null;
+    }
+    if (!storage || typeof storage.clear !== 'function') {
+        const values = new Map();
+        storage = {
+            clear: () => values.clear(),
+            getItem: (key) => values.has(String(key)) ? values.get(String(key)) : null,
+            removeItem: (key) => values.delete(String(key)),
+            setItem: (key, value) => values.set(String(key), String(value)),
+        };
+        Object.defineProperty(window, 'localStorage', { configurable: true, value: storage });
+    }
+    storage.clear();
     window.AppConfigSchema = { keys: ['demo'] };
     window.shell = {
         configStorage: {
