@@ -5,10 +5,14 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function response(data, status = 200) {
+function response(data, status = 200, customHeaders = {}) {
     return new Response(JSON.stringify(data), {
         status,
-        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+        headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'no-store',
+            ...customHeaders,
+        },
     });
 }
 
@@ -142,22 +146,37 @@ async function readIntraday(request, env, auth) {
         item.latestAt = new Date(Number(row.minute_at)).toISOString();
     }
     const missingCodes = allowed.filter((code) => !data[code] || !data[code].points.length);
-    return response({ success: true, data, meta: { updatedAt: new Date().toISOString(), missingCodes, source: 'DeepQ 盘中估值 · 共享采集' } });
+    // 允许边缘缓存 30s：盘中数据更新频率本身不超过 1 分钟，
+    // 原先 no-store 导致每次客户端轮询都穿透到 D1
+    return response(
+        { success: true, data, meta: { updatedAt: new Date().toISOString(), missingCodes, source: 'DeepQ 盘中估值 · 共享采集' } },
+        200,
+        { 'cache-control': 'public, max-age=30, s-maxage=30' },
+    );
 }
 
 async function collect(env, scheduledAt) {
     const nowDate = new Date(scheduledAt || Date.now());
     const now = nowDate.getTime();
-    const retention = Number(env.POINT_RETENTION_DAYS || 7) * DAY_MS;
-    await env.DB.batch([
-        env.DB.prepare('DELETE FROM subscriptions WHERE expires_at <= ?').bind(now),
-        env.DB.prepare('DELETE FROM installations WHERE expires_at <= ?').bind(now),
-        env.DB.prepare('DELETE FROM fund_intraday_points WHERE collected_at < ?').bind(now - retention),
-    ]);
+
+    // 非交易时间直接退出，避免每分钟无意义的 D1 扫描（读取额度消耗主因）
     if (!isCollectionMinute(nowDate)) return { skipped: true };
+
+    // 过期数据清理降频到每天一次（上海 09:15，即第一个采集分钟）
+    // 原先每分钟执行 DELETE，且 collected_at 无索引 -> 全表扫描吃满读取额度
+    const clock = shanghaiClock(nowDate);
+    const isFirstMinuteOfDay = clock.minutes === 9 * 60 + 15;
+
+    if (isFirstMinuteOfDay) {
+        const retention = Number(env.POINT_RETENTION_DAYS || 7) * DAY_MS;
+        await env.DB.batch([
+            env.DB.prepare('DELETE FROM subscriptions WHERE expires_at <= ?').bind(now),
+            env.DB.prepare('DELETE FROM installations WHERE expires_at <= ?').bind(now),
+            env.DB.prepare('DELETE FROM fund_intraday_points WHERE collected_at < ?').bind(now - retention),
+        ]);
+    }
     const result = await env.DB.prepare('SELECT DISTINCT code FROM subscriptions WHERE expires_at > ? ORDER BY code').bind(now).all();
     const codes = normalizeCodes((result.results || []).map((row) => row.code), 300);
-    const clock = shanghaiClock(nowDate);
     const minuteAt = Math.floor(now / 60000) * 60000;
     let written = 0;
     for (const batch of splitBatches(codes, 100)) {

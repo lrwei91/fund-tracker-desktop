@@ -33,6 +33,7 @@ coverage/
 
 # ===== Agent & tooling local state =====
 .workbuddy/
+.wrangler/
 
 # Agent 说明与工具本地状态（local-only, not pushed to remote）
 AGENTS.md

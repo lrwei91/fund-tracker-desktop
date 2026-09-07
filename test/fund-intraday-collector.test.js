@@ -24,4 +24,17 @@ describe('fund intraday collector core', () => {
             .toEqual([{ code: '110022', value: 0.2 }]);
         expect(splitBatches(Array.from({ length: 205 }), 100).map((batch) => batch.length)).toEqual([100, 100, 5]);
     });
+
+    it('collect handler skips execution and DB queries outside trading minutes', async () => {
+        const { collect } = await import('../services/fund-intraday-collector/src/index.mjs');
+        // Weekend date: should immediately skip without touching env.DB
+        const mockEnv = {
+            DB: {
+                batch: () => { throw new Error('DB should not be called outside trading minutes'); },
+                prepare: () => { throw new Error('DB should not be called outside trading minutes'); },
+            },
+        };
+        const result = await collect(mockEnv, new Date('2026-08-15T10:00:00+08:00').getTime());
+        expect(result).toEqual({ skipped: true });
+    });
 });

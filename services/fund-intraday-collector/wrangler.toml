@@ -5,6 +5,7 @@ workers_dev = true
 preview_urls = false
 
 [triggers]
+# 每分钟触发，非交易时间由 collect() 内的 isCollectionMinute 过滤
 crons = ["* * * * *"]
 
 [observability]
