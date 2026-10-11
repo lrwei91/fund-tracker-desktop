@@ -29,6 +29,10 @@ pub fn endpoint_policy(path: &str) -> EndpointPolicy {
         | "intraday-screening"
         | "fund-board-trends"
         | "fund-board-realtime" => EndpointPolicy::Live,
+        "stock-research" | "stock-ai-research" | "price-alerts" => EndpointPolicy::Live,
+        "stock-fundamentals" => EndpointPolicy::Informational {
+            stale_for: Duration::from_secs(60 * 60),
+        },
         "sector-rotation" => EndpointPolicy::Informational {
             stale_for: Duration::from_secs(30 * 60),
         },

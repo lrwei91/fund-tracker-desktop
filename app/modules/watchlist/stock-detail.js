@@ -136,10 +136,14 @@
         });
         initStockDetailTabs(body);
         initStockRiskLinks(body);
+        if (window.AppResearch) window.AppResearch.mount(body.querySelector('[data-stock-research-host]'), code);
+        if (window.AppPriceAlerts) window.AppPriceAlerts.mount(body.querySelector('[data-stock-alert-host]'), code);
     }
 
     function renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError, riskData, riskError) {
-        var researchHtml = renderStockCostEditor(code) + renderStockResearchGate(code, minuteData, fundData, klineData, newsData, newsError);
+        var researchHtml = window.AppResearch
+            ? '<details class="research-position-editor"><summary>持仓设置</summary>' + renderStockCostEditor(code) + '</details><div data-stock-research-host></div>'
+            : renderStockCostEditor(code) + renderStockResearchGate(code, minuteData, fundData, klineData, newsData, newsError);
         var minuteHtml = renderStockMinuteSection(minuteData, minuteError);
         var analysisHtml = renderStockAnalysisSection(klineData, klineError);
         var fundHtml = '';
@@ -163,6 +167,7 @@
                 '<button class="stock-detail-tab" data-stock-detail-tab="analysis" type="button">技术</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="fund" type="button">资金</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="risk" type="button">公告/风险</button>' +
+                '<button class="stock-detail-tab" data-stock-detail-tab="alerts" type="button">价格提醒</button>' +
             '</div>' +
             '<div class="stock-detail-pages">' +
                 renderStockDetailPage('research', researchHtml, true) +
@@ -170,6 +175,7 @@
                 renderStockDetailPage('analysis', analysisHtml, false) +
                 renderStockDetailPage('fund', fundHtml, false) +
                 renderStockDetailPage('risk', renderStockRiskSection(riskData, riskError), false) +
+                renderStockDetailPage('alerts', '<div data-stock-alert-host></div>', false) +
             '</div>';
     }
 

@@ -5,6 +5,7 @@ mod detail;
 mod fund;
 mod market;
 mod news;
+pub(crate) mod research;
 mod signals;
 mod stock;
 
@@ -36,6 +37,8 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
         "market-data" => market::data(gateway, query).await,
         "stock-kline" => detail::kline(gateway, query).await,
         "stock-minute" => detail::minute(gateway, query).await,
+        "stock-fundamentals" => research::fundamentals(gateway, query).await,
+        "stock-research" => research::snapshot(gateway, query).await,
         "opportunity-radar" => signals::opportunity(gateway, query).await,
         "market-warnings" => signals::market_warnings(gateway, query).await,
         "sector-rotation" => signals::sector_rotation(gateway, query).await,

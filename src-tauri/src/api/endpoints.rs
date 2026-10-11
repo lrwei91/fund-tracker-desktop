@@ -164,14 +164,14 @@ pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
                 if price.is_none() {
                     continue;
                 }
-                let pct = parts[32].parse::<f64>().unwrap_or(0.0);
+                let pct = parts[32].parse::<f64>().ok().filter(|v| v.is_finite());
                 let change = parts[31].parse::<f64>().ok();
                 let mut open = parts
                     .get(5)
                     .and_then(|v| v.parse::<f64>().ok())
                     .filter(|v| *v > 0.0);
                 if open.is_none() {
-                    if let Some(p) = price {
+                    if let (Some(p), Some(pct)) = (price, pct) {
                         let prev = p / (1.0 + pct / 100.0);
                         if prev.is_finite() && prev > 0.0 {
                             open = Some(round(prev, 2))
@@ -187,7 +187,16 @@ pub(crate) async fn stock(g: Arc<Gateway>, query: Query) -> Value {
                 if raw.len() == 14 {
                     times.push(raw.to_string())
                 }
-                data.insert(code.into(),json!({"code":code,"name":parts.get(1).copied().unwrap_or(code),"price":price.map(|p|format!("{p:.2}")).unwrap_or_else(||"--".into()),"priceValue":price,"change":change,"changePercent":pct,"volume":parts.get(36).or(parts.get(6)).copied().unwrap_or("--"),"openPrice":open,"quoteTime":display,"quoteTimeRaw":raw}));
+                let quote_number = |index: usize| {
+                    parts
+                        .get(index)
+                        .and_then(|v| v.parse::<f64>().ok())
+                        .filter(|v| v.is_finite())
+                };
+                // Tencent field 37 is turnover in ten-thousand yuan, 49 is volume ratio.
+                let turnover = quote_number(37).filter(|v| *v >= 0.0).map(|v| v * 10_000.0);
+                let volume_ratio = quote_number(49).filter(|v| *v >= 0.0);
+                data.insert(code.into(),json!({"code":code,"name":parts.get(1).copied().unwrap_or(code),"price":price.map(|p|format!("{p:.2}")).unwrap_or_else(||"--".into()),"priceValue":price,"change":change,"changePercent":pct,"volume":parts.get(36).or(parts.get(6)).copied().unwrap_or("--"),"turnover":turnover,"volumeRatio":volume_ratio,"pe":quote_number(39),"pb":quote_number(46),"marketCap":quote_number(45).map(|v|v*100_000_000.0),"openPrice":open,"quoteTime":display,"quoteTimeRaw":raw}));
             }
             times.sort();
             let request_time = Utc::now()

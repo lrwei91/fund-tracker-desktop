@@ -719,6 +719,9 @@
         initSectorTabs();
         initSignalWorkspace();
         initSettingsViews();
+        if (window.AppResearch) window.AppResearch.init();
+        if (window.AppPriceAlerts) window.AppPriceAlerts.init();
+        if (window.AppUpdates) window.AppUpdates.init();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
         if (window.AppFunds) window.AppFunds.initFunds();
         if (window.AppFundBoard) window.AppFundBoard.initFundBoard();

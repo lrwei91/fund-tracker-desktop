@@ -73,4 +73,16 @@ describe('AppDialog', () => {
         expect(panel.hidden).toBe(true);
         expect(document.activeElement).toBe(replacement);
     });
+
+    it('焦点循环包含折叠标题并跳过隐藏表单和未选中的页面', () => {
+        const panel = document.getElementById('panel');
+        panel.insertAdjacentHTML('beforeend', '<details><summary id="summary">持仓设置</summary><input id="hidden-cost"></details><section style="display:none"><button>隐藏页</button></section>');
+        const first = document.getElementById('first');
+        window.AppDialog.open(panel, null, { hideOnClose: true, focusTarget: first });
+        panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }));
+        expect(document.activeElement).toBe(document.getElementById('summary'));
+        panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+        expect(document.activeElement).toBe(first);
+        window.AppDialog.close(panel);
+    });
 });

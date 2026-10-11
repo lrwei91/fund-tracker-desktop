@@ -44,7 +44,7 @@
                 </svg>
             </span>
             <span class="desktop-nav-copy">
-                <span class="desktop-nav-label">信号</span>
+                <span class="desktop-nav-label">选股</span>
                 <span class="desktop-nav-meta">机会 / 热度 / 打板</span>
             </span>
         </button>
@@ -96,6 +96,7 @@
         <div class="header-meta">
             <div class="header-subtitle" id="last-updated">等待更新</div>
             <div class="refresh-status" id="refresh-status" aria-live="polite"></div>
+            <button class="app-update-notice" id="app-update-notice" type="button" hidden></button>
         </div>
     </div>
     <div class="header-right" data-tauri-drag-region="false">
@@ -108,7 +109,7 @@
 <!-- Tab 栏 — 顶部文字标签 -->
 <nav class="tab-bar">
     <button class="tab-btn active" data-tab="dashboard">行情</button>
-    <button class="tab-btn" data-tab="signals">信号</button>
+    <button class="tab-btn" data-tab="signals">选股</button>
     <button class="tab-btn" data-tab="funds">基金</button>
     <button class="tab-btn" data-tab="news">快讯</button>
 </nav>
@@ -327,9 +328,9 @@
     <div class="tab-panel" id="tab-signals">
 
         <div class="signal-workspace-tabs" role="tablist" aria-label="市场信号分类">
-            <button class="signal-workspace-tab active" type="button" role="tab" aria-selected="true" data-signal-view="radar">机会雷达</button>
+            <button class="signal-workspace-tab active" type="button" role="tab" aria-selected="true" data-signal-view="radar">候选选股</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="rotation">轮动板块</button>
-            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="screening">盘中筛选</button>
+            <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="alerts">价格提醒</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="heat">市场热度</button>
             <button class="signal-workspace-tab" type="button" role="tab" aria-selected="false" data-signal-view="limit">打板情绪</button>
         </div>
@@ -337,10 +338,18 @@
         <!-- 1. 机会雷达 -->
         <section class="card opportunity-radar-section signal-workspace-panel active" data-signal-panel="radar">
             <div class="card-header">
-                <h2>机会雷达</h2>
+                <h2>候选初筛与 AI 研究</h2>
                 <span class="opportunity-radar-header-time" id="opportunity-radar-update-time"></span>
             </div>
             <div class="card-body">
+                <div class="research-toolbar">
+                    <label>候选池<select id="research-pool"><option value="radar">机会初筛</option><option value="watchlist">全部自选</option></select></label>
+                    <label>研究数量<select id="research-batch-count"><option value="3">前3只</option><option value="5">前5只</option><option value="10">前10只</option></select></label>
+                    <button type="button" id="research-batch-run">AI 评分研究</button>
+                    <button type="button" id="research-batch-stop" hidden>停止后续</button>
+                </div>
+                <p class="research-note">初筛使用市场信号规则；AI 研究需手动运行。分数分别展示，均不代表上涨概率。</p>
+                <p id="research-batch-status" role="status"></p><div id="research-candidates" aria-live="polite"></div>
                 <div class="opportunity-radar-list" id="opportunity-radar-list">
                     <div class="ui-state ui-state--loading" data-ui-state="loading" role="status">
                         <strong class="ui-state-title">正在扫描机会</strong>
@@ -351,6 +360,9 @@
             </div>
         </section>
 
+        <section class="card signal-workspace-panel" data-signal-panel="alerts" hidden>
+            <div class="card-header"><h2>价格提醒</h2></div><div class="card-body" id="price-alert-workspace"></div>
+        </section>
         <!-- 2. 轮动板块（仅手动执行，展示上一交易日数据） -->
         <section class="card sector-rotation-section signal-workspace-panel" data-signal-panel="rotation" hidden>
             <div class="card-header sector-rotation-header">
@@ -363,21 +375,6 @@
             <div class="card-body">
                 <div class="intraday-screening-status" id="sector-rotation-status" role="status" aria-live="polite">不会自动获取。点击后读取上一交易日的板块轮动数据。</div>
                 <div class="sector-rotation-results" id="sector-rotation-results"></div>
-            </div>
-        </section>
-
-        <!-- 3. 盘中筛选（仅手动执行） -->
-        <section class="card intraday-screening-section signal-workspace-panel" data-signal-panel="screening" hidden>
-            <div class="card-header intraday-screening-header">
-                <div class="intraday-screening-heading">
-                    <h2>盘中筛选</h2>
-                    <span class="intraday-screening-update-time" id="intraday-screening-update-time"></span>
-                </div>
-                <button class="intraday-screening-run-btn" id="intraday-screening-run-btn" type="button">获取今日推荐</button>
-            </div>
-            <div class="card-body">
-                <div class="intraday-screening-status" id="intraday-screening-status" role="status" aria-live="polite">不会自动获取。交易日通常在 14:30–14:40 更新，点击“获取今日推荐”读取公开报告。</div>
-                <div class="intraday-screening-results" id="intraday-screening-results"></div>
             </div>
         </section>
 
@@ -569,6 +566,7 @@
             <button class="settings-nav-btn active" type="button" role="tab" aria-selected="true" data-settings-view="appearance">外观</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="refresh">刷新</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
+            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="ai">AI 服务</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="data">数据</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="about">关于</button>
@@ -630,6 +628,17 @@
                 <option value="1800">30分钟</option>
             </select>
         </div>
+        </section>
+        <section class="settings-view" data-settings-panel="ai" hidden>
+            <div class="settings-group-intro"><strong>AI 研究服务</strong><span>配置兼容 OpenAI Chat Completions 的服务。研究仅在点击生成时调用。</span></div>
+            <form id="ai-settings-form" class="research-settings-form">
+                <label>API 基础地址<input type="url" id="ai-base-url" required placeholder="https://服务域名/v1" autocomplete="off"></label>
+                <label>模型名称<input id="ai-model" required maxlength="120" autocomplete="off"></label>
+                <label>API 密钥<input type="password" id="ai-api-key" autocomplete="new-password" placeholder="留空保留该服务已保存的密钥"></label>
+                <p class="research-note">密钥保存在 macOS 钥匙串 / Windows 凭据管理器，不写入配置导出。更换 API 地址后需保存对应密钥。</p>
+                <div class="research-toolbar"><button type="submit">保存 AI 服务</button><button type="button" id="ai-clear-key">删除该服务密钥</button></div>
+                <p id="ai-settings-status" role="status"></p>
+            </form>
         </section>
         <section class="settings-view" data-settings-panel="alerts" hidden>
         <div class="settings-group-intro">
@@ -740,6 +749,15 @@
                 <dd>lrwei91/fund-tracker-desktop</dd>
             </div>
         </dl>
+        <section class="app-update-card" aria-label="软件更新">
+            <div class="settings-row"><span>当前版本</span><strong id="app-current-version">--</strong></div>
+            <div class="settings-row"><label for="app-automatic-updates">自动检查更新</label><label class="toggle"><input type="checkbox" id="app-automatic-updates" checked><span class="toggle-track"></span></label></div>
+            <p class="research-note" id="app-update-mode">启动 30 秒后自动检查，之后每 24 小时检查。</p>
+            <p id="app-update-status" role="status" aria-live="polite">尚未检查更新</p>
+            <progress id="app-update-progress" max="100" aria-label="更新下载进度" hidden></progress>
+            <pre id="app-update-notes"></pre>
+            <div class="research-toolbar"><button type="button" id="app-check-update">检查更新</button><button type="button" id="app-download-update" hidden>下载更新</button><button type="button" id="app-install-update" hidden>重启并安装</button></div>
+        </section>
         <div class="settings-about-actions">
             <button class="data-action-btn" id="about-github-btn" type="button" data-external-url="https://github.com/lrwei91/fund-tracker-desktop">查看 GitHub 项目 ↗</button>
             <button class="data-action-btn secondary" id="about-author-github-btn" type="button" data-external-url="https://github.com/lrwei91">维护者主页 ↗</button>
@@ -748,6 +766,12 @@
         <p class="settings-about-disclaimer">数据仅供参考，不构成投资建议。</p>
         </section>
     </div>
+</div>
+
+<div class="modal-overlay" id="app-update-install-overlay" hidden></div>
+<div class="modal-panel app-update-install-dialog" id="app-update-install-dialog" role="dialog" aria-modal="true" aria-labelledby="app-update-install-title" hidden>
+    <div class="modal-header"><h3 id="app-update-install-title">重启并安装更新？</h3></div>
+    <div class="app-update-install-body"><p>应用会先保存配置，再安装已校验的更新并重新启动。自选、持仓、提醒规则和 AI 服务设置会保留。</p><p id="app-update-install-error" role="alert"></p><div class="research-toolbar"><button type="button" id="app-update-install-cancel">暂不安装</button><button type="button" id="app-update-install-confirm">确认重启并安装</button></div></div>
 </div>
 
 <!-- 基金诊断详情（点击基金筛选卡片触发） -->
@@ -785,6 +809,8 @@
 <script src="modules/cache.js"></script>
 <script src="modules/data-client.js"></script>
 <script src="modules/data-status.js"></script>
+<script src="modules/stock-research.js"></script>
+<script src="modules/price-alerts.js"></script>
 <script src="modules/render-alerts.js"></script>
 <script src="modules/render-market.js?rev=10004"></script>
 <script src="modules/render-signals.js"></script>
@@ -802,6 +828,7 @@
 <script src="modules/watchlist/watchlist.js"></script>
 <script src="modules/render-news.js"></script>
 <script src="modules/refresh-coordinator.js?rev=10002"></script>
+<script src="modules/updates.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

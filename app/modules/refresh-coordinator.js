@@ -152,6 +152,7 @@
                 ? uniqueCodes(window.AppWatchlist[holdingOnly ? 'getHoldingCodes' : 'getAllWatchCodes']()) : [];
             var customCodes = holdingOnly ? [] : uniqueCodes(state.customIndexCodes || []);
             var quoteCodes = uniqueCodes(watchCodes.concat(customCodes));
+            if (!holdingOnly && window.AppPriceAlerts) quoteCodes = uniqueCodes(quoteCodes.concat(window.AppPriceAlerts.getCodes()));
             var batches = chunk(quoteCodes, QUOTE_BATCH_SIZE);
             quoteContext = {
                 watchCodes: watchCodes,

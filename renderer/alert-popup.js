@@ -22,9 +22,11 @@
         mascot.textContent = rising ? '🐂' : '🐻';
         alertElement.dataset.direction = rising ? 'up' : 'down';
         title.textContent = String(alert.name || alert.code || '自选股') + (rising ? ' 上涨提醒' : ' 下跌提醒');
+        if (alert.ruleName) title.textContent = String(alert.name || alert.code) + ' · ' + alert.ruleName;
         var marketChange = percent(alert.marketChangePct);
         var triggerChange = sign + alert.changePct.toFixed(2) + '%';
         detail.textContent = (marketChange ? '当前涨跌：' + marketChange + '  /  ' : '') + '涨幅幅度：' + triggerChange + '  /  现价：' + price(alert.price);
+        if (alert.ruleDetail) detail.textContent = alert.ruleDetail + ' · 现价：' + price(alert.price);
         alertElement.style.opacity = String(alert.opacity);
         alertElement.style.animation = 'none';
         void alertElement.offsetWidth;

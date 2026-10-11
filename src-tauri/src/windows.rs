@@ -1,10 +1,11 @@
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 #[cfg(windows)]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 #[cfg(windows)]
 use tauri::{
     menu::{Menu, MenuItem},
@@ -23,6 +24,7 @@ const HOLDING_W: f64 = 320.0;
 const HOLDING_H: f64 = 58.0;
 const ALERT_W: f64 = 420.0;
 const ALERT_H: f64 = 116.0;
+static ALERT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(windows)]
 const WEBVIEW2_DOWNLOAD_URL: &str =
@@ -93,6 +95,37 @@ pub struct StockAlert {
     time: Option<String>,
     opacity: Option<f64>,
     sound_enabled: Option<bool>,
+    rule_name: Option<String>,
+    rule_detail: Option<String>,
+}
+
+impl StockAlert {
+    pub fn from_price_rule(hit: &Value, settings: &Value) -> Self {
+        Self {
+            code: hit["code"].as_str().map(str::to_string),
+            name: hit["name"].as_str().map(str::to_string),
+            price: hit["price"].as_f64().unwrap_or(0.0),
+            change_pct: hit["changePct"].as_f64().unwrap_or(0.0),
+            market_change_pct: hit["changePct"].as_f64(),
+            open_price: None,
+            base_price: None,
+            base_label: None,
+            threshold: None,
+            time: hit["time"].as_str().map(str::to_string),
+            opacity: settings["opacity"].as_f64(),
+            sound_enabled: Some(
+                settings[if hit["changePct"].as_f64().unwrap_or(0.0) >= 0.0 {
+                    "bullSoundEnabled"
+                } else {
+                    "bearSoundEnabled"
+                }]
+                .as_bool()
+                .unwrap_or(true),
+            ),
+            rule_name: hit["ruleName"].as_str().map(str::to_string),
+            rule_detail: hit["detail"].as_str().map(str::to_string),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -397,16 +430,21 @@ pub async fn show_stock_alert(app: tauri::AppHandle, alert: StockAlert) -> Value
         "time": alert.time.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
         "opacity": alert.opacity.unwrap_or(1.0).clamp(0.2, 1.0),
         "soundEnabled": alert.sound_enabled.unwrap_or(true),
+        "ruleName": alert.rule_name.map(|s| s.chars().take(60).collect::<String>()),
+        "ruleDetail": alert.rule_detail.map(|s| s.chars().take(220).collect::<String>()),
     });
     if let Some(main) = app.get_webview_window("main") {
         let _ = window.set_position(screen_position(&main, ALERT_W, ALERT_H, true));
     }
     let _ = window.emit("stock-alert", payload);
     let _ = window.show();
+    let sequence = ALERT_SEQUENCE.fetch_add(1, Ordering::SeqCst) + 1;
     let weak = window.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(6)).await;
-        let _ = weak.hide();
+        if ALERT_SEQUENCE.load(Ordering::SeqCst) == sequence {
+            let _ = weak.hide();
+        }
     });
     json!({"ok": true})
 }

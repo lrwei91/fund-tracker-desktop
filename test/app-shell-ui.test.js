@@ -81,7 +81,7 @@ describe('主界面信息架构', () => {
         expect(doc.getElementById('watchlist-data-btn')).toBeNull();
         expect(doc.getElementById('data-panel')).toBeNull();
         expect(doc.getElementById('data-overlay')).toBeNull();
-        expect(settingsViews).toEqual(['appearance', 'refresh', 'alerts', 'widget', 'data', 'about']);
+        expect(settingsViews).toEqual(['appearance', 'refresh', 'alerts', 'ai', 'widget', 'data', 'about']);
 
         const dataView = doc.querySelector('[data-settings-panel="data"]');
         expect(dataView).not.toBeNull();
@@ -249,24 +249,22 @@ describe('主界面信息架构', () => {
         expect(styles).toMatch(/\.fund-board-grid\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     });
 
-    it('轮动板块位于盘中筛选左侧，两个面板初始都只提供手动入口', () => {
+    it('候选研究与价格提醒替代独立盘中筛选，板块轮动保留手动入口', () => {
         const doc = parseIndex();
         const signalViews = Array.from(doc.querySelectorAll('[data-signal-view]'))
             .map((button) => button.getAttribute('data-signal-view'));
         const rotationPanel = doc.querySelector('[data-signal-panel="rotation"]');
         const screeningPanel = doc.querySelector('[data-signal-panel="screening"]');
 
-        expect(signalViews).toEqual(['radar', 'rotation', 'screening', 'heat', 'limit']);
+        expect(signalViews).toEqual(['radar', 'rotation', 'alerts', 'heat', 'limit']);
         expect(rotationPanel).not.toBeNull();
         expect(rotationPanel.hidden).toBe(true);
         expect(rotationPanel.querySelector('#sector-rotation-run-btn').textContent).toBe('获取板块轮动');
         expect(rotationPanel.querySelector('#sector-rotation-status').textContent).toContain('不会自动获取');
         expect(rotationPanel.querySelector('#sector-rotation-results').children).toHaveLength(0);
-        expect(screeningPanel).not.toBeNull();
-        expect(screeningPanel.hidden).toBe(true);
-        expect(screeningPanel.querySelector('#intraday-screening-run-btn').textContent).toBe('获取今日推荐');
-        expect(screeningPanel.querySelector('#intraday-screening-status').textContent).toContain('不会自动获取');
-        expect(screeningPanel.querySelector('#intraday-screening-results').children).toHaveLength(0);
+        expect(screeningPanel).toBeNull();
+        expect(doc.getElementById('research-batch-run').textContent).toBe('AI 评分研究');
+        expect(doc.querySelector('[data-signal-panel="alerts"]').hidden).toBe(true);
     });
 
     it('盘中推荐 loader 只绑定到专属按钮点击', () => {

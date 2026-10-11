@@ -1,12 +1,12 @@
 mod diagnostics;
 mod endpoints;
 mod handlers;
-mod http;
+pub(crate) mod http;
 mod intraday;
 mod kline;
 mod market;
 mod minute;
-mod policy;
+pub(crate) mod policy;
 mod routes;
 mod shared_intraday;
 mod symbol;
@@ -17,6 +17,12 @@ use std::{collections::HashMap, sync::Arc};
 
 pub struct ApiState {
     gateway: Arc<http::Gateway>,
+    recent_quotes: std::sync::Mutex<HashMap<String, Value>>,
+}
+
+pub(crate) use handlers::research::snapshot as research_snapshot;
+pub(crate) fn valid_stock_code(code: &str) -> bool {
+    symbol::valid_code(code) && !symbol::is_legacy_beijing(code)
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -39,11 +45,52 @@ impl ApiState {
     pub fn new() -> Self {
         Self {
             gateway: http::Gateway::new(),
+            recent_quotes: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
     pub fn clear_diagnostics(&self) -> Result<(), String> {
         self.gateway.clear_diagnostics()
+    }
+
+    pub async fn price_alert_quotes(&self, mut codes: Vec<String>) -> Value {
+        codes.sort();
+        codes.dedup();
+        let mut data = serde_json::Map::new();
+        if let Ok(cache) = self.recent_quotes.lock() {
+            for code in &codes {
+                if let Some(quote) = cache.get(code) {
+                    let fresh = quote["quoteTimeRaw"]
+                        .as_str()
+                        .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y%m%d%H%M%S").ok())
+                        .and_then(|dt| dt.and_local_timezone(chrono_tz::Asia::Shanghai).single())
+                        .is_some_and(|at| {
+                            let age =
+                                (chrono::Utc::now() - at.with_timezone(&chrono::Utc)).num_seconds();
+                            (0..=30).contains(&age)
+                        });
+                    if fresh {
+                        data.insert(code.clone(), quote.clone());
+                    }
+                }
+            }
+        }
+        let missing: Vec<_> = codes
+            .into_iter()
+            .filter(|code| !data.contains_key(code))
+            .collect();
+        if !missing.is_empty() {
+            let result = routes::dispatch(
+                self.gateway.clone(),
+                "stock",
+                HashMap::from([("codes".into(), missing.join(","))]),
+            )
+            .await;
+            if let Some(rows) = result["data"].as_object() {
+                data.extend(rows.clone());
+            }
+        }
+        serde_json::json!({"success":!data.is_empty(),"data":data})
     }
 
     pub fn diagnostics(&self) -> Value {
@@ -63,27 +110,54 @@ pub fn diagnostics_clear(state: tauri::State<'_, ApiState>) -> Result<(), String
 
 #[tauri::command]
 pub async fn fetch_data(
+    window: tauri::WebviewWindow,
     state: tauri::State<'_, ApiState>,
     config: tauri::State<'_, crate::config::ConfigStore>,
+    research: tauri::State<'_, crate::research_ai::ResearchAi>,
     path: String,
     query: HashMap<String, String>,
     options: Option<FetchOptions>,
 ) -> Result<Value, String> {
     let gateway = state.gateway.clone();
+    let route = path.trim_start_matches('/');
+    if matches!(route, "stock-ai-research" | "price-alerts") {
+        if window.label() != "main" {
+            return Err("该功能仅允许主窗口调用".into());
+        }
+        return Ok(if route == "price-alerts" {
+            crate::price_alerts::handle(&config, query)
+        } else {
+            crate::research_ai::handle(gateway.scoped(route), &config, &research, query).await
+        });
+    }
     if path.trim_start_matches('/') == "fund-intraday" {
         let scoped = gateway.scoped("fund-intraday");
         let mut value = shared_intraday::fetch(scoped.clone(), &config, query).await;
         policy::finalize_response(&mut value, scoped.trace_id());
         return Ok(value);
     }
-    Ok(routes::dispatch_with_options(
+    let result = routes::dispatch_with_options(
         gateway,
         &path,
         query,
         parse_cache_mode(options.as_ref()),
         options.and_then(|value| value.cycle_id),
     )
-    .await)
+    .await;
+    if route == "stock" {
+        if let (Some(rows), Ok(mut cache)) =
+            (result["data"].as_object(), state.recent_quotes.lock())
+        {
+            cache.extend(
+                rows.iter()
+                    .map(|(code, quote)| (code.clone(), quote.clone())),
+            );
+            if cache.len() > 1000 {
+                cache.clear();
+            }
+        }
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -159,6 +233,8 @@ mod tests {
             ),
             ("stock-kline", vec![("code", "600519"), ("days", "120")]),
             ("stock-minute", vec![("code", "600519"), ("count", "30")]),
+            ("stock-fundamentals", vec![("code", "600519")]),
+            ("stock-research", vec![("code", "600519")]),
             ("opportunity-radar", vec![("limit", "3")]),
             ("market-warnings", vec![("codes", "600664,600519")]),
             ("sector-rotation", vec![]),
@@ -215,6 +291,14 @@ mod tests {
                     .as_array()
                     .is_some_and(|rows| !rows.is_empty()),
                 "stock-risk" => result["data"]["announcements"]["available"] == true,
+                "stock-fundamentals" => {
+                    result["data"]["available"] == true
+                        && result["data"]["periods"][0]["disclosedAt"].is_string()
+                }
+                "stock-research" => {
+                    result["data"]["quant"]["score"].is_number()
+                        && result["data"]["quote"]["priceValue"].is_number()
+                }
                 "fund-flow-120d" => result["data"]["items"][0]["available"] == true,
                 "stock-kline" => result["data"]["bars"]
                     .as_array()

@@ -191,6 +191,7 @@ type EndpointResponseCache = Arc<Mutex<HashMap<String, EndpointCacheEntry>>>;
 
 pub struct Gateway {
     client: Client,
+    credential_client: Client,
     inflight: Arc<AsyncMutex<HashMap<String, SharedRequest>>>,
     cache: RawResponseCache,
     endpoint_cache: EndpointResponseCache,
@@ -220,6 +221,11 @@ impl Gateway {
                 }))
                 .build()
                 .expect("HTTP client"),
+            credential_client: Client::builder()
+                .user_agent(BROWSER_USER_AGENT)
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("credential HTTP client"),
             inflight: Arc::new(AsyncMutex::new(HashMap::new())),
             cache: Arc::new(Mutex::new(HashMap::new())),
             endpoint_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -239,6 +245,7 @@ impl Gateway {
     pub fn scoped(self: &Arc<Self>, route: &str) -> Arc<Self> {
         Arc::new(Self {
             client: self.client.clone(),
+            credential_client: self.credential_client.clone(),
             inflight: self.inflight.clone(),
             cache: self.cache.clone(),
             endpoint_cache: self.endpoint_cache.clone(),
@@ -262,6 +269,7 @@ impl Gateway {
     ) -> Arc<Self> {
         Arc::new(Self {
             client: self.client.clone(),
+            credential_client: self.credential_client.clone(),
             inflight: self.inflight.clone(),
             cache: self.cache.clone(),
             endpoint_cache: self.endpoint_cache.clone(),
@@ -527,8 +535,12 @@ impl Gateway {
                     headers.insert(name, value);
                 }
             }
-            let mut request = self
-                .client
+            let client = if spec.allowed_host.is_some() {
+                &self.credential_client
+            } else {
+                &self.client
+            };
+            let mut request = client
                 .request(spec.method.clone(), &spec.url)
                 .headers(headers)
                 .timeout(spec.timeout);
@@ -771,6 +783,34 @@ mod tests {
         assert!(validate_upstream_url("https://push2.eastmoney.com:8443/api", None).is_err());
         assert!(validate_upstream_url("https://evil.example/api", None).is_err());
         assert!(validate_upstream_url("https://127.0.0.1/api", None).is_err());
+        assert!(
+            validate_upstream_url("https://api.example.com/v1", Some("api.example.com")).is_ok()
+        );
+        assert!(
+            validate_upstream_url("https://evil.example.com/v1", Some("api.example.com")).is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn credential_requests_never_follow_redirects() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0; 4096];
+            let _ = stream.read(&mut buffer);
+            stream.write_all(b"HTTP/1.1 307 Temporary Redirect\r\nLocation: https://qt.gtimg.cn/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        });
+        let error = Gateway::new()
+            .bytes(
+                RequestSpec::get(format!("http://{address}/fixture"))
+                    .allow_host("127.0.0.1")
+                    .header("authorization", "Bearer synthetic-test-key")
+                    .cache(0),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.status, Some(307));
     }
 
     #[tokio::test]

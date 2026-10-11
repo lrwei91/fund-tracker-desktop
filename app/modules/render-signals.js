@@ -548,7 +548,7 @@
         var riskStatus = risk.status || 'watch';
         var components = item.components || {};
         var availableComponentCount = Object.keys(components).filter(function (key) {
-            return Number.isFinite(Number(components[key]));
+            return toFiniteNumber(components[key]) !== null;
         }).length;
         var visibleScore = availableComponentCount >= 3 ? item.score : null;
         var scoreCls = scoreClass(visibleScore);
@@ -581,7 +581,7 @@
                 '</div>' +
                 '<div class="opportunity-radar-score ' + scoreCls + '">' +
                     '<strong>' + utils.escapeHtml(visibleScore == null ? '--' : String(visibleScore)) + '</strong>' +
-                    '<span>综合分</span>' +
+                    '<span>初筛分</span>' +
                 '</div>' +
                 '<div class="opportunity-radar-pct ' + pctCls + '">' + utils.escapeHtml(pct) + '</div>' +
                 '<div class="opportunity-radar-risk ' + utils.escapeHtml(riskStatus) + '">' + utils.escapeHtml(risk.label || '--') + '</div>' +

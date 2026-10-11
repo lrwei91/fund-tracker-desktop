@@ -47,4 +47,11 @@ describe('桌面提醒卡片', () => {
         expect(document.getElementById('alert-detail').textContent).toBe('当前涨跌：-0.75%  /  涨幅幅度：-2.00%  /  现价：9.80');
         expect(play).not.toHaveBeenCalled();
     });
+
+    it('规则提醒展示实际阈值而非相对涨幅提示', () => {
+        receiveAlert({ name: '测试股', code: '600000', price: 10.5, changePct: 0, ruleName: '回到观察价', ruleDetail: '价格 >= 10', soundEnabled: false });
+        expect(document.getElementById('alert-title').textContent).toContain('回到观察价');
+        expect(document.getElementById('alert-detail').textContent).toContain('价格 >= 10');
+        expect(document.getElementById('alert-detail').textContent).toContain('10.50');
+    });
 });

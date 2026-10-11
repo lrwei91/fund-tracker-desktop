@@ -20,6 +20,10 @@ const KEYS: &[&str] = &[
     "fund_tracker_limit_up_tab",
     "fund_tracker_holding_clown_mode",
     "fund_tracker_fund_watchlist",
+    "fund_tracker_ai_settings",
+    "fund_tracker_price_alerts",
+    "fund_tracker_research_history",
+    "fund_tracker_update_settings",
 ];
 pub const SENSITIVE_KEYS: &[&str] = &[
     "fund_tracker_watchlist_cost",
@@ -38,6 +42,10 @@ const JSON_KEYS: &[&str] = &[
     "fund_tracker_watchlist",
     "fund_tracker_watchlist_tabs",
     "fund_tracker_fund_watchlist",
+    "fund_tracker_ai_settings",
+    "fund_tracker_price_alerts",
+    "fund_tracker_research_history",
+    "fund_tracker_update_settings",
 ];
 
 pub struct ConfigStore {
@@ -51,6 +59,33 @@ fn empty() -> Value {
 }
 
 impl ConfigStore {
+    pub fn data_value(&self, key: &str) -> Value {
+        self.value
+            .lock()
+            .ok()
+            .and_then(|value| value.get("data")?.get(key).cloned())
+            .unwrap_or(Value::Null)
+    }
+
+    // Native background jobs and UI mutations share one atomic transaction.
+    pub fn update_data(
+        &self,
+        key: &str,
+        update: impl FnOnce(Value) -> Result<Value, String>,
+    ) -> Result<Value, String> {
+        if !JSON_KEYS.contains(&key) || self.load_error.is_some() {
+            return Err("配置不可写，未覆盖原文件".into());
+        }
+        let mut current = self.value.lock().map_err(|_| "配置锁不可用")?;
+        let mut candidate = current.clone();
+        let next = update(candidate["data"].get(key).cloned().unwrap_or(Value::Null))?;
+        candidate["data"][key] = next.clone();
+        candidate["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
+        persist(&self.path, &candidate)?;
+        *current = candidate;
+        Ok(next)
+    }
+
     pub fn product_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(std::env::temp_dir)
@@ -222,6 +257,40 @@ fn persist(path: &PathBuf, value: &Value) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_transactions_preserve_other_keys_and_rollback_failures() {
+        let path = std::env::temp_dir().join(format!("fund-tracker-{}.json", uuid::Uuid::new_v4()));
+        let store = std::sync::Arc::new(ConfigStore::new(path.clone()));
+        let jobs: Vec<_> = ["fund_tracker_price_alerts", "fund_tracker_research_history"]
+            .into_iter()
+            .map(|key| {
+                let store = store.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..10 {
+                        store
+                            .update_data(key, |value| {
+                                Ok(json!({"count":value["count"].as_u64().unwrap_or(0)+1}))
+                            })
+                            .unwrap();
+                    }
+                })
+            })
+            .collect();
+        for job in jobs {
+            job.join().unwrap();
+        }
+        assert_eq!(store.data_value("fund_tracker_price_alerts")["count"], 10);
+        assert_eq!(
+            store.data_value("fund_tracker_research_history")["count"],
+            10
+        );
+        let before = fs::read_to_string(&path).unwrap();
+        assert!(store
+            .update_data("fund_tracker_price_alerts", |_| Err("invalid".into()))
+            .is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+        fs::remove_file(path).unwrap();
+    }
     #[test]
     fn patches_and_deletes_config() {
         let path = std::env::temp_dir().join(format!("fund-tracker-{}.json", uuid::Uuid::new_v4()));

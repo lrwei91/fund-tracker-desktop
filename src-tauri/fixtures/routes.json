@@ -162,5 +162,80 @@
         }
       }
     }
+  },
+  "stock-fundamentals": {
+    "success": true,
+    "data": {
+      "available": true,
+      "source": "eastmoney",
+      "sourceLabel": "东方财富财务指标",
+      "periods": [
+        {
+          "reportDate": "2026-06-30",
+          "disclosedAt": "2026-08-15",
+          "profitGrowth": 12,
+          "roe": 8,
+          "revenue": null
+        }
+      ]
+    },
+    "meta": {
+      "stale": false,
+      "degraded": false
+    }
+  },
+  "stock-research": {
+    "success": true,
+    "data": {
+      "code": "600000",
+      "quote": {
+        "code": "600000",
+        "name": "浦发银行",
+        "price": "10.50",
+        "priceValue": 10.5,
+        "change": 0.2,
+        "changePercent": 1.94,
+        "openPrice": 10.3
+      },
+      "quant": {
+        "score": null,
+        "coverage": 16,
+        "factors": [],
+        "missingSources": [
+          "technical",
+          "fund",
+          "news",
+          "risk",
+          "financial"
+        ]
+      }
+    },
+    "meta": {
+      "stale": false,
+      "degraded": true
+    }
+  },
+  "stock-ai-research": {
+    "success": true,
+    "data": {
+      "items": []
+    },
+    "meta": {
+      "stale": false,
+      "degraded": false
+    }
+  },
+  "price-alerts": {
+    "success": true,
+    "data": {
+      "rules": [],
+      "history": [],
+      "lastCheckedAt": null,
+      "status": "idle"
+    },
+    "meta": {
+      "stale": false,
+      "degraded": false
+    }
   }
 }

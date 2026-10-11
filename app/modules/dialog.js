@@ -10,10 +10,16 @@
     function focusable(panel) {
         return Array.from(panel.querySelectorAll([
             'a[href]', 'button:not([disabled])', 'input:not([disabled])',
-            'select:not([disabled])', 'textarea:not([disabled])',
+            'select:not([disabled])', 'textarea:not([disabled])', 'summary',
             '[tabindex]:not([tabindex="-1"])',
         ].join(','))).filter(function (element) {
-            return !element.hidden && element.getAttribute('aria-hidden') !== 'true';
+            if (element.getAttribute('aria-hidden') === 'true') return false;
+            for (var parent = element; parent; parent = parent.parentElement) {
+                if (parent.hidden || getComputedStyle(parent).display === 'none') return false;
+                if (parent.tagName === 'DETAILS' && !parent.open && !(element.tagName === 'SUMMARY' && element.parentElement === parent)) return false;
+                if (parent === panel) break;
+            }
+            return true;
         });
     }
 

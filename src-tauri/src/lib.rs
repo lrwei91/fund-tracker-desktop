@@ -1,5 +1,8 @@
 mod api;
 mod config;
+mod price_alerts;
+mod research_ai;
+mod updates;
 mod windows;
 
 use config::ConfigStore;
@@ -69,10 +72,15 @@ pub fn run() {
         },
     ));
     let app = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(store)
         .manage(api::ApiState::new())
+        .manage(research_ai::ResearchAi::default())
+        .manage(updates::Updates::default())
         .setup(|app| {
             windows::create_auxiliary_windows(app.handle())?;
+            price_alerts::start(app.handle().clone());
+            updates::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -89,6 +97,13 @@ pub fn run() {
             windows::holding_widget_sync,
             windows::show_stock_alert,
             api::fetch_data,
+            research_ai::ai_settings_status,
+            research_ai::ai_settings_save,
+            updates::update_status,
+            updates::update_preferences,
+            updates::update_check,
+            updates::update_download,
+            updates::update_install,
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Tauri application");
