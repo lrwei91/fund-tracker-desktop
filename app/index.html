@@ -476,14 +476,13 @@
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="refresh">刷新</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="alerts">告警</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="ai">AI 服务</button>
-            <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="widget">浮窗</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="data">数据</button>
             <button class="settings-nav-btn" type="button" role="tab" aria-selected="false" data-settings-view="about">关于</button>
         </div>
         <section class="settings-view active" data-settings-panel="appearance">
         <div class="settings-group-intro">
             <strong>应用外观</strong>
-            <span>主窗口、持仓浮窗和桌面告警使用同一套显示模式。</span>
+            <span>主窗口、持仓浮窗和桌面告警使用同一套显示模式；浮窗的价格配色与不透明度在此单独设置。</span>
         </div>
         <div class="settings-row">
             <label for="color-mode-select">显示模式</label>
@@ -495,6 +494,21 @@
         </div>
         <div class="settings-appearance-preview" aria-hidden="true">
             <span></span><span></span><span></span>
+        </div>
+        <div class="settings-section-label">持仓浮窗</div>
+        <div class="settings-row">
+            <label>价格颜色</label>
+            <select id="holding-color-mode">
+                <option value="market" selected>红绿显示</option>
+                <option value="white">单色显示</option>
+            </select>
+        </div>
+        <div class="settings-row settings-row-stacked">
+            <div class="settings-row-title">
+                <label>不透明度</label>
+                <span class="settings-range-value" id="holding-opacity-value">100%</span>
+            </div>
+            <input type="range" id="holding-opacity-input" min="0" max="100" step="1" value="100" class="settings-range-input">
         </div>
         </section>
         <section class="settings-view" data-settings-panel="refresh" hidden>
@@ -590,26 +604,6 @@
         <div class="alert-preview-actions">
             <button type="button" class="data-action-btn secondary" id="preview-bull-alert">测试上涨提醒</button>
             <button type="button" class="data-action-btn secondary" id="preview-bear-alert">测试下跌提醒</button>
-        </div>
-        </section>
-        <section class="settings-view" data-settings-panel="widget" hidden>
-        <div class="settings-group-intro">
-            <strong>桌面浮窗</strong>
-            <span>控制持仓浮窗的价格配色和整体透明度。</span>
-        </div>
-        <div class="settings-row">
-            <label>价格颜色</label>
-            <select id="holding-color-mode">
-                <option value="market" selected>红绿显示</option>
-                <option value="white">单色显示</option>
-            </select>
-        </div>
-        <div class="settings-row settings-row-stacked">
-            <div class="settings-row-title">
-                <label>不透明度</label>
-                <span class="settings-range-value" id="holding-opacity-value">100%</span>
-            </div>
-            <input type="range" id="holding-opacity-input" min="0" max="100" step="1" value="100" class="settings-range-input">
         </div>
         </section>
         <section class="settings-view" data-settings-panel="data" hidden>

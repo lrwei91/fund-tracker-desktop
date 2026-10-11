@@ -107,7 +107,14 @@ describe('主界面信息架构', () => {
         expect(doc.getElementById('watchlist-data-btn')).toBeNull();
         expect(doc.getElementById('data-panel')).toBeNull();
         expect(doc.getElementById('data-overlay')).toBeNull();
-        expect(settingsViews).toEqual(['appearance', 'refresh', 'alerts', 'ai', 'widget', 'data', 'about']);
+        expect(settingsViews).toEqual(['appearance', 'refresh', 'alerts', 'ai', 'data', 'about']);
+        expect(doc.querySelector('[data-settings-view="widget"]')).toBeNull();
+        expect(doc.querySelector('[data-settings-panel="widget"]')).toBeNull();
+
+        const appearanceView = doc.querySelector('[data-settings-panel="appearance"]');
+        expect(appearanceView.querySelector('#color-mode-select')).not.toBeNull();
+        expect(appearanceView.querySelector('#holding-color-mode')).not.toBeNull();
+        expect(appearanceView.querySelector('#holding-opacity-input')).not.toBeNull();
 
         const dataView = doc.querySelector('[data-settings-panel="data"]');
         expect(dataView).not.toBeNull();

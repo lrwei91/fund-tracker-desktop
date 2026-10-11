@@ -3136,7 +3136,6 @@ html[data-theme="dark"] .electron-app {
 
 .electron-app .stock-analysis-section,
 .electron-app .stock-research-section,
-.electron-app .stock-risk-block,
 .electron-app .stock-minute-card,
 .electron-app .stock-cost-editor,
 .electron-app .stock-fund-summary {
@@ -3148,8 +3147,7 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .stock-analysis-section:first-child,
-.electron-app .stock-research-section:first-child,
-.electron-app .stock-risk-block:first-child {
+.electron-app .stock-research-section:first-child {
     margin-top: 0;
 }
 
@@ -3258,7 +3256,6 @@ html[data-theme="dark"] .electron-app {
 .electron-app .stock-research-reason,
 .electron-app .stock-research-condition,
 .electron-app .stock-news-list li,
-.electron-app .stock-risk-row,
 .electron-app .stock-fund-history-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -3272,15 +3269,13 @@ html[data-theme="dark"] .electron-app {
 
 .electron-app .stock-signal-row span,
 .electron-app .stock-research-reason span,
-.electron-app .stock-news-list span,
-.electron-app .stock-risk-row span {
+.electron-app .stock-news-list span {
     min-width: 0;
 }
 
 .electron-app .stock-signal-row em,
 .electron-app .stock-research-reason em,
-.electron-app .stock-news-list em,
-.electron-app .stock-risk-row em {
+.electron-app .stock-news-list em {
     color: var(--text-tertiary);
     font-style: normal;
     text-align: right;
@@ -3378,7 +3373,6 @@ html[data-theme="dark"] .electron-app {
     color: var(--text-tertiary);
 }
 
-.electron-app .stock-risk-pdf,
 .electron-app .stock-cost-save-btn {
     min-height: 34px;
     padding: 0 11px;
@@ -3389,20 +3383,6 @@ html[data-theme="dark"] .electron-app {
     font-size: 12px;
     font-weight: 700;
     cursor: pointer;
-}
-
-.electron-app .stock-lockup-metrics {
-    text-align: right;
-}
-
-.electron-app .stock-lockup-metrics b,
-.electron-app .stock-lockup-metrics small {
-    display: block;
-}
-
-.electron-app .stock-lockup-metrics small {
-    margin-top: 3px;
-    color: var(--amber);
 }
 
 .electron-app .stock-cost-editor-row {
