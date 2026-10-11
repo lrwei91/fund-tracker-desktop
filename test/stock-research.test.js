@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 describe('统一研究与价格提醒', () => {
     beforeEach(async () => {
         vi.resetModules();
-        localStorage.clear();
+        // Node 26 的同名全局不是浏览器存储，明确使用测试 DOM 的 Storage。
+        vi.stubGlobal('localStorage', globalThis.jsdom.window.localStorage);
+        window.localStorage.clear();
         document.body.innerHTML = '<div id="detail"></div><div id="alerts"></div>';
         delete window.AppRefreshCoordinator;
         await import('../app/modules/utils.js');
@@ -105,7 +107,7 @@ describe('统一研究与价格提醒', () => {
             { field: 'price', op: '>=', value: 10 },
             { field: 'volumeRatio', op: '>=', value: 2 },
         ]);
-        expect(localStorage.length).toBe(0);
+        expect(window.localStorage.length).toBe(0);
     });
 
     it('详情里保存规则后同步提醒管理页', async () => {
@@ -148,6 +150,6 @@ describe('统一研究与价格提醒', () => {
             .dispatchEvent(new Event('submit', { cancelable: true }));
         await vi.waitFor(() => expect(window.shell.aiSettingsSave).toHaveBeenCalledOnce());
         expect(document.getElementById('ai-api-key').value).toBe('');
-        expect(localStorage.length).toBe(0);
+        expect(window.localStorage.length).toBe(0);
     });
 });
