@@ -362,7 +362,9 @@
                     return;
                 }
             } catch (error) {
-                status.textContent = error.message;
+                status.textContent =
+                    (typeof error === 'string' ? error : error && error.message) ||
+                    '读取 AI 服务配置失败';
                 return;
             }
         }
@@ -417,7 +419,9 @@
                     ? '服务已配置，密钥保存在系统凭据库。'
                     : '尚未配置完整的 AI 服务。';
             } catch (error) {
-                status.textContent = error.message;
+                status.textContent =
+                    (typeof error === 'string' ? error : error && error.message) ||
+                    '读取 AI 服务配置失败';
             }
         }
         form.addEventListener('submit', async function (event) {
@@ -434,7 +438,8 @@
                 );
                 await refresh();
             } catch (error) {
-                status.textContent = error.message || '保存失败';
+                status.textContent =
+                    (typeof error === 'string' ? error : error && error.message) || '保存失败';
             } finally {
                 apiKey = '';
                 button.disabled = false;
@@ -449,7 +454,8 @@
                 );
                 await refresh();
             } catch (error) {
-                status.textContent = error.message || '删除密钥失败';
+                status.textContent =
+                    (typeof error === 'string' ? error : error && error.message) || '删除密钥失败';
             }
         });
         await refresh();

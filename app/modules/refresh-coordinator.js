@@ -211,7 +211,7 @@
         };
     }
 
-    function runQueue(tasks) {
+    function runQueue(tasks, onResult) {
         var index = 0;
         var active = 0;
         var failures = [];
@@ -228,6 +228,7 @@
                     Promise.resolve().then(task.run).then(function (result) {
                         if (result) results.push(result);
                         if (result && result.type === 'quotes' && result.error) failures.push(result.error);
+                        if (result && onResult) onResult(result, results);
                     }).catch(function (error) {
                         failures.push(error);
                     }).finally(function () {
@@ -250,10 +251,14 @@
         var batchLabel = plan.quoteContext && plan.quoteContext.batchCount > 1 ? ' · 行情分批' : '';
         statusText('刷新中 · ' + tasks.length + ' 项' + batchLabel, true);
         var startedAt = now();
-        var promise = runQueue(tasks).then(function (queue) {
-            if (id === cycleId && plan.quoteContext && plan.quoteContext.batchCount) {
-                applyQuoteResults(plan.quoteContext, queue.results, id);
+        var quoteBatchesReceived = 0;
+        var promise = runQueue(tasks, function (result, results) {
+            if (result.type !== 'quotes' || !plan.quoteContext) return;
+            quoteBatchesReceived += 1;
+            if (quoteBatchesReceived === plan.quoteContext.batchCount) {
+                applyQuoteResults(plan.quoteContext, results, id);
             }
+        }).then(function (queue) {
             var failures = queue.failures;
             var elapsed = now() - startedAt;
             if (failures.length) {

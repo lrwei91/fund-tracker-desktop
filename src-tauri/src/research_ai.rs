@@ -1,7 +1,7 @@
 use crate::{
     api::{
         self,
-        http::{Gateway, RequestSpec},
+        http::{is_loopback_url, Gateway, RequestSpec},
         policy,
     },
     config::ConfigStore,
@@ -43,18 +43,22 @@ impl Default for ResearchAi {
 fn validate_settings(mut settings: Settings) -> Result<Settings, String> {
     let mut url = url::Url::parse(settings.base_url.trim()).map_err(|_| "模型 API 地址无效")?;
     let host = url.host_str().ok_or("模型 API 地址缺少域名")?;
-    if url.scheme() != "https"
-        || url.port().is_some()
-        || host.parse::<std::net::IpAddr>().is_ok()
-        || !host.contains('.')
-        || host.ends_with(".local")
-        || host.ends_with(".localhost")
+    let loopback = is_loopback_url(&url) && matches!(url.scheme(), "http" | "https");
+    let public_https = url.scheme() == "https"
+        && url.port().is_none()
+        && host.parse::<std::net::IpAddr>().is_err()
+        && host.contains('.')
+        && !host.ends_with(".local")
+        && !host.ends_with(".localhost");
+    if !(loopback || public_https)
         || !url.username().is_empty()
         || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err("模型 API 必须使用无凭据、无参数的公网 HTTPS 地址".into());
+        return Err(
+            "模型 API 须为公网 HTTPS 或本机 HTTP/HTTPS 地址，不能包含凭据、参数或片段".into(),
+        );
     }
     url.set_path(url.path().trim_end_matches('/').to_owned().as_str());
     settings.base_url = url.to_string().trim_end_matches('/').to_string();
@@ -363,11 +367,15 @@ mod tests {
     fn rejects_unsafe_provider_endpoints() {
         for url in [
             "http://api.example.com/v1",
-            "https://127.0.0.1/v1",
             "https://api.example.com:8443/v1",
             "https://user:pass@api.example.com/v1",
             "https://api.example.com/v1?key=x",
-            "https://localhost/v1",
+            "http://192.168.1.2:8788/v1",
+            "http://0.0.0.0:8788/v1",
+            "http://localhost.example.com:8788/v1",
+            "http://127.0.0.1:8788/v1?key=x",
+            "http://user:pass@localhost:8788/v1",
+            "http://[::1]:8788/v1#fragment",
         ] {
             assert!(validate_settings(Settings {
                 base_url: url.into(),
@@ -380,6 +388,23 @@ mod tests {
             model: "model".into()
         })
         .is_ok());
+    }
+    #[test]
+    fn accepts_loopback_provider_endpoints() {
+        for base in [
+            "http://127.0.0.1:8788/v1",
+            "http://localhost:8788/v1",
+            "http://[::1]:8788/v1",
+            "https://127.0.0.1:8788/v1",
+        ] {
+            let settings = validate_settings(Settings {
+                base_url: format!(" {base}/ "),
+                model: " model ".into(),
+            })
+            .unwrap();
+            assert_eq!(settings.base_url, base);
+            assert_eq!(settings.model, "model");
+        }
     }
     #[test]
     fn rejects_invented_sources_and_abstains_without_a_score() {

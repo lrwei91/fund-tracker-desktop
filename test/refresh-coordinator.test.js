@@ -122,6 +122,56 @@ describe('AppRefreshCoordinator', () => {
         expect(window.AppWatchlist.applyWatchQuoteBatch.mock.calls[0][1]).toHaveLength(51);
     });
 
+    it.each([false, true])('行情收齐后不等待慢速板块，失败批次=%s 时仍只回填一次', async (failed) => {
+        const watchCodes = makeCodes(51);
+        window.AppWatchlist.getAllWatchCodes = () => watchCodes;
+        const quotes = [];
+        window.AppDataClient.fetchData.mockImplementation(
+            () =>
+                new Promise((resolve, reject) => {
+                    quotes.push({ resolve, reject });
+                }),
+        );
+        let resolveSector;
+        window.AppMarket.loadSectorData.mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    resolveSector = resolve;
+                }),
+        );
+        await import('../app/modules/refresh-coordinator.js');
+        const refresh = window.AppRefreshCoordinator.refreshAll({
+            skipLimitUp: true,
+            skipOpportunity: true,
+        });
+        await vi.waitFor(() => expect(quotes).toHaveLength(2));
+        quotes[0].resolve({
+            success: true,
+            data: { [watchCodes[0]]: { priceValue: 10 } },
+            meta: {},
+        });
+        await vi.waitFor(() => expect(resolveSector).toBeTypeOf('function'));
+        expect(window.AppWatchlist.applyWatchQuoteBatch).not.toHaveBeenCalled();
+        if (failed) quotes[1].reject(new Error('second batch unavailable'));
+        else quotes[1].resolve({ success: true, data: {}, meta: {} });
+        await vi.waitFor(() =>
+            expect(window.AppWatchlist.applyWatchQuoteBatch).toHaveBeenCalledOnce(),
+        );
+        expect(window.AppRefreshCoordinator.isRunning()).toBe(true);
+        expect(window.AppWatchlist.applyWatchQuoteBatch).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: { [watchCodes[0]]: { priceValue: 10 } },
+                meta: expect.objectContaining({ degraded: failed }),
+            }),
+            watchCodes,
+        );
+        expect(window.shell.syncHoldingWidget).toHaveBeenCalledOnce();
+        resolveSector();
+        const result = await refresh;
+        expect(result.failures).toHaveLength(failed ? 1 : 0);
+        expect(window.AppWatchlist.applyWatchQuoteBatch).toHaveBeenCalledOnce();
+    });
+
     it('同一周期重复点击复用在途 Promise，不重叠刷新', async () => {
         let resolveQuotes;
         window.AppDataClient.fetchData.mockReturnValueOnce(new Promise((resolve) => {

@@ -654,11 +654,27 @@ impl Gateway {
     }
 }
 
+pub(crate) fn is_loopback_url(url: &url::Url) -> bool {
+    matches!(url.host(), Some(url::Host::Domain("localhost")))
+        || matches!(url.host(), Some(url::Host::Ipv4(ip)) if ip.is_loopback())
+        || matches!(url.host(), Some(url::Host::Ipv6(ip)) if ip.is_loopback())
+}
+
 fn validate_upstream_url(raw: &str, allowed_host: Option<&str>) -> Result<String, ApiError> {
     let parsed = url::Url::parse(raw).map_err(|_| ApiError::new("上游地址无效"))?;
     let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    if !parsed.username().is_empty() || parsed.password().is_some() || parsed.fragment().is_some() {
+        return Err(ApiError::new("上游地址包含凭据或片段"));
+    }
+    // Only an explicitly selected provider can use loopback in production.
+    if matches!(parsed.scheme(), "http" | "https")
+        && is_loopback_url(&parsed)
+        && allowed_host == Some(host.as_str())
+    {
+        return Ok(host);
+    }
     #[cfg(any(test, debug_assertions))]
-    if parsed.scheme() == "http" && matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1") {
+    if parsed.scheme() == "http" && is_loopback_url(&parsed) {
         return Ok(host);
     }
     if parsed.scheme() != "https" || parsed.port().is_some() {
@@ -784,6 +800,27 @@ mod tests {
         assert!(
             validate_upstream_url("https://evil.example.com/v1", Some("api.example.com")).is_err()
         );
+    }
+
+    #[test]
+    fn explicitly_selected_loopback_providers_allow_custom_ports() {
+        for (url, host) in [
+            ("http://127.0.0.1:8788/v1", "127.0.0.1"),
+            ("http://localhost:8788/v1", "localhost"),
+            ("http://[::1]:8788/v1", "[::1]"),
+            ("https://127.0.0.1:8788/v1", "127.0.0.1"),
+        ] {
+            assert_eq!(validate_upstream_url(url, Some(host)).unwrap(), host);
+        }
+        for url in [
+            "http://192.168.1.2:8788/v1",
+            "http://0.0.0.0:8788/v1",
+            "http://user:pass@127.0.0.1:8788/v1",
+            "http://127.0.0.1:8788/v1#fragment",
+        ] {
+            assert!(validate_upstream_url(url, Some("127.0.0.1")).is_err());
+        }
+        assert!(validate_upstream_url("https://127.0.0.1:8788/v1", None).is_err());
     }
 
     #[tokio::test]

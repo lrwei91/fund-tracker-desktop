@@ -152,4 +152,32 @@ describe('统一研究与价格提醒', () => {
         expect(document.getElementById('ai-api-key').value).toBe('');
         expect(window.localStorage.length).toBe(0);
     });
+    it.each(['save', 'clear', 'status'])('AI 设置 %s 显示原生命令的文字错误', async (action) => {
+        document.body.innerHTML =
+            '<form id="ai-settings-form"><input id="ai-base-url"><input id="ai-model"><input id="ai-api-key"><button type="submit">保存</button></form><button id="ai-clear-key"></button><p id="ai-settings-status"></p>';
+        const failure = '模型 API 地址无效';
+        window.shell = {
+            aiSettingsStatus: vi.fn(async () => {
+                if (action === 'status') throw failure;
+                return { configured: false };
+            }),
+            aiSettingsSave: vi.fn(async () => {
+                throw failure;
+            }),
+        };
+        window.AppResearch.init();
+        const status = document.getElementById('ai-settings-status');
+        await vi.waitFor(() => expect(status.textContent).not.toBe(''));
+        if (action === 'save') {
+            document.getElementById('ai-base-url').value = 'http://127.0.0.1:8788/v1';
+            document.getElementById('ai-model').value = 'test-model';
+            document
+                .getElementById('ai-settings-form')
+                .dispatchEvent(new Event('submit', { cancelable: true }));
+        } else if (action === 'clear') {
+            document.getElementById('ai-clear-key').click();
+        }
+        await vi.waitFor(() => expect(status.textContent).toBe(failure));
+        expect(document.querySelector('[type="submit"]').disabled).toBe(false);
+    });
 });
