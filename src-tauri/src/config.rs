@@ -19,7 +19,6 @@ const KEYS: &[&str] = &[
     "fund_tracker_hot_rank_source",
     "fund_tracker_limit_up_tab",
     "fund_tracker_holding_clown_mode",
-    "fund_tracker_fund_watchlist",
     "fund_tracker_ai_settings",
     "fund_tracker_price_alerts",
     "fund_tracker_research_history",
@@ -28,7 +27,6 @@ const KEYS: &[&str] = &[
 pub const SENSITIVE_KEYS: &[&str] = &[
     "fund_tracker_watchlist_cost",
     "fund_tracker_watchlist_remarks",
-    "fundIntradayCollectorToken",
 ];
 const STORAGE_ENCODING: &str = "utf8-json";
 const JSON_KEYS: &[&str] = &[
@@ -41,7 +39,6 @@ const JSON_KEYS: &[&str] = &[
     "fund_tracker_watchlist_remarks",
     "fund_tracker_watchlist",
     "fund_tracker_watchlist_tabs",
-    "fund_tracker_fund_watchlist",
     "fund_tracker_ai_settings",
     "fund_tracker_price_alerts",
     "fund_tracker_research_history",
@@ -167,40 +164,6 @@ impl ConfigStore {
         persist(&self.path, &candidate)?;
         *value = candidate;
         Ok(snapshot(&value))
-    }
-
-    pub fn private_collector_token(&self) -> Option<String> {
-        self.value
-            .lock()
-            .ok()?
-            .get("private")?
-            .get("fundIntradayCollectorToken")?
-            .as_str()
-            .filter(|token| !token.is_empty())
-            .map(str::to_owned)
-    }
-
-    pub fn set_private_collector_token(&self, token: &str) -> Result<(), String> {
-        if !SENSITIVE_KEYS.contains(&"fundIntradayCollectorToken") {
-            return Err("私有配置键未登记".to_string());
-        }
-        if self.load_error.is_some() {
-            return Err("配置文件损坏，未覆盖原文件；请修复配置文件后重试".to_string());
-        }
-        let mut value = self.value.lock().map_err(|_| "配置锁不可用".to_string())?;
-        let mut candidate = value.clone();
-        if !candidate.get("private").is_some_and(Value::is_object) {
-            candidate["private"] = json!({});
-        }
-        candidate["private"]["fundIntradayCollectorToken"] = json!(token);
-        candidate["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
-        persist(&self.path, &candidate)?;
-        *value = candidate;
-        Ok(())
-    }
-
-    pub fn clear_private_collector_token(&self) -> Result<(), String> {
-        self.set_private_collector_token("")
     }
 }
 
@@ -337,22 +300,40 @@ mod tests {
     }
 
     #[test]
-    fn collector_token_is_persisted_but_not_exposed_in_snapshot() {
+    fn retired_fund_data_is_hidden_and_preserved_during_stock_updates() {
         let path =
-            std::env::temp_dir().join(format!("fund-tracker-secret-{}.json", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("retired-funds-{}.json", uuid::Uuid::new_v4()));
+        let legacy = json!({
+            "version": 2,
+            "data": {"fund_tracker_fund_watchlist": [{"code": "110022"}]},
+            "private": {"fundIntradayCollectorToken": "synthetic-legacy-token"}
+        });
+        fs::write(&path, legacy.to_string()).unwrap();
         let store = ConfigStore::new(path.clone());
-        store.set_private_collector_token("TOKEN.secret").unwrap();
-        assert_eq!(
-            store.private_collector_token().as_deref(),
-            Some("TOKEN.secret")
-        );
+        assert!(store.load()["data"]
+            .get("fund_tracker_fund_watchlist")
+            .is_none());
         assert!(store.load().get("private").is_none());
-        let restored = ConfigStore::new(path.clone());
+        store
+            .patch(
+                serde_json::from_value(json!({
+                    "fund_tracker_active_main_tab": "dashboard",
+                    "fund_tracker_fund_watchlist": null
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        let persisted: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(
-            restored.private_collector_token().as_deref(),
-            Some("TOKEN.secret")
+            persisted["data"]["fund_tracker_fund_watchlist"],
+            legacy["data"]["fund_tracker_fund_watchlist"]
         );
-        let _ = fs::remove_file(path);
+        assert_eq!(persisted["private"], legacy["private"]);
+        assert_eq!(
+            persisted["data"]["fund_tracker_active_main_tab"],
+            "dashboard"
+        );
+        fs::remove_file(path).unwrap();
     }
 
     #[test]
@@ -370,8 +351,6 @@ mod tests {
         assert!(store.load()["data"]
             .get("fund_tracker_active_main_tab")
             .is_none());
-        assert!(store.set_private_collector_token("secret").is_err());
-        assert!(store.private_collector_token().is_none());
         fs::remove_dir_all(path).unwrap();
     }
 

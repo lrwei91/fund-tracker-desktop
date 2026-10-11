@@ -206,8 +206,6 @@
     function getExportPayload() {
         var tabs = W.getWatchTabs();
         var activeWatchTabId = getImportedActiveWatchTabId(state.activeWatchTabId, tabs);
-        var funds = window.AppFunds && typeof window.AppFunds.exportFunds === 'function'
-            ? window.AppFunds.exportFunds() : [];
         return {
             version: 3,
             exportedAt: new Date().toISOString(),
@@ -216,7 +214,6 @@
             watchlistCost: normalizeImportedWatchlistCost(state.watchlistCost, tabs),
             watchlistRemarks: normalizeImportedWatchlistRemarks(state.watchlistRemarks, tabs),
             customIndexCodes: normalizeImportedCustomIndexCodes(state.customIndexCodes),
-            funds: funds,
         };
     }
 
@@ -254,9 +251,9 @@
                 var hasRemarks = W.hasOwn(json, 'watchlistRemarks') || W.hasOwn(json, 'holdingRemarks') || W.hasOwn(json, 'remarks') || W.hasOwn(json, 'aliases') || W.hasOwn(json, 'aliasMap');
                 var rawCustomIndexCodes = getRawCustomIndexCodesFromJson(json);
                 var hasCustomIndices = rawCustomIndexCodes !== null;
-                var rawFunds = W.hasOwn(json, 'funds') ? json.funds : json.fundWatchlist;
-                var hasFunds = W.hasOwn(json, 'funds') || W.hasOwn(json, 'fundWatchlist');
-                if (hasFunds && !Array.isArray(rawFunds)) throw new Error('基金列表格式错误');
+                if (!hasTabs && !hasCost && !hasRemarks && !hasCustomIndices) {
+                    throw new Error('文件未包含可导入的自选股、持仓或自选指数数据');
+                }
                 var replace = false;
                 var preview = countPreview(currentTabs, importedTabs, false);
                 var replacePreview = countPreview(currentTabs, importedTabs, true);
@@ -264,7 +261,6 @@
                 if (hasTabs) summary += '\n替换模式将移除 ' + replacePreview.removed + ' 项';
                 if (hasTabs) summary += '\n文件包含 ' + importedTabs.length + ' 个分组';
                 if (hasCustomIndices) summary += '\n自选指数：' + normalizeImportedCustomIndexCodes(rawCustomIndexCodes).length + ' 个';
-                if (hasFunds) summary += '\n基金：' + (Array.isArray(rawFunds) ? rawFunds.length : 0) + ' 只';
                 chooseImportMode(summary, document.activeElement).then(function (mode) {
                     if (mode === 'cancel') return;
                     replace = mode === 'replace';
@@ -284,15 +280,6 @@
                         ? normalizeImportedCustomIndexCodes(rawCustomIndexCodes)
                         : state.customIndexCodes;
                     if (hasCustomIndices && !replace) customIndexCodes = W.sanitizeCodes((state.customIndexCodes || []).concat(customIndexCodes)).slice(0, KEYS.CUSTOM_INDEX_MAX);
-                    var normalizedFunds = hasFunds && window.AppFunds && typeof window.AppFunds.normalizeFunds === 'function'
-                        ? window.AppFunds.normalizeFunds(rawFunds)
-                        : (hasFunds ? [] : null);
-                    if (hasFunds && !replace && window.AppFunds && typeof window.AppFunds.exportFunds === 'function') {
-                        var existingFunds = window.AppFunds.exportFunds();
-                        var byCode = {};
-                        existingFunds.concat(normalizedFunds).forEach(function (fund) { if (!byCode[fund.code]) byCode[fund.code] = fund; });
-                        normalizedFunds = Object.keys(byCode).map(function (code) { return byCode[code]; }).slice(0, 30);
-                    }
                     var changes = {};
                     changes[KEYS.WATCH_TABS_KEY] = JSON.stringify(tabs);
                     changes[KEYS.STORAGE_KEY] = JSON.stringify(tabs[0] ? tabs[0].codes : []);
@@ -300,7 +287,6 @@
                     if (hasCost || replace) changes[KEYS.WATCHLIST_COST_KEY] = JSON.stringify(watchlistCost);
                     if (hasRemarks || replace) changes[KEYS.WATCHLIST_REMARKS_KEY] = JSON.stringify(watchlistRemarks);
                     if (hasCustomIndices) changes[KEYS.CUSTOM_INDICES_KEY] = JSON.stringify(customIndexCodes);
-                    if (hasFunds) changes.fund_tracker_fund_watchlist = JSON.stringify(normalizedFunds);
                     changes[KEYS.WATCH_ALERT_STATE_KEY] = JSON.stringify({ __v: KEYS.WATCH_ALERT_SCHEMA_VERSION });
                     var commit = window.AppStorage && typeof window.AppStorage.commit === 'function'
                         ? window.AppStorage.commit(changes)
@@ -316,9 +302,6 @@
                             state.customIndexCache = {};
                             state.customIndexUpdateTime = '';
                         }
-                        if (hasFunds && window.AppFunds && typeof window.AppFunds.importFunds === 'function') {
-                            window.AppFunds.importFunds(normalizedFunds, { persist: false, refresh: false });
-                        }
                         state.watchQuoteCache = {};
                         state.watchQuoteUpdateTime = '';
                         state.watchAlertState = {};
@@ -327,12 +310,10 @@
                         W.renderWatchTabs();
                         W.renderWatchlist();
                         W.renderCustomIndex();
-                        if (hasFunds && window.AppFunds && normalizedFunds.length) window.AppFunds.loadFundQuotes(true).catch(function () {});
                         W.loadWatchlistData();
                         if (hasCustomIndices) W.loadCustomIndexData();
                         W.showDataStatus('已' + (replace ? '替换' : '合并') + '导入 ' + tabs.length + ' 个分组' +
-                            (hasCustomIndices ? '、' + customIndexCodes.length + ' 个自选指数' : '') +
-                            (hasFunds ? '、' + normalizedFunds.length + ' 只基金' : ''));
+                            (hasCustomIndices ? '、' + customIndexCodes.length + ' 个自选指数' : ''));
                     });
                 }).catch(function (err) {
                     W.showDataStatus(err && err.message ? err.message : '导入保存失败，原数据未修改', 'error');

@@ -81,8 +81,8 @@
     var STATUS_TOAST_TTL_MS = 2500;
 
     // ---------- 主 tab 路由 ----------
-    var VALID_TABS = ['dashboard', 'signals', 'funds', 'news'];
-    var TAB_TITLES = { dashboard: '市场行情', signals: '市场信号', funds: '自选基金', news: '财经快讯' };
+    var VALID_TABS = ['dashboard', 'signals', 'news'];
+    var TAB_TITLES = { dashboard: '市场行情', signals: '市场信号', news: '财经快讯' };
 
     // ---------- 新闻翻页 ----------
     var NEWS_PAGE_SIZE = { jin10: 20, eastmoney: 30, cls: 20 };
@@ -102,7 +102,7 @@
     var refreshIntervalNews = null;
     var refreshIntervalDaily = null;
     var isAutoRefresh = true;
-    var refreshSecondsMain = 10;
+    var refreshSecondsMain = 5;
     var refreshSecondsSignal = 1800;
     var refreshSecondsNews = 60;
 

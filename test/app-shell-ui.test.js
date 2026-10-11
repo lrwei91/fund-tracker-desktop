@@ -24,17 +24,18 @@ async function bootstrapApp(options = {}) {
     const stored = new Map([
         ['fund_tracker_active_main_tab', 'signals'],
     ]);
+    if (options.settings) stored.set('fund_tracker_settings', JSON.stringify(options.settings));
     window.AppState = {
         KEYS: {
             ACTIVE_TAB_KEY: 'fund_tracker_active_main_tab',
             SETTINGS_KEY: 'fund_tracker_settings',
             COLLAPSE_STATE_KEY: 'fund_tracker_collapse_state',
-            VALID_TABS: ['dashboard', 'signals', 'funds', 'news'],
-            TAB_TITLES: { dashboard: '市场行情', signals: '市场信号', funds: '自选基金', news: '财经快讯' },
+            VALID_TABS: ['dashboard', 'signals', 'news'],
+            TAB_TITLES: { dashboard: '市场行情', signals: '市场信号', news: '财经快讯' },
         },
         colorMode: 'light',
         isAutoRefresh: false,
-        refreshSecondsMain: 10,
+        refreshSecondsMain: 5,
         refreshSecondsSignal: 1800,
         refreshSecondsNews: 60,
         holdingColorMode: 'market',
@@ -56,7 +57,6 @@ async function bootstrapApp(options = {}) {
         setItem: (key, value) => stored.set(key, String(value)),
     };
     window.shell = options.shell;
-    window.AppFundBoard = options.fundBoard;
     window.AppRefreshCoordinator = options.refreshCoordinator;
 
     window.eval(appScript);
@@ -69,6 +69,32 @@ async function bootstrapApp(options = {}) {
 }
 
 describe('主界面信息架构', () => {
+    it.each([undefined, 5, 10, 30, 60, 1])('行情默认 5 秒并兼容已保存间隔 %s', async (interval) => {
+        const dom = await bootstrapApp({ settings: interval === undefined ? undefined : { mainInterval: interval } });
+        try {
+            const expected = [5, 10, 30, 60].includes(interval) ? interval : 5;
+            expect(dom.window.AppState.refreshSecondsMain).toBe(expected);
+            expect(dom.window.document.getElementById('refresh-interval-main').value).toBe(String(expected));
+        } finally {
+            dom.window.close();
+        }
+    });
+    it('基金入口全部移除，旧链接回到行情页', async () => {
+        const dom = await bootstrapApp({ url: 'https://local.invalid/#funds' });
+        try {
+            const doc = dom.window.document;
+            expect(doc.querySelector('[data-tab="funds"]')).toBeNull();
+            expect(doc.getElementById('tab-funds')).toBeNull();
+            expect(doc.getElementById('fund-diagnosis-panel')).toBeNull();
+            expect(doc.querySelector('script[src*="render-fund"]')).toBeNull();
+            dom.window.location.hash = '#funds';
+            dom.window.dispatchEvent(new dom.window.HashChangeEvent('hashchange'));
+            expect(doc.querySelector('.tab-panel.active').id).toBe('tab-dashboard');
+            expect(dom.window.AppState.currentTab).toBe('dashboard');
+        } finally {
+            dom.window.close();
+        }
+    });
     it('底栏只保留设置入口，导入导出位于设置的数据页', () => {
         const doc = parseIndex();
         const navigationButtons = Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'));
@@ -76,7 +102,7 @@ describe('主界面信息架构', () => {
             .map((button) => button.getAttribute('data-settings-view'));
 
         expect(navigationButtons.map((button) => button.getAttribute('aria-label')))
-            .toEqual(['行情', '信号', '基金', '快讯', '设置']);
+            .toEqual(['行情', '信号', '快讯', '设置']);
         expect(doc.querySelector('.desktop-sidebar-footer')).toBeNull();
         expect(doc.getElementById('watchlist-data-btn')).toBeNull();
         expect(doc.getElementById('data-panel')).toBeNull();
@@ -113,30 +139,6 @@ describe('主界面信息架构', () => {
             header.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: ' ', bubbles: true }));
             expect(header.getAttribute('aria-expanded')).toBe('true');
             expect(body.style.display).toBe('');
-        } finally {
-            dom.window.close();
-        }
-    });
-
-    it('进入基金主 Tab 时独立确保已恢复的基金筛选子页完成首次加载', async () => {
-        let ensureCount = 0;
-        let refreshCount = 0;
-        const dom = await bootstrapApp({
-            fundBoard: {
-                initFundBoard() {},
-                ensureLoaded: async () => { ensureCount += 1; },
-            },
-            refreshCoordinator: {
-                start() {},
-                refreshAll: async () => {},
-                refreshTab: async (tab) => { if (tab === 'funds') refreshCount += 1; },
-            },
-        });
-        try {
-            dom.window.document.querySelector('.tab-btn[data-tab="funds"]').click();
-            await Promise.resolve();
-            expect(ensureCount).toBe(1);
-            expect(refreshCount).toBe(1);
         } finally {
             dom.window.close();
         }
@@ -193,12 +195,11 @@ describe('主界面信息架构', () => {
         }
     });
 
-    it('五个入口位于同一导航组并共享尺寸规则', () => {
+    it('四个入口位于同一导航组并共享尺寸规则', () => {
         const doc = parseIndex();
-        expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(5);
+        expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(4);
         expect(doc.querySelector('[data-tab="dashboard"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('market');
         expect(doc.querySelector('[data-tab="signals"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('radar');
-        expect(doc.querySelector('[data-tab="funds"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('fund');
         expect(styles).toMatch(/\.desktop-nav-btn\s*\{[\s\S]*?flex:\s*1;/);
         expect(styles).toMatch(/@media \(min-width: 1280px\)[\s\S]*?\.desktop-nav-btn\s*\{[\s\S]*?height:\s*58px;/);
         expect(styles).not.toMatch(/\.desktop-sidebar-footer\s*\{/);
@@ -226,27 +227,6 @@ describe('主界面信息架构', () => {
         expect(panorama.querySelector('#sector-panorama-grid')).not.toBeNull();
         expect(styles).toMatch(/\.sector-panorama-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,/);
         expect(styles).toMatch(/\.sector-panorama-change\s*\{[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
-    });
-
-    it('基金 Tab 紧跟信号，并提供独立自选基金表格', () => {
-        const doc = parseIndex();
-        const desktopTabs = Array.from(doc.querySelectorAll('.desktop-nav > .tab-btn'))
-            .map((button) => button.dataset.tab);
-        expect(desktopTabs).toEqual(['dashboard', 'signals', 'funds', 'news']);
-        const panel = doc.getElementById('tab-funds');
-        expect(panel.querySelector('#fund-input')).not.toBeNull();
-        expect(panel.querySelector('#add-fund-btn').textContent).toBe('添加基金');
-        expect(panel.querySelectorAll('.fund-watch-table-head [role="columnheader"]')).toHaveLength(7);
-        expect(panel.textContent).toContain('单位净值');
-        expect(panel.textContent).toContain('日涨跌');
-        expect(styles).toMatch(/\.fund-watch-section > \.card-body\s*\{[\s\S]*?padding:\s*0;/);
-        expect(styles).toMatch(/\.fund-watch-add input\s*\{[\s\S]*?height:\s*36px;/);
-        expect(styles).toMatch(/\.fund-watch-status:empty\s*\{[\s\S]*?display:\s*none;/);
-        expect(styles).toMatch(/\.fund-watch-list > \.ui-state\s*\{[\s\S]*?min-height:\s*72px;/);
-        expect(styles).toMatch(/#main-content:has\(#tab-funds\.active \.fund-board-workspace\.active\)\s*\{[\s\S]*?overflow:\s*hidden;/);
-        expect(styles).toMatch(/#tab-funds\.active:has\(\.fund-board-workspace\.active\)\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\);[\s\S]*?height:\s*100%;/);
-        expect(styles).toMatch(/\.fund-board-workspace\.active\s*\{[\s\S]*?grid-template-rows:\s*auto minmax\(0, 1fr\) auto;[\s\S]*?overflow:\s*hidden;/);
-        expect(styles).toMatch(/\.fund-board-grid\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?overflow:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/);
     });
 
     it('候选研究与价格提醒替代独立盘中筛选，板块轮动保留手动入口', () => {

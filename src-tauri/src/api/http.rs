@@ -26,7 +26,6 @@ const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const BROWSER_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
 const ALLOWED_UPSTREAM_HOSTS: &[&str] = &[
     "sq.deepq.tech",
-    "fundsuggest.eastmoney.com",
     "hq.sinajs.cn",
     "web.ifzq.gtimg.cn",
     "qt.gtimg.cn",
@@ -149,10 +148,6 @@ impl RequestSpec {
     pub fn body(mut self, body: String) -> Self {
         self.method = Method::POST;
         self.body = Some(body);
-        self
-    }
-    pub fn method(mut self, method: Method) -> Self {
-        self.method = method;
         self
     }
     pub fn timeout(mut self, seconds: u64) -> Self {

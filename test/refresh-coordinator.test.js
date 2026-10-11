@@ -24,7 +24,7 @@ function installHarness() {
     window.AppState = {
         currentTab: 'dashboard',
         isAutoRefresh: false,
-        refreshSecondsMain: 10,
+        refreshSecondsMain: 5,
         refreshSecondsSignal: 1800,
         refreshSecondsNews: 60,
         customIndexCodes: [watchCodes[0], watchCodes[1], '000001'],
@@ -67,15 +67,6 @@ function installHarness() {
         loadLimitUpData: vi.fn().mockResolvedValue(undefined),
     };
     window.AppNews = { refreshNewsData: vi.fn().mockResolvedValue(undefined) };
-    window.AppFunds = {
-        getFundCodes: () => [],
-        loadFundQuotes: vi.fn().mockResolvedValue(undefined),
-    };
-    window.AppFundBoard = {
-        isActive: () => false,
-        hasLoaded: () => false,
-        loadBoard: vi.fn().mockResolvedValue(undefined),
-    };
     window.shell = {
         syncHoldingWidget: vi.fn().mockResolvedValue({ ok: true }),
         onHoldingWidgetVisibility: vi.fn(),
@@ -159,29 +150,6 @@ describe('AppRefreshCoordinator', () => {
         expect(window.AppMarket.loadCapitalData).not.toHaveBeenCalled();
     });
 
-    it('切到基金 Tab 只刷新基金净值，且进入全量刷新任务', async () => {
-        installHarness();
-        window.AppFunds.getFundCodes = () => ['110022'];
-        await import('../app/modules/refresh-coordinator.js');
-
-        await window.AppRefreshCoordinator.refreshTab('funds');
-        expect(window.AppFunds.loadFundQuotes).toHaveBeenCalledTimes(1);
-        expect(window.AppMarket.loadIndexData).not.toHaveBeenCalled();
-        expect(window.AppSignals.loadHotRankData).not.toHaveBeenCalled();
-
-        await window.AppRefreshCoordinator.refreshAll({ skipLimitUp: true, skipOpportunity: true });
-        expect(window.AppFunds.loadFundQuotes).toHaveBeenCalledTimes(2);
-    });
-
-    it('基金筛选子 Tab 激活时随基金刷新，未激活时不额外请求', async () => {
-        installHarness();
-        window.AppFundBoard.isActive = () => true;
-        await import('../app/modules/refresh-coordinator.js');
-
-        await window.AppRefreshCoordinator.refreshTab('funds');
-        expect(window.AppFundBoard.loadBoard).toHaveBeenCalledWith(false);
-    });
-
     it('普通刷新任务并发不超过 3 个', async () => {
         let active = 0;
         let maxActive = 0;
@@ -253,7 +221,9 @@ describe('AppRefreshCoordinator', () => {
         window.AppMarket.loadIndexData.mockClear();
         window.AppWatchlist.loadWatchMarketWarnings.mockClear();
 
-        await vi.advanceTimersByTimeAsync(10000);
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(window.AppDataClient.fetchData).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
 
         expect(window.AppDataClient.fetchData).toHaveBeenCalledTimes(1);
         expect(window.AppDataClient.fetchData.mock.calls[0][1].codes).toBe(holdingCodes.join(','));

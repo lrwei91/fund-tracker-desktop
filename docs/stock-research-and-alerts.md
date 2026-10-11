@@ -9,7 +9,7 @@
 - 点击股票 → 研究：查看行情日期、估值、量化因子、覆盖率、已披露财务指标；手动生成支持理由、反对理由、观察条件和失效条件，可打开历史研究。
 - 选股 → 价格提醒，或个股 → 价格提醒：设置价格、涨跌幅、成交额（元）、量比的比较或穿越条件，组合 AND / OR，并设置冷却时间、每日次数、到期与单次触发。
 
-持仓、基金、快讯及原有持仓相对涨跌提醒继续保留。独立“盘中筛选”页面入口已移除，旧数据路由保留兼容；研究页采用统一快照，替代旧的分散规则结论展示。
+持仓、快讯及原有持仓相对涨跌提醒继续保留。独立“盘中筛选”页面入口已移除，旧数据路由保留兼容；研究页采用统一快照，替代旧的分散规则结论展示。
 
 ## 数据与评分
 
@@ -33,7 +33,7 @@ Rust 原生任务每 30 秒监控，在沪深交易时段检查，复用前端�
 
 后端：`api/handlers/research.rs` 提供 `/stock-fundamentals`、`/stock-research`；`research_ai.rs` 提供主窗口专用 `/stock-ai-research`（含历史读取）；`price_alerts.rs` 提供主窗口专用 `/price-alerts` 和原生监控。`ai_settings_status` / `ai_settings_save` 只允许主窗口配置凭据。
 
-新增 v2 配置字段：`fund_tracker_ai_settings`（地址与模型）、`fund_tracker_price_alerts`、`fund_tracker_research_history`。旧配置字段继续兼容，自选导入导出的范围保持为自选、持仓和基金；新提醒与研究通过应用配置持久化。
+新增 v2 配置字段：`fund_tracker_ai_settings`（地址与模型）、`fund_tracker_price_alerts`、`fund_tracker_research_history`。旧配置字段继续兼容，自选导入导出的范围保持为自选、持仓和自选指数；新提醒与研究通过应用配置持久化。
 
 模型请求经 gateway 的请求合并、并发、超时和响应体限制。仅允许用户配置的精确 HTTPS 域名，无自动跳转，无 HTTP/IP/带凭据或查询参数的服务地址，不向 renderer 开放任意联网、文件或进程权限。
 

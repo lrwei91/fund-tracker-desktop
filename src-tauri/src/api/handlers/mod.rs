@@ -2,7 +2,6 @@
 //! `routes.rs`; this module only keeps path dispatch separate from handler logic.
 
 mod detail;
-mod fund;
 mod market;
 mod news;
 pub(crate) mod research;
@@ -18,13 +17,6 @@ pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query
     match path.trim_start_matches('/') {
         "stock" => stock::handle(gateway, query).await,
         "stock-search" => stock::search(gateway, query).await,
-        "fund-search" => fund::search(gateway, query).await,
-        "fund-quotes" => fund::quotes(gateway, query).await,
-        "fund-board" => fund::board(gateway, query).await,
-        "fund-board-trends" => fund::board_trends(gateway, query).await,
-        "fund-board-realtime" => fund::board_realtime(gateway, query).await,
-        "fund-diagnosis" => fund::diagnosis(gateway, query).await,
-        "fund-interaction" => fund::interaction(gateway, query).await,
         "hot-rank" => market::hot_rank(gateway, query).await,
         "limit-up" => market::limit_up(gateway, query).await,
         "cls-news" => news::cls(gateway, query).await,

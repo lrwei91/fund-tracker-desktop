@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const source = readFileSync(join(process.cwd(), 'app/modules/watchlist/watch-io.js'), 'utf8');
+const BrowserFileReader = globalThis.jsdom.window.FileReader;
 
 function installWatch(options = {}) {
     const state = {
@@ -23,11 +24,6 @@ function installWatch(options = {}) {
     const calls = { status: [] };
     const commit = options.commit || vi.fn().mockResolvedValue({});
     window.AppStorage = { commit, setItem: vi.fn() };
-    window.AppFunds = {
-        normalizeFunds: (entries) => Array.isArray(entries) ? entries.filter((entry) => /^\d{6}$/.test(String(entry.code))).map((entry) => ({ code: String(entry.code), name: entry.name || entry.code, type: entry.type || '' })) : [],
-        exportFunds: () => [{ code: '110022', name: '已有基金', type: '股票型' }],
-        importFunds: vi.fn(),
-    };
     window.AppDialog = { choose: vi.fn().mockResolvedValue(options.mode || 'merge') };
     window.__watch = {
         state,
@@ -71,7 +67,6 @@ describe('自选数据导入事务', () => {
         document.body.innerHTML = '';
         delete window.__watch;
         delete window.AppDialog;
-        delete window.AppFunds;
     });
 
     it('取消预览时不修改原状态', async () => {
@@ -98,7 +93,40 @@ describe('自选数据导入事务', () => {
         importFile({ watchTabs: [{ id: 'default', name: '导入名', codes: ['000001'] }], funds: [{ code: '110023', name: '新基金' }] });
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(commit).toHaveBeenCalledOnce();
+        expect(commit.mock.calls[0][0]).not.toHaveProperty('fund_tracker_fund_watchlist');
         expect(JSON.parse(commit.mock.calls[0][0].fund_tracker_watchlist_tabs)[0].codes).toEqual(['600519', '000001']);
         expect(state.watchQuoteCache).toEqual({});
+    });
+
+    it('旧备份的停用基金字段不影响股票导入，导出只包含当前功能', async () => {
+        const { commit } = installWatch();
+        importFile({ watchTabs: [{ id: 'default', codes: ['000001'] }], fundWatchlist: 'legacy-unused' });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(commit).toHaveBeenCalledOnce();
+        expect(commit.mock.calls[0][0]).not.toHaveProperty('fund_tracker_fund_watchlist');
+        const createObjectURL = vi.fn(() => 'blob:test-export');
+        window.URL.createObjectURL = createObjectURL;
+        window.URL.revokeObjectURL = vi.fn();
+        vi.stubGlobal('Blob', globalThis.jsdom.window.Blob);
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+        window.__watch.exportWatchlistData();
+        const blob = createObjectURL.mock.calls[0][0];
+        const exported = await new Promise((resolve) => {
+            const reader = new BrowserFileReader();
+            reader.onload = () => resolve(JSON.parse(reader.result));
+            reader.readAsText(blob);
+        });
+        expect(exported).not.toHaveProperty('funds');
+    });
+
+    it('仅包含基金的旧备份不进入替换流程或修改持仓', async () => {
+        const { state, commit, calls } = installWatch({ mode: 'replace' });
+        const before = JSON.stringify(state);
+        importFile({ funds: [{ code: '110023', name: '旧基金' }] });
+        await Promise.resolve();
+        expect(window.AppDialog.choose).not.toHaveBeenCalled();
+        expect(commit).not.toHaveBeenCalled();
+        expect(JSON.stringify(state)).toBe(before);
+        expect(calls.status.at(-1).message).toContain('文件未包含可导入');
     });
 });

@@ -19,42 +19,6 @@
     "data": [{"code": "600000", "name": "浦发银行"}],
     "meta": {"degraded": false, "stale": false}
   },
-  "fund-search": {
-    "success": true,
-    "data": [{"code": "110022", "name": "易方达消费行业股票", "type": "股票型", "company": "易方达基金", "nav": 2.95, "navDate": "2026-08-12"}],
-    "meta": {"degraded": false, "stale": false, "sources": {"search": {"actual": "eastmoney-fund"}}}
-  },
-  "fund-quotes": {
-    "success": true,
-    "data": {"110022": {"code": "110022", "name": "易方达消费行业股票", "unitNav": 2.95, "cumulativeNav": 2.95, "previousNav": 2.953, "navChange": -0.003, "dayChangePercent": -0.1, "navDate": "2026-08-12"}},
-    "time": "2026-08-12",
-    "meta": {"degraded": false, "stale": false, "missingCodes": [], "sources": {"quotes": {"actual": "sina-fund"}}}
-  },
-  "fund-board": {
-    "success": true,
-    "data": {"funds": [{"sector": "有色金属", "name": "示例基金", "code": "017193", "weekReturn": "1.35%", "yearReturn": "56.35%", "maxDrawdown": "32.15%", "scale": "65.2亿", "institutionHolding": "3%", "managerHolding": "0万份", "internalHolding": "37万份", "stars": "★★★★★", "tags": "涨得多、跌得少", "redemptionFee": "7免"}], "etfInfo": {}},
-    "meta": {"degraded": false, "stale": false, "sources": {"fundPool": {"actual": "deepq-star"}}}
-  },
-  "fund-board-trends": {
-    "success": true,
-    "data": {"有色金属": 1.23},
-    "meta": {"degraded": false, "stale": false}
-  },
-  "fund-board-realtime": {
-    "success": true,
-    "data": {"017193": 1.08},
-    "meta": {"degraded": false, "stale": false}
-  },
-  "fund-diagnosis": {
-    "success": true,
-    "data": {"code": "017193", "diagnosis": {"fund_name": "示例基金", "smart_diagnosis": {"label": "稳健型", "label_text": "关注回撤与持有周期"}, "highlights": {"scale": {"title": "基金规模", "value": "当前53.8亿", "reason": "规模变化需结合策略容量观察"}}}, "nav": {"week_return": "6.36%", "return": "10.42%", "max_drawdown": "33.66%"}, "interaction": {"like": 0, "block": 0, "own": 0}, "realtime": 0.48},
-    "meta": {"degraded": false, "stale": false}
-  },
-  "fund-interaction": {
-    "success": true,
-    "data": {"like": 1, "block": 0, "own": 0},
-    "meta": {"degraded": false, "stale": false}
-  },
   "hot-rank": {
     "success": true,
     "data": {"source": "ths", "items": []},

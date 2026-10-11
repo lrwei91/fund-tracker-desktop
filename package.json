@@ -1,6 +1,6 @@
 {
   "name": "fund-tracker-desktop",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "恭喜发财本地 Tauri 桌面应用",
   "private": true,
   "engines": {
@@ -25,9 +25,6 @@
     "format": "prettier --write \"app/**/*.js\" \"renderer/**/*.js\" && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
     "test:watch": "vitest",
-    "worker:dev": "wrangler dev --config services/fund-intraday-collector/wrangler.toml",
-    "worker:test": "vitest run test/fund-intraday-collector.test.js",
-    "worker:deploy:dry": "wrangler deploy --dry-run --config services/fund-intraday-collector/wrangler.toml",
     "artifact:verify": "node scripts/check-artifact-size.js --verify",
     "build:update:mac": "npm run frontend:prepare && tauri build --config src-tauri/tauri.updater.conf.json --bundles app && node scripts/package-tauri.js mac && node scripts/updater-artifacts.js mac",
     "build:update:win": "npm run frontend:prepare && tauri build --config src-tauri/tauri.updater.conf.json --bundles nsis && node scripts/package-tauri.js win && node scripts/updater-artifacts.js win",
@@ -44,7 +41,6 @@
     "globals": "^15.15.0",
     "jsdom": "^25.0.1",
     "prettier": "^3.9.4",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.123.0"
+    "vitest": "^4.1.10"
   }
 }

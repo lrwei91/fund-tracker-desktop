@@ -57,13 +57,6 @@ mod tests {
     const ROUTES: &[&str] = &[
         "stock",
         "stock-search",
-        "fund-search",
-        "fund-quotes",
-        "fund-board",
-        "fund-board-trends",
-        "fund-board-realtime",
-        "fund-diagnosis",
-        "fund-interaction",
         "hot-rank",
         "limit-up",
         "cls-news",
@@ -132,5 +125,24 @@ mod tests {
             assert!(fixture["meta"].get("stale").is_some(), "{route} stale");
         }
         assert_eq!(fixtures.len(), ROUTES.len());
+    }
+
+    #[tokio::test]
+    async fn retired_fund_routes_no_longer_dispatch() {
+        let gateway = Gateway::new();
+        for route in [
+            "fund-search",
+            "fund-quotes",
+            "fund-board",
+            "fund-board-trends",
+            "fund-board-realtime",
+            "fund-diagnosis",
+            "fund-interaction",
+            "fund-intraday",
+        ] {
+            let result = handlers::dispatch_raw(gateway.clone(), route, HashMap::new()).await;
+            assert_eq!(result["success"], false, "{route}");
+            assert_eq!(result["message"], "API not found", "{route}");
+        }
     }
 }

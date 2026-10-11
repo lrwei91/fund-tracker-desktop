@@ -66,7 +66,7 @@
             : normalizeOptionValue(saved.colorMode, ['light', 'dark', 'system'], 'light');
         if (window.AppTheme) window.AppTheme.setMode(state.colorMode);
         state.isAutoRefresh = typeof saved.autoRefresh === 'boolean' ? saved.autoRefresh : state.isAutoRefresh;
-        state.refreshSecondsMain = parseInt(normalizeOptionValue(saved.mainInterval, ['10', '30', '60'], state.refreshSecondsMain), 10);
+        state.refreshSecondsMain = parseInt(normalizeOptionValue(saved.mainInterval, ['5', '10', '30', '60'], state.refreshSecondsMain), 10);
         state.refreshSecondsSignal = parseInt(normalizeOptionValue(saved.signalInterval, ['900', '1800', '3600', '7200'], state.refreshSecondsSignal), 10);
         state.refreshSecondsNews = parseInt(normalizeOptionValue(saved.newsInterval, ['60', '600', '1800'], state.refreshSecondsNews), 10);
         state.holdingColorMode = normalizeOptionValue(saved.holdingColorMode, ['market', 'white'], state.holdingColorMode);
@@ -150,14 +150,6 @@
         // Load tab-specific data when switching panels.
         if (tab === 'signals') {
             if (!isBootstrapping && window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
-        }
-        if (tab === 'funds' && !isBootstrapping) {
-            // 子页可能由上次选择直接恢复为“基金筛选”。即使启动总刷新仍在运行，
-            // 也要独立确保首次数据加载，避免刷新协调器复用旧批次后漏掉该请求。
-            if (window.AppFundBoard && typeof window.AppFundBoard.ensureLoaded === 'function') {
-                window.AppFundBoard.ensureLoaded().catch(function () {});
-            }
-            if (window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
         }
         if (tab === 'news' && !isBootstrapping && window.AppRefreshCoordinator) {
             window.AppRefreshCoordinator.refreshTab(tab);
@@ -692,7 +684,6 @@
             var refresh = {
                 all: coordinator.refreshAll,
                 main: coordinator.refreshMain,
-                funds: coordinator.refreshFunds,
                 news: coordinator.refreshNews,
                 signals: coordinator.refreshSignals,
             }[scope];
@@ -723,8 +714,6 @@
         if (window.AppPriceAlerts) window.AppPriceAlerts.init();
         if (window.AppUpdates) window.AppUpdates.init();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
-        if (window.AppFunds) window.AppFunds.initFunds();
-        if (window.AppFundBoard) window.AppFundBoard.initFundBoard();
         if (window.AppWatchlist) window.AppWatchlist.initWatchlistTabs();
         if (window.AppNews) {
             window.AppNews.initNewsSourceTabs();

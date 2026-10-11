@@ -8,7 +8,6 @@ mod market;
 mod minute;
 pub(crate) mod policy;
 mod routes;
-mod shared_intraday;
 mod symbol;
 
 use serde::{Deserialize, Serialize};
@@ -130,12 +129,6 @@ pub async fn fetch_data(
             crate::research_ai::handle(gateway.scoped(route), &config, &research, query).await
         });
     }
-    if path.trim_start_matches('/') == "fund-intraday" {
-        let scoped = gateway.scoped("fund-intraday");
-        let mut value = shared_intraday::fetch(scoped.clone(), &config, query).await;
-        policy::finalize_response(&mut value, scoped.trace_id());
-        return Ok(value);
-    }
     let result = routes::dispatch_with_options(
         gateway,
         &path,
@@ -185,12 +178,6 @@ mod tests {
         let targets = vec![
             ("stock", vec![("codes", "600519,000858,920982")]),
             ("stock-search", vec![("q", "茅台")]),
-            ("fund-search", vec![("q", "易方达消费")]),
-            ("fund-quotes", vec![("codes", "110022,000001")]),
-            ("fund-board", vec![]),
-            ("fund-board-trends", vec![("sectors", "有色金属,半导体")]),
-            ("fund-board-realtime", vec![("codes", "017193,015596")]),
-            ("fund-diagnosis", vec![("code", "017193")]),
             ("hot-rank", vec![("source", "ths"), ("limit", "5")]),
             ("limit-up", vec![("type", "zt"), ("limit", "5")]),
             ("cls-news", vec![("limit", "3")]),
@@ -262,25 +249,6 @@ mod tests {
                 "stock-search" => result["data"]
                     .as_array()
                     .is_some_and(|rows| !rows.is_empty()),
-                "fund-search" => result["data"]
-                    .as_array()
-                    .is_some_and(|rows| !rows.is_empty()),
-                "fund-quotes" => {
-                    result["data"]["110022"]["unitNav"].is_number()
-                        && result["data"]["110022"]["dayChangePercent"].is_number()
-                }
-                "fund-board" => {
-                    result["data"]["funds"]
-                        .as_array()
-                        .is_some_and(|rows| !rows.is_empty())
-                        && result["data"]["etfInfo"].is_object()
-                }
-                "fund-board-trends" => result["data"]["有色金属"].is_number(),
-                "fund-board-realtime" => result["data"].is_object(),
-                "fund-diagnosis" => {
-                    result["data"]["diagnosis"]["fund_name"].is_string()
-                        && result["data"]["nav"].is_object()
-                }
                 "global-news" => {
                     result["data"]["data"]
                         .as_array()

@@ -29,18 +29,6 @@ jobs:
       - name: Dependency audit
         run: npm audit --audit-level=high
 
-  worker-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - name: Validate Worker bundle
-        run: npm run worker:deploy:dry
-
   rust-quality:
     runs-on: ubuntu-latest
     permissions:
@@ -97,13 +85,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Package
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        env:
-          FUND_INTRADAY_SERVICE_URL: ${{ vars.FUND_INTRADAY_SERVICE_URL }}
         run: ${{ matrix.command }}
       - name: Package signed update
         if: startsWith(github.ref, 'refs/tags/v')
         env:
-          FUND_INTRADAY_SERVICE_URL: ${{ vars.FUND_INTRADAY_SERVICE_URL }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
@@ -131,7 +116,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [quality, worker-quality, rust-quality, package]
+    needs: [quality, rust-quality, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write

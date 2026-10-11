@@ -23,12 +23,7 @@ impl EndpointPolicy {
 
 pub fn endpoint_policy(path: &str) -> EndpointPolicy {
     match path.trim_start_matches('/') {
-        "stock"
-        | "market-data"
-        | "stock-minute"
-        | "intraday-screening"
-        | "fund-board-trends"
-        | "fund-board-realtime" => EndpointPolicy::Live,
+        "stock" | "market-data" | "stock-minute" | "intraday-screening" => EndpointPolicy::Live,
         "stock-research" | "stock-ai-research" | "price-alerts" => EndpointPolicy::Live,
         "stock-fundamentals" => EndpointPolicy::Informational {
             stale_for: Duration::from_secs(60 * 60),
@@ -39,13 +34,11 @@ pub fn endpoint_policy(path: &str) -> EndpointPolicy {
         "opportunity-radar" => EndpointPolicy::Derived {
             stale_for: Duration::from_secs(10 * 60),
         },
-        "stock-search" | "fund-search" | "fund-quotes" | "fund-board" | "fund-diagnosis"
-        | "hot-rank" | "limit-up" | "cls-news" | "global-news" | "news" | "stock-news"
-        | "stock-risk" | "dragon-tiger" | "fund-flow-120d" | "stock-kline" | "market-warnings" => {
-            EndpointPolicy::Informational {
-                stale_for: Duration::from_secs(30 * 60),
-            }
-        }
+        "stock-search" | "hot-rank" | "limit-up" | "cls-news" | "global-news" | "news"
+        | "stock-news" | "stock-risk" | "dragon-tiger" | "fund-flow-120d" | "stock-kline"
+        | "market-warnings" => EndpointPolicy::Informational {
+            stale_for: Duration::from_secs(30 * 60),
+        },
         _ => EndpointPolicy::Live,
     }
 }
