@@ -483,8 +483,5 @@
         renderReport: renderReport,
         renderSnapshot: renderSnapshot,
         renderFinancials: renderFinancials,
-        getSnapshot: function (code) {
-            return snapshots[code];
-        },
     };
 })();

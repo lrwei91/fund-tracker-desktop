@@ -7,7 +7,6 @@ use super::{
 use serde_json::Value;
 use std::sync::Arc;
 
-#[allow(dead_code)]
 pub async fn dispatch(gateway: Arc<Gateway>, path: &str, query: Query) -> Value {
     dispatch_with_options(gateway, path, query, CacheMode::Normal, None).await
 }

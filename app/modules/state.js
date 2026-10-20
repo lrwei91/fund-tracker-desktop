@@ -97,10 +97,6 @@
     // ============ State (运行时变量) ============
 
     // 自动刷新 interval 句柄
-    var refreshIntervalMain = null;
-    var refreshIntervalSignal = null;
-    var refreshIntervalNews = null;
-    var refreshIntervalDaily = null;
     var isAutoRefresh = true;
     var refreshSecondsMain = 5;
     var refreshSecondsSignal = 1800;
@@ -136,7 +132,6 @@
     var customIndexUpdateTime = '';
     var watchlistCost = {};
     var watchlistRemarks = {};
-    var hasInitialDataLoaded = false;
 
     // 涨跌幅告警
     var alertEnabled = true;
@@ -339,10 +334,6 @@
             WATCH_ALERT_SCHEMA_VERSION: WATCH_ALERT_SCHEMA_VERSION,
         },
         // state
-        refreshIntervalMain: refreshIntervalMain,
-        refreshIntervalSignal: refreshIntervalSignal,
-        refreshIntervalNews: refreshIntervalNews,
-        refreshIntervalDaily: refreshIntervalDaily,
         isAutoRefresh: isAutoRefresh,
         refreshSecondsMain: refreshSecondsMain,
         refreshSecondsSignal: refreshSecondsSignal,
@@ -367,7 +358,6 @@
         customIndexUpdateTime: customIndexUpdateTime,
         watchlistCost: watchlistCost,
         watchlistRemarks: watchlistRemarks,
-        hasInitialDataLoaded: hasInitialDataLoaded,
         alertEnabled: alertEnabled,
         alertThreshold: alertThreshold,
         alertOpacity: alertOpacity,

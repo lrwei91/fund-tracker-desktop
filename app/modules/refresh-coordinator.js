@@ -496,7 +496,6 @@
         setHoldingVisible: setHoldingVisible,
         syncCurrentHoldingWidget: syncCurrentHoldingWidget,
         isRunning: function () { return !!running; },
-        isVisible: function () { return visible; },
         isHoldingVisible: function () { return holdingVisible; },
     };
 })();

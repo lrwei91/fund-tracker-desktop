@@ -644,7 +644,6 @@
         // 页面初始化:先渲染本地缓存,再复用手动刷新入口请求一次最新数据。
         renderRealtimeFromCache();
         manualRefreshAll('启动刷新');
-        state.hasInitialDataLoaded = true;
     }
 
     document.addEventListener('DOMContentLoaded', function () {

@@ -156,7 +156,6 @@ html[data-theme="dark"] .electron-app {
 
 .electron-app .desktop-brand,
 .electron-app .desktop-nav-meta,
-.electron-app .tab-bar,
 .electron-app .footer {
     display: none;
 }
@@ -239,18 +238,15 @@ html[data-theme="dark"] .electron-app {
     min-width: 0;
 }
 
-.electron-app .positive,
-.electron-app .flow-positive {
+.electron-app .positive {
     color: var(--red);
 }
 
-.electron-app .negative,
-.electron-app .flow-negative {
+.electron-app .negative {
     color: var(--green);
 }
 
-.electron-app .neutral,
-.electron-app .flow-neutral {
+.electron-app .neutral {
     color: var(--text-secondary);
 }
 
@@ -1284,10 +1280,7 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .watchlist-empty,
-.electron-app .list-empty,
-.electron-app .limit-up-empty,
-.electron-app .opportunity-radar-empty,
-.electron-app .news-empty {
+.electron-app .list-empty {
     min-height: 96px;
     margin: 0;
     padding: 20px 10px;
@@ -1574,12 +1567,6 @@ html[data-theme="dark"] .electron-app {
 .electron-app .sector-rotation-detail p { margin: 5px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.65; white-space: pre-line; }
 
 /* Intraday screening stays idle until the user explicitly starts it. */
-.electron-app .intraday-screening-heading {
-    display: flex;
-    min-width: 0;
-    align-items: baseline;
-    gap: 9px;
-}
 
 .electron-app .intraday-screening-update-time {
     min-width: 0;
@@ -1691,8 +1678,7 @@ html[data-theme="dark"] .electron-app {
 }
 
 .electron-app .intraday-screening-table-head,
-.electron-app .intraday-screening-card,
-.electron-app .intraday-screening-row {
+.electron-app .intraday-screening-card {
     display: grid;
     grid-template-columns: 34px minmax(120px, 1fr) 52px 64px 64px 54px 72px;
     align-items: center;
@@ -1709,15 +1695,14 @@ html[data-theme="dark"] .electron-app {
     font-size: 10px;
 }
 
-.electron-app .intraday-screening-card,
-.electron-app .intraday-screening-row {
+.electron-app .intraday-screening-card {
     min-height: 58px;
     border-bottom: 1px solid var(--border-subtle);
     color: var(--text-secondary);
     font-size: 11px;
 }
 
-.electron-app :where(.intraday-screening-card, .intraday-screening-row):last-child {
+.electron-app .intraday-screening-card:last-child {
     border-bottom: 0;
 }
 
@@ -2345,10 +2330,6 @@ html[data-theme="dark"] .electron-app {
     line-height: 1.5;
 }
 
-.electron-app .ui-state--error {
-    border-color: var(--color-market-rise-border);
-    background: var(--red-bg);
-}
 
 .electron-app .ui-state-skeleton {
     display: grid;

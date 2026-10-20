@@ -269,7 +269,6 @@
     window.AppNews = {
         initNewsSourceTabs: initNewsSourceTabs,
         initNewsScroll: initNewsScroll,
-        loadNewsData: loadMoreNews,
         loadMoreNews: loadMoreNews,
         mergeUnique: mergeUnique,
         maybeLoadMoreNews: maybeLoadMoreNews,

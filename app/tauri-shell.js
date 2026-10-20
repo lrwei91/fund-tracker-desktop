@@ -40,7 +40,6 @@
         openReport: function (id) { return invoke('open_report', { id: id }); },
         onPriceAlertHit: function (callback) { return subscribe('price-alert-hit', callback); },
         onPriceAlertError: function (callback) { return subscribe('price-alert-error', callback); },
-        isWindows: navigator.userAgent.indexOf('Windows') >= 0,
         getConfigPath: function () { return invoke('config_storage_path'); },
         openExternalUrl: function (url) { return invoke('open_external_url', { url: url }); },
         configStorage: {

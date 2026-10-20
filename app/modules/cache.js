@@ -14,7 +14,7 @@
         'fund_tracker_multiday_flow_cache',  // 旧多日资金流缓存,已无 read 路径
         'fund_tracker_fund_flow_cache',      // 旧个股资金流缓存,已无 read 路径
         // 注: 'fund_tracker_prev_pct' 不要放这里 — 它是自选股个股 prev 涨跌的存储
-        //      (render-watchlist.js 的 getPrevChangePct / persistCurrentChangePct 还在用,
+        //      (watch-state.js 的 getPrevChangePct / watch-render.js 的 persistCurrentChangePct 还在用,
         //       见 modules/state.js PREV_KEY);大盘/自选指数的 prev 早就独立到 'fund_tracker_index_prev_pct'
     ];
     var _legacyCleaned = false;
