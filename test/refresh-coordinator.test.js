@@ -87,6 +87,20 @@ describe('AppRefreshCoordinator', () => {
         vi.useRealTimers();
     });
 
+    it('切换资讯时等待当前行情完成，然后实际加载资讯', async () => {
+        let release;
+        window.AppDataClient.fetchData.mockImplementation(() => new Promise((resolve) => { release = resolve; }));
+        await import('../app/modules/refresh-coordinator.js');
+        const current = window.AppRefreshCoordinator.refreshMain();
+        await Promise.resolve();
+        window.AppState.currentTab = 'news';
+        const next = window.AppRefreshCoordinator.refreshTab('news');
+        expect(window.AppNews.refreshNewsData).not.toHaveBeenCalled();
+        release({ success: true, data: {}, meta: {} });
+        await current; await next;
+        expect(window.AppNews.refreshNewsData).toHaveBeenCalledOnce();
+    });
+
     it('把跨分组的 50 只自选股合并为一次行情请求并去重', async () => {
         const { watchCodes } = installHarness();
         await import('../app/modules/refresh-coordinator.js');

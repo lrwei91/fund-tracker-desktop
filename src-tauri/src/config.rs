@@ -22,6 +22,7 @@ const KEYS: &[&str] = &[
     "fund_tracker_ai_settings",
     "fund_tracker_price_alerts",
     "fund_tracker_research_history",
+    "fund_tracker_report_center",
     "fund_tracker_update_settings",
 ];
 pub const SENSITIVE_KEYS: &[&str] = &[
@@ -42,6 +43,7 @@ const JSON_KEYS: &[&str] = &[
     "fund_tracker_ai_settings",
     "fund_tracker_price_alerts",
     "fund_tracker_research_history",
+    "fund_tracker_report_center",
     "fund_tracker_update_settings",
 ];
 
@@ -133,7 +135,7 @@ impl ConfigStore {
             .and_then(Value::as_object_mut)
             .ok_or("配置格式异常")?;
         for (key, raw) in changes {
-            if !KEYS.contains(&key.as_str()) {
+            if !KEYS.contains(&key.as_str()) || key == "fund_tracker_report_center" {
                 continue;
             }
             if raw.is_null() {

@@ -95,9 +95,12 @@ body {
   color: var(--green);
 }
 
-#alert strong,
-#alert span {
+#alert strong {
   display: block;
+}
+
+#alert > div:last-child {
+  min-width: 0;
 }
 
 #alert-title {
@@ -105,11 +108,18 @@ body {
   overflow: hidden;
   font-size: 15px;
   font-weight: 720;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 #alert-detail {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
   color: var(--muted);
   font-family: "SF Mono", "Menlo", "Consolas", monospace;
   font-size: 12px;
@@ -132,3 +142,7 @@ body {
     animation: none;
   }
 }
+
+#alert[data-direction="report"] { pointer-events: auto; cursor: pointer; border-left-color: #b6b800; }
+#alert[data-direction="report"] #mascot { background: #f5ff00; color: #1a1a1a; font-family: monospace; }
+#alert:focus-visible { outline: 3px solid #b6b800; outline-offset: -3px; }

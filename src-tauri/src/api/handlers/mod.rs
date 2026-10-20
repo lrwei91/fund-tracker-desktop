@@ -15,6 +15,9 @@ use std::sync::Arc;
 
 pub(crate) async fn dispatch_raw(gateway: Arc<Gateway>, path: &str, query: Query) -> Value {
     match path.trim_start_matches('/') {
+        "research-reports" => {
+            super::policy::failure("报告仅允许主窗口访问", "native main-window route", None)
+        }
         "stock" => stock::handle(gateway, query).await,
         "stock-search" => stock::search(gateway, query).await,
         "hot-rank" => market::hot_rank(gateway, query).await,

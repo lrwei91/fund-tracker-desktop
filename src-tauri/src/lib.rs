@@ -2,6 +2,8 @@ mod api;
 mod config;
 mod price_alerts;
 mod research_ai;
+mod research_reports;
+mod trading_calendar;
 mod updates;
 mod windows;
 
@@ -81,6 +83,8 @@ pub fn run() {
             windows::create_auxiliary_windows(app.handle())?;
             price_alerts::start(app.handle().clone());
             updates::start(app.handle().clone());
+            research_reports::start(app.handle().clone());
+            windows::fit_main_window(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +100,7 @@ pub fn run() {
             windows::close_holding_window,
             windows::holding_widget_sync,
             windows::show_stock_alert,
+            windows::open_report,
             api::fetch_data,
             research_ai::ai_settings_status,
             research_ai::ai_settings_save,

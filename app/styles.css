@@ -896,25 +896,6 @@ html[data-theme="dark"] .electron-app {
     gap: var(--desktop-gap);
 }
 
-/* Dashboard hierarchy. Contents are reordered without touching render IDs. */
-.electron-app #tab-dashboard.active {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--desktop-gap);
-}
-
-.electron-app #tab-dashboard .dashboard-column {
-    display: contents;
-}
-
-.electron-app #tab-dashboard .index-section { order: 1; }
-.electron-app #tab-dashboard .watchlist-section { order: 2; }
-.electron-app #tab-dashboard .custom-index-section { order: 3; }
-.electron-app #tab-dashboard .capital-section { order: 4; }
-.electron-app #tab-dashboard .market-breadth-section { order: 5; }
-.electron-app #tab-dashboard .sector-section { order: 6; }
-.electron-app #tab-dashboard .sector-panorama-section { order: 7; }
-
 .electron-app .card {
     min-width: 0;
     margin: 0;
@@ -1504,14 +1485,6 @@ html[data-theme="dark"] .electron-app {
 .electron-app :where(.sector-tab, .hot-rank-tab, .limit-up-tab, .news-source-tab).active {
     border-color: var(--amber-soft);
     color: var(--text-primary);
-}
-
-/* Signal workspace */
-.electron-app #tab-signals.active {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 8px;
 }
 
 .electron-app .signal-workspace-tabs {
@@ -3759,36 +3732,10 @@ html[data-theme="dark"] .electron-app {
 }
 
 @media (min-width: 760px) {
-    .electron-app #tab-dashboard.active {
-        grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
-        align-items: start;
-    }
-
-    .electron-app #tab-dashboard .dashboard-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--desktop-gap);
-    }
-
-    .electron-app #tab-dashboard .dashboard-market-column { grid-column: 2; grid-row: 1; }
-    .electron-app #tab-dashboard .dashboard-holdings-column { grid-column: 1; grid-row: 1 / span 2; }
-    .electron-app #tab-dashboard .dashboard-flow-column { grid-column: 2; grid-row: 2; }
 
     .electron-app .news-summary {
         -webkit-line-clamp: 2;
     }
-}
-
-@media (max-width: 759px) {
-    .electron-app #tab-dashboard .dashboard-column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--desktop-gap);
-    }
-
-    .electron-app #tab-dashboard .dashboard-holdings-column { order: 1; }
-    .electron-app #tab-dashboard .dashboard-market-column { order: 2; }
-    .electron-app #tab-dashboard .dashboard-flow-column { order: 3; }
 }
 
 @media (max-width: 600px) {
@@ -3976,177 +3923,6 @@ html[data-theme="dark"] .electron-app {
 
     .electron-app .stock-research-reason em {
         min-width: 0;
-    }
-}
-
-@media (min-width: 1280px) {
-    .electron-app {
-        --desktop-bottombar-h: 0px;
-        --desktop-toolbar-h: 60px;
-        --desktop-gap: 14px;
-        --desktop-sidebar-w: 210px;
-    }
-
-    .electron-app .app-shell {
-        grid-template-columns: var(--desktop-sidebar-w) minmax(0, 1fr);
-        grid-template-rows: minmax(0, 1fr);
-    }
-
-    .electron-app .app-main-pane {
-        grid-column: 2;
-        grid-row: 1;
-    }
-
-    .electron-app .desktop-sidebar {
-        grid-column: 1;
-        grid-row: 1;
-        flex-direction: column;
-        width: var(--desktop-sidebar-w);
-        height: 100%;
-        border-top: 0;
-        border-right: 1px solid var(--desktop-border);
-        background: var(--color-surface);
-        box-shadow: none;
-    }
-
-    .electron-app .desktop-brand {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-        flex: 0 0 76px;
-        padding: 16px;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .electron-app .desktop-brand-mark {
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
-        object-fit: contain;
-    }
-
-    .electron-app .desktop-brand-name {
-        color: var(--text-primary);
-        font-size: 14px;
-        font-weight: 750;
-    }
-
-    .electron-app .desktop-brand-subtitle {
-        margin-top: 4px;
-        color: var(--text-tertiary);
-        font-family: var(--mono);
-        font-size: 10px;
-        letter-spacing: 0.8px;
-    }
-
-    .electron-app .desktop-nav {
-        flex-direction: column;
-        flex: 0 0 auto;
-        gap: 4px;
-        padding: 12px 10px;
-    }
-
-    .electron-app .desktop-nav-btn {
-        justify-content: flex-start;
-        flex: 0 0 58px;
-        width: 100%;
-        height: 58px;
-        gap: 11px;
-        padding: 0 12px;
-        border: 0;
-        border-radius: 8px;
-        text-align: left;
-    }
-
-    .electron-app .desktop-nav-btn.active {
-        margin: 0;
-        border: 0;
-        border-left: 3px solid var(--amber);
-        background: var(--amber-soft-bg);
-    }
-
-    .electron-app .desktop-nav-copy {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 4px;
-    }
-
-    .electron-app .desktop-nav-icon {
-        width: 22px;
-        height: 22px;
-    }
-
-    .electron-app .desktop-nav-icon svg {
-        width: 19px;
-        height: 19px;
-    }
-
-    .electron-app .desktop-nav-label {
-        font-size: 13px;
-    }
-
-    .electron-app .desktop-nav-meta {
-        display: block;
-        color: var(--text-tertiary);
-        font-size: 10px;
-        line-height: 1;
-    }
-
-    .electron-app .header {
-        padding: 0 18px;
-    }
-
-    .electron-app #main-content {
-        padding: 14px;
-    }
-
-    .electron-app #tab-dashboard.active {
-        grid-template-columns: minmax(290px, 0.92fr) minmax(410px, 1.28fr) minmax(310px, 1fr);
-        align-items: start;
-        width: 100%;
-        margin: 0;
-    }
-
-    .electron-app #tab-dashboard .dashboard-column {
-        display: grid;
-        align-content: start;
-        gap: var(--desktop-gap);
-        min-width: 0;
-    }
-
-    .electron-app #tab-dashboard .index-section,
-    .electron-app #tab-dashboard .watchlist-section,
-    .electron-app #tab-dashboard .custom-index-section,
-    .electron-app #tab-dashboard .capital-section,
-    .electron-app #tab-dashboard .market-breadth-section,
-    .electron-app #tab-dashboard .sector-section,
-    .electron-app #tab-dashboard .sector-panorama-section {
-        grid-column: auto;
-        order: initial;
-    }
-
-    .electron-app .dashboard-flow-column {
-        grid-template-rows: auto auto minmax(0, 1fr) auto;
-    }
-
-    .electron-app #tab-signals.active,
-    .electron-app #tab-news.active {
-        width: min(100%, 1600px);
-        margin: 0 auto;
-    }
-
-    .electron-app .settings-overlay,
-    .electron-app .modal-overlay {
-        inset: 0;
-    }
-
-    .electron-app .settings-panel,
-    .electron-app .modal-panel {
-        top: 50%;
-    }
-
-    .electron-app .alert-toast-container {
-        top: 72px;
     }
 }
 

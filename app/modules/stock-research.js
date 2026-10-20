@@ -214,6 +214,10 @@
     }
     async function mount(root, code) {
         if (!root) return;
+        if (utils.isEtf && utils.isEtf(code)) {
+            root.innerHTML = '<p class="research-note">场内 ETF 可查看行情、技术和本地持仓统计，本轮未启用公司财报或 AI 深度研究。</p>';
+            return;
+        }
         root.innerHTML = renderShell(code);
         var workspace = root.firstElementChild;
         var snapshotHost = workspace.querySelector('[data-research-snapshot]');

@@ -201,5 +201,6 @@
       "stale": false,
       "degraded": false
     }
-  }
+  },
+  "research-reports": {"success": true, "data": {"settings": {"premarket": false, "afterClose": false}, "items": [], "calendarKnown": true}, "meta": {"stale": false, "degraded": false}}
 }

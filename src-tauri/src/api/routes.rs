@@ -73,6 +73,7 @@ mod tests {
         "stock-research",
         "stock-ai-research",
         "price-alerts",
+        "research-reports",
         "opportunity-radar",
         "market-warnings",
         "sector-rotation",

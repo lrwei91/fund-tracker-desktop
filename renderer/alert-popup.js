@@ -14,7 +14,11 @@
         return (value > 0 ? '+' : '') + value.toFixed(2) + '%';
     }
 
+    var reportId = null;
     function showAlert(alert) {
+        reportId = null;
+        alertElement.removeAttribute("role");
+        alertElement.removeAttribute("tabindex");
         if (!alert || typeof alert.changePct !== 'number') return;
         if (window.AppTheme) window.AppTheme.syncFromSettings(window.localStorage.getItem(SETTINGS_KEY));
         var rising = alert.changePct >= 0;
@@ -41,6 +45,20 @@
         audio.play().catch(function () {});
     }
 
+    function openReport() { if (reportId && window.shell && window.shell.openReport) window.shell.openReport(reportId).catch(function () {}); }
+    alertElement.addEventListener('click', openReport);
+    alertElement.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openReport(); }
+    });
+    if (window.shell && window.shell.onReportNotice) window.shell.onReportNotice(function (notice) {
+        if (!notice || !notice.id) return;
+        reportId = notice.id;
+        if (window.AppTheme) window.AppTheme.syncFromSettings(window.localStorage.getItem(SETTINGS_KEY));
+        alertElement.dataset.direction = 'report';
+        alertElement.setAttribute('role', 'button'); alertElement.tabIndex = 0;
+        mascot.textContent = '▤'; title.textContent = notice.title; detail.textContent = notice.detail;
+        alertElement.style.opacity = '1';
+    });
     if (window.shell && typeof window.shell.onStockAlert === 'function') {
         window.shell.onStockAlert(showAlert);
     }

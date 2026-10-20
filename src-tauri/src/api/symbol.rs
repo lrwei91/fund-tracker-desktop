@@ -9,6 +9,14 @@ pub fn valid_code(code: &str) -> bool {
     code.len() == 6 && code.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+/// Listed mainland company stocks. Funds/bonds/indices must not use corporate financials.
+pub fn company_stock(code: &str) -> bool {
+    valid_code(code)
+        && ["60", "68", "00", "30", "92"]
+            .iter()
+            .any(|prefix| code.starts_with(prefix))
+}
+
 pub fn is_legacy_beijing(code: &str) -> bool {
     valid_code(code)
         && ["43", "83", "87"]

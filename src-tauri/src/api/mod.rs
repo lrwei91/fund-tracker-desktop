@@ -13,6 +13,7 @@ mod symbol;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use tauri::Manager;
 
 pub struct ApiState {
     gateway: Arc<http::Gateway>,
@@ -20,6 +21,7 @@ pub struct ApiState {
 }
 
 pub(crate) use handlers::research::snapshot as research_snapshot;
+pub(crate) use symbol::company_stock;
 pub(crate) fn valid_stock_code(code: &str) -> bool {
     symbol::valid_code(code) && !symbol::is_legacy_beijing(code)
 }
@@ -46,6 +48,20 @@ impl ApiState {
             gateway: http::Gateway::new(),
             recent_quotes: std::sync::Mutex::new(HashMap::new()),
         }
+    }
+
+    pub(crate) fn report_gateway(&self) -> Arc<http::Gateway> {
+        self.gateway.scoped("research-reports")
+    }
+    pub(crate) async fn report_quotes(&self, codes: String) -> Value {
+        routes::dispatch_with_options(
+            self.gateway.clone(),
+            "stock",
+            HashMap::from([("codes".into(), codes)]),
+            http::CacheMode::BypassFresh,
+            None,
+        )
+        .await
     }
 
     pub fn clear_diagnostics(&self) -> Result<(), String> {
@@ -119,11 +135,16 @@ pub async fn fetch_data(
 ) -> Result<Value, String> {
     let gateway = state.gateway.clone();
     let route = path.trim_start_matches('/');
-    if matches!(route, "stock-ai-research" | "price-alerts") {
+    if matches!(
+        route,
+        "stock-ai-research" | "price-alerts" | "research-reports"
+    ) {
         if window.label() != "main" {
             return Err("该功能仅允许主窗口调用".into());
         }
-        return Ok(if route == "price-alerts" {
+        return Ok(if route == "research-reports" {
+            crate::research_reports::handle(window.app_handle(), query).await
+        } else if route == "price-alerts" {
             crate::price_alerts::handle(&config, query)
         } else {
             crate::research_ai::handle(gateway.scoped(route), &config, &research, query).await

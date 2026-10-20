@@ -5,6 +5,8 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 describe('桌面提醒卡片', () => {
     var receiveAlert;
+    var receiveReport;
+    var openReport = vi.fn().mockResolvedValue(undefined);
     var play;
 
     beforeAll(async () => {
@@ -21,6 +23,8 @@ describe('桌面提醒卡片', () => {
             this.play = play;
         });
         window.shell = {
+            onReportNotice(callback) { receiveReport = callback; },
+            openReport: openReport,
             onStockAlert(callback) {
                 receiveAlert = callback;
                 return () => {};
@@ -54,4 +58,20 @@ describe('桌面提醒卡片', () => {
         expect(document.getElementById('alert-detail').textContent).toContain('价格 >= 10');
         expect(document.getElementById('alert-detail').textContent).toContain('10.50');
     });
+    it('报告使用中性样式且点击仅打开已保存记录，不播放涨跌音效', () => {
+        play.mockClear();
+        receiveReport({ id: 'report-fixture', title: '盘后报告已生成', detail: '点击查看' });
+        const alert = document.getElementById('alert');
+        expect(alert.dataset.direction).toBe('report');
+        expect(alert.getAttribute('role')).toBe('button');
+        expect(document.getElementById('mascot').textContent).toBe('▤');
+        alert.click();
+        expect(openReport).toHaveBeenCalledWith('report-fixture');
+        expect(play).not.toHaveBeenCalled();
+        receiveAlert({ price: 10, changePct: 1, soundEnabled: false });
+        openReport.mockClear(); alert.click();
+        expect(openReport).not.toHaveBeenCalled();
+        expect(alert.hasAttribute('role')).toBe(false);
+    });
+
 });

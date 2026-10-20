@@ -31,6 +31,13 @@ pub(crate) fn parse_financials(payload: &Value, today: NaiveDate) -> Value {
 
 pub(crate) async fn fundamentals(gateway: Arc<Gateway>, query: Query) -> Value {
     let code = query.get("code").map(String::as_str).unwrap_or("");
+    if !symbol::company_stock(code) {
+        return policy::failure(
+            "该标的未启用公司财报研究",
+            "场内 ETF 等标的仅提供行情、技术与本地持仓统计",
+            None,
+        );
+    }
     if !symbol::valid_code(code) || symbol::is_legacy_beijing(code) {
         return policy::failure("股票代码无效", "请使用当前六位股票代码", None);
     }
@@ -56,6 +63,13 @@ pub(crate) async fn fundamentals(gateway: Arc<Gateway>, query: Query) -> Value {
 // One canonical snapshot supplies both stock research and the AI request.
 pub(crate) async fn snapshot(g: Arc<Gateway>, query: Query) -> Value {
     let code = query.get("code").cloned().unwrap_or_default();
+    if !symbol::company_stock(&code) {
+        return policy::failure(
+            "该标的未启用公司财报研究",
+            "场内 ETF 等标的仅提供行情、技术与本地持仓统计",
+            None,
+        );
+    }
     if !symbol::valid_code(&code) || symbol::is_legacy_beijing(&code) {
         return policy::failure("股票代码无效", "请使用当前六位股票代码", None);
     }

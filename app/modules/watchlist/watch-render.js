@@ -89,6 +89,7 @@
     }
 
     function renderWatchlist() {
+        if (window.AppWorkbench) window.AppWorkbench.renderSummary();
         var grid = document.getElementById('watchlist-grid');
         var updateTimeEl = document.getElementById('watchlist-update-time');
         var codes = W.getWatchlist();
@@ -124,6 +125,7 @@
         grid.classList.toggle('with-cost', showCost);
         document.querySelector('.watchlist-header-row')?.classList.toggle('with-cost', showCost);
         bindWatchItemClick();
+        if (window.AppWorkbench) window.AppWorkbench.markSelected();
         hydrateWatchSparklines(codes.filter(function (code) { return !!state.watchQuoteFreshCodes[code]; }));
         grid.querySelectorAll('.watchlist-fund-fill[data-w]').forEach(function (fill) {
             fill.style.width = fill.getAttribute('data-w') + '%';
@@ -266,10 +268,10 @@
                 window.AppAlerts.checkAlerts(result.data);
             }
         } catch (e) {
-            console.error('新增股票行情获取失败:', e);
+            console.error('新增股票行情获取失败：', e);
             delete state.watchQuoteFreshCodes[code];
             try { window.AppStorage.setItem(KEYS.WATCH_QUOTE_STATUS_KEY, 'stale'); } catch (storageError) {}
-            W.showWatchStatus('已添加,行情稍后自动刷新', 'error');
+            W.showWatchStatus('已添加，行情稍后自动刷新', 'error');
             utils.setLastUpdated('加载失败');
             renderWatchlist();
         }
@@ -364,7 +366,7 @@
             });
             return applyWatchMarketWarnings(result, cleanCodes);
         } catch (error) {
-            console.error('自选股市场异动获取失败:', error);
+            console.error('自选股市场异动获取失败：', error);
             return false;
         }
     }

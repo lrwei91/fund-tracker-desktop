@@ -153,7 +153,7 @@
                 (stale ? ' · 缓存数据' : '') + ' · 仅手动更新', stale ? 'degraded' : 'ready');
             return normalized;
         }).catch(function (error) {
-            console.error('轮动板块获取失败:', error);
+            console.error('轮动板块获取失败：', error);
             if (sectorRotationResult) {
                 setSectorRotationStatus('刷新失败，保留当前结果。', 'error');
             } else {
@@ -438,7 +438,7 @@
                 renderIntradayScreeningReady(data, json.meta || null, parsed);
                 return data;
             } catch (error) {
-                console.error('盘中筛选获取失败:', error);
+                console.error('盘中筛选获取失败：', error);
                 var errorDateKey = utils.getShanghaiDateKey();
                 clearIntradayScreeningResultAcrossDay(errorDateKey);
                 renderIntradayScreeningError(errorDateKey);
@@ -501,7 +501,7 @@
                 timeEl.textContent = prefix + ' · ' + utils.formatShanghaiTime(json.data.generatedAt || new Date().toISOString());
             }
         } catch (e) {
-            console.error('机会雷达获取失败:', e);
+            console.error('机会雷达获取失败：', e);
             if (cached && cached.data && Array.isArray(cached.data.items)) {
                 renderOpportunityRadar(cached.data, false);
                 if (timeEl) timeEl.textContent = '缓存';
@@ -648,7 +648,7 @@
             cache.writeDailyDataCache(cacheKey, todayKey, { source: source, items: result.data.items });
             renderHotRank(result.data.items, source, true, result.meta || null);
         } catch (e) {
-            console.error('市场热度获取失败:', e);
+            console.error('市场热度获取失败：', e);
             if (cached && cached.date === todayKey && cached.data && Array.isArray(cached.data.items)) {
                 renderHotRank(cached.data.items, source, false);
                 return;
@@ -884,7 +884,7 @@
                     renderSummary(sumCached.data);
                 }
             } catch (e) {
-                console.error('打板情绪 summary 获取失败:', e);
+                console.error('打板情绪 summary 获取失败：', e);
                 if (sumCached && sumCached.data) renderSummary(sumCached.data);
             }
         }

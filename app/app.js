@@ -14,7 +14,6 @@
     var utils = window.AppUtils;
     var cache = window.AppCache;
     var KEYS = state.KEYS;
-    var isBootstrapping = true;
 
     // ============================================================
     // Settings 持久化
@@ -110,50 +109,7 @@
     // ============================================================
 
     function initTabs() {
-        var buttons = document.querySelectorAll('.tab-btn');
-        buttons.forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                switchTab(btn.getAttribute('data-tab'));
-            });
-        });
-
-        window.addEventListener('hashchange', handleHash);
-        // 每次启动都从行情页进入，不恢复上次停留的主 Tab。
-        switchTab('dashboard');
-    }
-
-    function handleHash() {
-        var hash = window.location.hash.replace('#', '');
-        var tab = KEYS.VALID_TABS.includes(hash) ? hash : 'dashboard';
-        switchTab(tab, false);
-    }
-
-    function switchTab(tab, updateHash) {
-        if (!KEYS.VALID_TABS.includes(tab)) return;
-        state.currentTab = tab;
-        try { window.AppStorage.setItem(KEYS.ACTIVE_TAB_KEY, tab); } catch (e) {}
-
-        document.querySelectorAll('.tab-btn').forEach(function (btn) {
-            btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
-        });
-
-        document.querySelectorAll('.tab-panel').forEach(function (panel) {
-            panel.classList.toggle('active', panel.id === 'tab-' + tab);
-        });
-
-        document.getElementById('header-title').textContent = KEYS.TAB_TITLES[tab] || '市场行情';
-
-        if (updateHash !== false) {
-            window.location.hash = tab === 'dashboard' ? '' : '#' + tab;
-        }
-
-        // Load tab-specific data when switching panels.
-        if (tab === 'signals') {
-            if (!isBootstrapping && window.AppRefreshCoordinator) window.AppRefreshCoordinator.refreshTab(tab);
-        }
-        if (tab === 'news' && !isBootstrapping && window.AppRefreshCoordinator) {
-            window.AppRefreshCoordinator.refreshTab(tab);
-        }
+        if (window.AppWorkbench) window.AppWorkbench.init();
     }
 
     // ============================================================
@@ -219,63 +175,23 @@
     }
 
     function initSignalWorkspace() {
-        var tabs = document.querySelectorAll('[data-signal-view]');
+        var tabs = Array.from(document.querySelectorAll('[data-signal-view]'));
         var panels = document.querySelectorAll('[data-signal-panel]');
-        if (!tabs.length || !panels.length) return;
-
-        function reconcileIntradayScreeningDate() {
-            if (window.AppSignals && typeof window.AppSignals.reconcileIntradayScreeningDate === 'function') {
-                window.AppSignals.reconcileIntradayScreeningDate();
-            }
-        }
-
-        function scheduleIntradayScreeningDayRollover() {
-            var shanghaiOffsetMs = 8 * 60 * 60 * 1000;
-            var shiftedNow = Date.now() + shanghaiOffsetMs;
-            var shanghaiNow = new Date(shiftedNow);
-            var nextDay = Date.UTC(
-                shanghaiNow.getUTCFullYear(),
-                shanghaiNow.getUTCMonth(),
-                shanghaiNow.getUTCDate() + 1
-            );
-            var delay = Math.max(1000, nextDay - shiftedNow + 1000);
-            window.setTimeout(function () {
-                reconcileIntradayScreeningDate();
-                scheduleIntradayScreeningDayRollover();
-            }, delay);
-        }
-
-        function selectSignalView(view) {
+        function select(view) {
             tabs.forEach(function (tab) {
-                var active = tab.getAttribute('data-signal-view') === view;
-                tab.classList.toggle('active', active);
-                tab.setAttribute('aria-selected', active ? 'true' : 'false');
-                tab.tabIndex = active ? 0 : -1;
+                var active = tab.dataset.signalView === view;
+                tab.classList.toggle('active', active); tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
             });
-            panels.forEach(function (panel) {
-                var active = panel.getAttribute('data-signal-panel') === view;
-                panel.classList.toggle('active', active);
-                panel.hidden = !active;
-            });
-            try { window.AppStorage.setItem('fund_tracker_signal_view', view); } catch (e) {}
-            if (view === 'screening') reconcileIntradayScreeningDate();
+            panels.forEach(function (panel) { var active = panel.dataset.signalPanel === view; panel.hidden = !active; panel.classList.toggle('active', active); });
         }
-
-        var savedView = 'radar';
-        try { savedView = window.AppStorage.getItem('fund_tracker_signal_view') || savedView; } catch (e) {}
-        if (!Array.from(tabs).some(function (tab) { return tab.getAttribute('data-signal-view') === savedView; })) {
-            savedView = 'radar';
-        }
-        selectSignalView(savedView);
-        tabs.forEach(function (tab) {
-            tab.addEventListener('click', function () {
-                selectSignalView(tab.getAttribute('data-signal-view'));
+        tabs.forEach(function (tab, index) {
+            tab.addEventListener('click', function () { select(tab.dataset.signalView); });
+            tab.addEventListener('keydown', function (event) {
+                var direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                if (direction) { event.preventDefault(); var next = tabs[(index + direction + tabs.length) % tabs.length]; next.click(); next.focus(); }
             });
         });
-        document.addEventListener('visibilitychange', function () {
-            if (!document.hidden) reconcileIntradayScreeningDate();
-        });
-        scheduleIntradayScreeningDayRollover();
+        select('rotation');
     }
 
     function initSettingsViews() {
@@ -600,14 +516,7 @@
                 }
             });
         }
-        var intradayScreeningRunBtn = document.getElementById('intraday-screening-run-btn');
-        if (intradayScreeningRunBtn) {
-            intradayScreeningRunBtn.addEventListener('click', function () {
-                if (window.AppSignals && typeof window.AppSignals.runIntradayScreening === 'function') {
-                    window.AppSignals.runIntradayScreening(true);
-                }
-            });
-        }
+
 
     }
 
@@ -713,6 +622,7 @@
         if (window.AppResearch) window.AppResearch.init();
         if (window.AppPriceAlerts) window.AppPriceAlerts.init();
         if (window.AppUpdates) window.AppUpdates.init();
+        if (window.AppReports) window.AppReports.init();
         if (window.AppSignals) window.AppSignals.initHotRankTabs();
         if (window.AppWatchlist) window.AppWatchlist.initWatchlistTabs();
         if (window.AppNews) {
@@ -735,7 +645,6 @@
         renderRealtimeFromCache();
         manualRefreshAll('启动刷新');
         state.hasInitialDataLoaded = true;
-        isBootstrapping = false;
     }
 
     document.addEventListener('DOMContentLoaded', function () {

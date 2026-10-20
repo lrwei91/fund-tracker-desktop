@@ -2,6 +2,7 @@
 (function () {
     var schema = window.AppConfigSchema || { keys: [] };
     var durable = new Set(schema.keys || []);
+    var nativeOwned = new Set(schema.nativeOwnedKeys || []);
     var pending = {};
     var flushTimer = null;
     var flushPromise = null;
@@ -23,11 +24,11 @@
     function setItem(key, value) {
         var normalized = String(value);
         nativeStorage.setItem(String(key), normalized);
-        if (durable.has(String(key))) schedulePatch(String(key), normalized);
+        if (durable.has(String(key)) && !nativeOwned.has(String(key))) schedulePatch(String(key), normalized);
     }
     function removeItem(key) {
         nativeStorage.removeItem(String(key));
-        if (durable.has(String(key))) schedulePatch(String(key), null);
+        if (durable.has(String(key)) && !nativeOwned.has(String(key))) schedulePatch(String(key), null);
     }
     function schedulePatch(key, value) {
         pending[key] = value;
@@ -84,7 +85,7 @@
             });
             var migration = {};
             durable.forEach(function (key) {
-                if (!Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) {
+                if (!nativeOwned.has(key) && !Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) {
                     migration[key] = nativeStorage.getItem(key);
                 }
             });

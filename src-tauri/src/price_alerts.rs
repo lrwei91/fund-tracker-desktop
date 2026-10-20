@@ -72,7 +72,7 @@ fn validate(mut rule: Rule) -> Result<Rule, String> {
         || rule.conditions.is_empty()
         || rule.conditions.len() > 6
     {
-        return Err("请设置1至6个有效条件".into());
+        return Err("请设置 1 至 6 个有效条件".into());
     }
     for c in &rule.conditions {
         if !["price", "changePct", "turnover", "volumeRatio"].contains(&c.field.as_str())
@@ -152,7 +152,7 @@ pub fn handle(store: &ConfigStore, query: HashMap<String, String>) -> Value {
                     doc.rules[pos] = rule;
                 } else {
                     if doc.rules.len() >= 100 {
-                        return Err("最多保存100条提醒规则".into());
+                        return Err("最多保存 100 条提醒规则".into());
                     }
                     doc.rules.push(rule);
                 }

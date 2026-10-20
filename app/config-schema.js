@@ -13,6 +13,7 @@
         'fund_tracker_holding_clown_mode',
         'fund_tracker_ai_settings', 'fund_tracker_price_alerts',
         'fund_tracker_research_history',
+        'fund_tracker_report_center',
         'fund_tracker_update_settings',
     ];
     var jsonKeys = [
@@ -21,7 +22,8 @@
         'fund_tracker_watchlist_remarks', 'fund_tracker_watchlist', 'fund_tracker_watchlist_tabs',
         'fund_tracker_ai_settings', 'fund_tracker_price_alerts',
         'fund_tracker_research_history',
+        'fund_tracker_report_center',
         'fund_tracker_update_settings',
     ];
-    return { version: 2, keys: keys, jsonKeys: jsonKeys };
+    return { version: 2, keys: keys, jsonKeys: jsonKeys, nativeOwnedKeys: ['fund_tracker_report_center'] };
 });

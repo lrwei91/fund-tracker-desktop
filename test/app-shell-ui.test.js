@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { JSDOM } from 'jsdom';
 
 const indexHtml = readFileSync(join(process.cwd(), 'app/index.html'), 'utf8');
+const workbenchScript = readFileSync(join(process.cwd(), 'app/modules/workbench.js'), 'utf8');
+const workbenchStyles = readFileSync(join(process.cwd(), 'app/workbench.css'), 'utf8');
 const appScript = readFileSync(join(process.cwd(), 'app/app.js'), 'utf8');
 const styles = readFileSync(join(process.cwd(), 'app/styles.css'), 'utf8');
 const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
@@ -30,8 +32,8 @@ async function bootstrapApp(options = {}) {
             ACTIVE_TAB_KEY: 'fund_tracker_active_main_tab',
             SETTINGS_KEY: 'fund_tracker_settings',
             COLLAPSE_STATE_KEY: 'fund_tracker_collapse_state',
-            VALID_TABS: ['dashboard', 'signals', 'news'],
-            TAB_TITLES: { dashboard: '市场行情', signals: '市场信号', news: '财经快讯' },
+            VALID_TABS: ['dashboard', 'market', 'research', 'alerts', 'news'],
+            TAB_TITLES: { dashboard: '我的盯盘', market: '市场总览', research: '研究工作台', alerts: '提醒中心', news: '财经资讯' },
         },
         colorMode: 'light',
         isAutoRefresh: false,
@@ -59,6 +61,7 @@ async function bootstrapApp(options = {}) {
     window.shell = options.shell;
     window.AppRefreshCoordinator = options.refreshCoordinator;
 
+    window.eval(workbenchScript);
     window.eval(appScript);
     if (window.document.readyState === 'loading') {
         await new Promise((resolve) => window.document.addEventListener('DOMContentLoaded', resolve, { once: true }));
@@ -102,7 +105,7 @@ describe('主界面信息架构', () => {
             .map((button) => button.getAttribute('data-settings-view'));
 
         expect(navigationButtons.map((button) => button.getAttribute('aria-label')))
-            .toEqual(['行情', '信号', '快讯', '设置']);
+            .toEqual(['盯盘', '市场', '研究', '提醒', '资讯', '设置']);
         expect(doc.querySelector('.desktop-sidebar-footer')).toBeNull();
         expect(doc.getElementById('watchlist-data-btn')).toBeNull();
         expect(doc.getElementById('data-panel')).toBeNull();
@@ -123,13 +126,13 @@ describe('主界面信息架构', () => {
         expect(dataView.querySelector('#import-watchlist-file')).not.toBeNull();
     });
 
-    it('每次启动忽略旧 hash 与上次 Tab，固定进入行情', async () => {
+    it('旧选股 hash 映射研究工作台', async () => {
         const dom = await bootstrapApp();
         try {
-            expect(dom.window.AppState.currentTab).toBe('dashboard');
-            expect(dom.window.location.hash).toBe('');
-            expect(dom.window.document.querySelector('.tab-panel.active').id).toBe('tab-dashboard');
-            expect(dom.window.document.querySelector('.desktop-nav .tab-btn.active').dataset.tab).toBe('dashboard');
+            expect(dom.window.AppState.currentTab).toBe('research');
+            expect(dom.window.location.hash).toBe('#signals');
+            expect(dom.window.document.querySelector('.tab-panel.active').id).toBe('tab-research');
+            expect(dom.window.document.querySelector('.desktop-nav .tab-btn.active').dataset.tab).toBe('research');
         } finally {
             dom.window.close();
         }
@@ -138,8 +141,8 @@ describe('主界面信息架构', () => {
     it('折叠卡片支持 Enter 与空格，并同步 aria 状态', async () => {
         const dom = await bootstrapApp();
         try {
-            const header = dom.window.document.querySelector('.watchlist-section .card-header');
-            const body = dom.window.document.querySelector('.watchlist-section .card-body');
+            const header = dom.window.document.querySelector('.capital-section .card-header');
+            const body = dom.window.document.querySelector('.capital-section .card-body');
             header.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
             expect(header.getAttribute('aria-expanded')).toBe('false');
             expect(body.style.display).toBe('none');
@@ -202,21 +205,21 @@ describe('主界面信息架构', () => {
         }
     });
 
-    it('四个入口位于同一导航组并共享尺寸规则', () => {
+    it('五个入口和设置共享导航，窄窗保留底栏', () => {
         const doc = parseIndex();
-        expect(Array.from(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn'))).toHaveLength(4);
-        expect(doc.querySelector('[data-tab="dashboard"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('market');
-        expect(doc.querySelector('[data-tab="signals"] [data-nav-icon]').getAttribute('data-nav-icon')).toBe('radar');
-        expect(styles).toMatch(/\.desktop-nav-btn\s*\{[\s\S]*?flex:\s*1;/);
-        expect(styles).toMatch(/@media \(min-width: 1280px\)[\s\S]*?\.desktop-nav-btn\s*\{[\s\S]*?height:\s*58px;/);
-        expect(styles).not.toMatch(/\.desktop-sidebar-footer\s*\{/);
+        expect(doc.querySelectorAll('.desktop-nav > .desktop-nav-btn')).toHaveLength(6);
+        expect(doc.querySelector('[data-tab="market"] svg')).not.toBeNull();
+        expect(doc.querySelector('[data-tab="research"] svg')).not.toBeNull();
+        expect(workbenchStyles).toMatch(/@media \(max-width: 650px\)/);
+        expect(workbenchStyles).toMatch(/\.desktop-settings-btn\s*\{\s*margin-top: auto/);
     });
 
     it('市场涨跌家数紧跟资金流向并复用行情卡片视觉契约', () => {
         const doc = parseIndex();
         const capital = doc.querySelector('.capital-section');
         const breadth = doc.querySelector('.market-breadth-section');
-        expect(capital.nextElementSibling).toBe(breadth);
+        expect(capital.closest('#tab-market')).not.toBeNull();
+        expect(breadth.closest('#tab-market')).not.toBeNull();
         expect(breadth.querySelector('.card-header h2').textContent).toBe('市场涨跌家数');
         expect(breadth.querySelectorAll('.market-breadth-item')).toHaveLength(3);
         expect(breadth.querySelector('#market-breadth-track')).not.toBeNull();
@@ -243,7 +246,7 @@ describe('主界面信息架构', () => {
         const rotationPanel = doc.querySelector('[data-signal-panel="rotation"]');
         const screeningPanel = doc.querySelector('[data-signal-panel="screening"]');
 
-        expect(signalViews).toEqual(['radar', 'rotation', 'alerts', 'heat', 'limit']);
+        expect(signalViews).toEqual(['rotation', 'heat', 'limit']);
         expect(rotationPanel).not.toBeNull();
         expect(rotationPanel.hidden).toBe(true);
         expect(rotationPanel.querySelector('#sector-rotation-run-btn').textContent).toBe('获取板块轮动');
@@ -251,14 +254,14 @@ describe('主界面信息架构', () => {
         expect(rotationPanel.querySelector('#sector-rotation-results').children).toHaveLength(0);
         expect(screeningPanel).toBeNull();
         expect(doc.getElementById('research-batch-run').textContent).toBe('AI 评分研究');
-        expect(doc.querySelector('[data-signal-panel="alerts"]').hidden).toBe(true);
+        expect(doc.querySelector('#tab-alerts #price-alert-workspace')).not.toBeNull();
+        expect(doc.querySelector('#tab-research #research-batch-run')).not.toBeNull();
     });
 
-    it('盘中推荐 loader 只绑定到专属按钮点击', () => {
-        expect(appScript.match(/runIntradayScreening\(true\)/g)).toHaveLength(1);
-        expect(appScript).toMatch(/intradayScreeningRunBtn\.addEventListener\('click',[\s\S]*runIntradayScreening\(true\)/);
-        expect(appScript).toMatch(/visibilitychange[\s\S]*reconcileIntradayScreeningDate/);
-        expect(appScript).toMatch(/scheduleIntradayScreeningDayRollover/);
+    it('已移除的盘中筛选不再注册前端任务或日切定时器', () => {
+        expect(appScript).not.toContain('runIntradayScreening(true)');
+        expect(appScript).not.toContain('scheduleIntradayScreeningDayRollover');
+        expect(parseIndex().getElementById('intraday-screening-run-btn')).toBeNull();
     });
 
     it('轮动板块 loader 只绑定到专属按钮点击', () => {

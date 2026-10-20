@@ -513,7 +513,11 @@ impl Gateway {
             }
             circuits.entry(host.clone()).or_default().last_started = Some(Instant::now());
         }
-        let attempts = if provider == "eastmoney" { 3 } else { 1 };
+        let attempts = if provider == "eastmoney" && spec.body.is_none() {
+            3
+        } else {
+            1
+        };
         let mut last = ApiError::new("请求失败");
         for attempt in 0..attempts {
             let mut headers = HeaderMap::new();

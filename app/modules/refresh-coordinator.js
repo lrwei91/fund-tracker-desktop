@@ -186,7 +186,7 @@
             tasks.push({ name: '板块', priority: 55, run: function () {
                 return window.AppMarket ? window.AppMarket.loadSectorData(!!options.force) : null;
             } });
-            if (!options.skipOpportunity && state.currentTab === 'signals') {
+            if (!options.skipOpportunity && (state.currentTab === 'signals' || state.currentTab === 'research')) {
                 tasks.push({ name: '机会雷达', priority: 80, run: function () {
                     return window.AppSignals ? window.AppSignals.loadOpportunityRadarData(!!options.force) : null;
                 } });
@@ -200,6 +200,7 @@
                 return window.AppSignals ? window.AppSignals.loadHotRankData(window.AppSignals.getActiveHotRankSource(), !!options.force) : null;
             } });
         }
+        if (kind === 'research') tasks.push({ name: '机会雷达', priority: 80, run: function () { return window.AppSignals ? window.AppSignals.loadOpportunityRadarData(!!options.force) : null; } });
         if ((kind === 'all' || kind === 'news') && state.currentTab === 'news') {
             tasks.push({ name: '快讯', priority: 85, run: function () {
                 return window.AppNews ? window.AppNews.refreshNewsData(!!options.force) : null;
@@ -394,7 +395,7 @@
             } else if (dueMain) {
                 request('main');
             } else if (dueSignals || dueDaily) {
-                request('signals', { force: dueDaily, skipOpportunity: dueDaily });
+                request(state.currentTab === 'research' ? 'research' : 'signals', { force: dueDaily, skipOpportunity: dueDaily });
             } else if (dueNews) {
                 request('news');
             }
@@ -428,9 +429,12 @@
     }
 
     function refreshTab(tab) {
+        if (tab === 'research') return requestAfterCurrent('research', {});
+        if (tab === 'market') return requestAfterCurrent('all', { skipOpportunity: true });
+        if (tab === 'alerts') return Promise.resolve();
         if (tab === 'signals') return request('signals', { skipLimitUp: false });
-        if (tab === 'news') return request('news');
-        return request('main');
+        if (tab === 'news') return requestAfterCurrent('news', {});
+        return requestAfterCurrent('main', {});
     }
 
     function setHoldingVisible(value) {

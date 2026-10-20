@@ -12,6 +12,9 @@
     };
     var dataStatus = window.AppDataStatus || { label: function (_meta, fallback) { return fallback || ''; } };
 
+    var detailRequest = 0;
+    W.invalidateDetail = function () { detailRequest += 1; };
+
     async function loadStockMinuteData(code) {
         var res = await window.AppDataClient.fetch('/stock-minute', { code: code, count: 240 });
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -73,7 +76,9 @@
         var body = document.getElementById('stock-fund-body');
         var title = document.getElementById('stock-fund-title');
         if (!panel || !overlay || !body || !title) return;
-        if (window.AppDialog) {
+        if (window.AppWorkbench) {
+            window.AppWorkbench.openDetail(code, trigger);
+        } else if (window.AppDialog) {
             window.AppDialog.open(panel, overlay, {
                 trigger: trigger || document.activeElement,
                 restoreFocus: function () {
@@ -86,6 +91,7 @@
             overlay.hidden = false;
             panel.hidden = false;
         }
+        var requestId = ++detailRequest;
         var cachedQuote = state.watchQuoteCache[code];
         title.textContent = W.getDisplayStockName(code, cachedQuote && cachedQuote.name) + ' (' + code + ')';
         body.innerHTML = uiState.render('loading', {
@@ -102,6 +108,7 @@
         var results = window.AppRefreshCoordinator && typeof window.AppRefreshCoordinator.runDetail === 'function'
             ? await window.AppRefreshCoordinator.runDetail(loaders.map(function (run) { return { run: run }; }))
             : await Promise.allSettled(loaders.map(function (run) { return run(); }));
+        if (requestId !== detailRequest || panel.hidden) return;
         var minuteData = results[0].status === 'fulfilled' ? results[0].value : null;
         var minuteError = results[0].status === 'rejected' ? results[0].reason : null;
         var fundData = results[1].status === 'fulfilled' ? results[1].value : null;
@@ -129,10 +136,9 @@
 
     function renderStockModalBody(code, minuteData, minuteError, fundData, fundError, klineData, klineError, newsData, newsError) {
         var researchHtml = window.AppResearch
-            ? '<details class="research-position-editor"><summary>持仓设置</summary>' + renderStockCostEditor(code) + '</details><div data-stock-research-host></div>'
+            ? '<div data-stock-research-host></div>'
             : renderStockCostEditor(code) + renderStockResearchGate(code, minuteData, fundData, klineData, newsData, newsError);
-        var minuteHtml = renderStockMinuteSection(minuteData, minuteError);
-        var analysisHtml = renderStockAnalysisSection(klineData, klineError);
+        var minuteHtml = renderStockMinuteSection(minuteData, minuteError) + renderStockAnalysisSection(klineData, klineError) + '<div class="stock-fund-section-title">相关资讯</div>' + renderStockNewsList(newsData, newsError);
         var fundHtml = '';
         if (fundData && fundData.item) {
             fundHtml += W.renderStockFundFlowBody(fundData.item, fundData.latestFlow, fundData.last, fundData.prevMain, {
@@ -148,17 +154,15 @@
                 '<div class="list-empty">资金流加载失败: ' + utils.escapeHtml(fundError && fundError.message ? fundError.message : '数据异常') + '</div>' +
             '</div>';
         }
-        return '<div class="stock-detail-tabs">' +
-                '<button class="stock-detail-tab active" data-stock-detail-tab="research" type="button">研究</button>' +
-                '<button class="stock-detail-tab" data-stock-detail-tab="minute" type="button">分时</button>' +
-                '<button class="stock-detail-tab" data-stock-detail-tab="analysis" type="button">技术</button>' +
+        return (W.getHoldingCodes().includes(code) ? '<details class="research-position-editor"><summary>编辑成本、股数与备注</summary>' + renderStockCostEditor(code) + '</details>' : '') + '<div class="stock-detail-tabs" role="tablist" aria-label="标的资料">' +
+                '<button class="stock-detail-tab active" data-stock-detail-tab="minute" type="button">行情</button>' +
+                '<button class="stock-detail-tab" data-stock-detail-tab="research" type="button">研究</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="fund" type="button">资金</button>' +
                 '<button class="stock-detail-tab" data-stock-detail-tab="alerts" type="button">价格提醒</button>' +
             '</div>' +
             '<div class="stock-detail-pages">' +
-                renderStockDetailPage('research', researchHtml, true) +
-                renderStockDetailPage('minute', minuteHtml, false) +
-                renderStockDetailPage('analysis', analysisHtml, false) +
+                renderStockDetailPage('research', researchHtml, false) +
+                renderStockDetailPage('minute', minuteHtml, true) +
                 renderStockDetailPage('fund', fundHtml, false) +
                 renderStockDetailPage('alerts', '<div data-stock-alert-host></div>', false) +
             '</div>';
@@ -171,13 +175,22 @@
     function initStockDetailTabs(root) {
         if (!root) return;
         var tabs = root.querySelectorAll('[data-stock-detail-tab]');
-        tabs.forEach(function (tab) {
-            tab.addEventListener('click', function () {
-                var target = tab.getAttribute('data-stock-detail-tab');
-                tabs.forEach(function (item) { item.classList.toggle('active', item === tab); });
-                root.querySelectorAll('[data-stock-detail-page]').forEach(function (page) {
-                    page.classList.toggle('active', page.getAttribute('data-stock-detail-page') === target);
-                });
+        function select(target) {
+            tabs.forEach(function (item) {
+                var active = item.getAttribute('data-stock-detail-tab') === target;
+                item.setAttribute('role', 'tab'); item.setAttribute('aria-selected', String(active)); item.tabIndex = active ? 0 : -1;
+                item.classList.toggle('active', active);
+            });
+            root.querySelectorAll('[data-stock-detail-page]').forEach(function (page) {
+                page.classList.toggle('active', page.getAttribute('data-stock-detail-page') === target);
+            });
+        }
+        select('minute');
+        tabs.forEach(function (tab, index) {
+            tab.addEventListener('click', function () { select(tab.getAttribute('data-stock-detail-tab')); });
+            tab.addEventListener('keydown', function (event) {
+                var direction = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+                if (direction) { event.preventDefault(); var next = tabs[(index + direction + tabs.length) % tabs.length]; next.click(); next.focus(); }
             });
         });
     }

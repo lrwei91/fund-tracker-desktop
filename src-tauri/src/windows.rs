@@ -436,6 +436,7 @@ pub async fn show_stock_alert(app: tauri::AppHandle, alert: StockAlert) -> Value
     if let Some(main) = app.get_webview_window("main") {
         let _ = window.set_position(screen_position(&main, ALERT_W, ALERT_H, true));
     }
+    let _ = window.set_ignore_cursor_events(true);
     let _ = window.emit("stock-alert", payload);
     let _ = window.show();
     let sequence = ALERT_SEQUENCE.fetch_add(1, Ordering::SeqCst) + 1;
@@ -447,4 +448,64 @@ pub async fn show_stock_alert(app: tauri::AppHandle, alert: StockAlert) -> Value
         }
     });
     json!({"ok": true})
+}
+
+pub fn fit_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let size = monitor.work_area().size;
+            let scale = monitor.scale_factor();
+            let _ = window.set_size(tauri::LogicalSize::new(
+                (size.width as f64 / scale - 40.0).clamp(540.0, 1280.0),
+                (size.height as f64 / scale - 40.0).clamp(680.0, 860.0),
+            ));
+            let _ = window.center();
+        }
+    }
+}
+pub fn show_report_notice(app: &tauri::AppHandle, id: &str, label: &str) {
+    let Some(window) = app.get_webview_window("alert") else {
+        return;
+    };
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = window.set_position(screen_position(&main, ALERT_W, ALERT_H, true));
+    }
+    let _ = window.set_ignore_cursor_events(false);
+    let _=window.emit("research-report-notice",json!({"id":id,"title":format!("{label}已生成"),"detail":"报告已保存 · 点击查看研究与覆盖范围"}));
+    let _ = window.show();
+    let sequence = ALERT_SEQUENCE.fetch_add(1, Ordering::SeqCst) + 1;
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        if ALERT_SEQUENCE.load(Ordering::SeqCst) == sequence {
+            let _ = window.hide();
+            let _ = window.set_ignore_cursor_events(true);
+        }
+    });
+}
+#[tauri::command]
+pub fn open_report(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    store: tauri::State<crate::config::ConfigStore>,
+    id: String,
+) -> Result<(), String> {
+    if !["main", "alert"].contains(&window.label()) {
+        return Err("当前窗口无权打开报告".into());
+    }
+    if !store.data_value(crate::research_reports::KEY)["runs"]
+        .as_array()
+        .is_some_and(|runs| runs.iter().any(|r| r["id"] == id && !r["report"].is_null()))
+    {
+        return Err("报告不存在或未完成".into());
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.unminimize();
+        let _ = main.show();
+        let _ = main.set_focus();
+        let _ = main.emit("research-report-open", json!({"id":id}));
+    }
+    if let Some(alert) = app.get_webview_window("alert") {
+        let _ = alert.hide();
+    }
+    Ok(())
 }

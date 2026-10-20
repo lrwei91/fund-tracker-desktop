@@ -24,7 +24,9 @@ impl EndpointPolicy {
 pub fn endpoint_policy(path: &str) -> EndpointPolicy {
     match path.trim_start_matches('/') {
         "stock" | "market-data" | "stock-minute" | "intraday-screening" => EndpointPolicy::Live,
-        "stock-research" | "stock-ai-research" | "price-alerts" => EndpointPolicy::Live,
+        "stock-research" | "stock-ai-research" | "price-alerts" | "research-reports" => {
+            EndpointPolicy::Live
+        }
         "stock-fundamentals" => EndpointPolicy::Informational {
             stale_for: Duration::from_secs(60 * 60),
         },

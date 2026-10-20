@@ -1,4 +1,5 @@
 (function () {
+    var nativeOwned = new Set((window.AppConfigSchema || {}).nativeOwnedKeys || []);
   var schema = window.AppConfigSchema || { keys: [] }
   var durable = new Set(schema.keys || [])
   var nativeStorage = window.localStorage
@@ -50,11 +51,11 @@
   function getItem(key) { return nativeStorage.getItem(String(key)) }
   function setItem(key, value) {
     nativeStorage.setItem(String(key), String(value))
-    if (durable.has(String(key))) schedule(String(key), String(value))
+    if (durable.has(String(key)) && !nativeOwned.has(String(key))) schedule(String(key), String(value))
   }
   function removeItem(key) {
     nativeStorage.removeItem(String(key))
-    if (durable.has(String(key))) schedule(String(key), null)
+    if (durable.has(String(key)) && !nativeOwned.has(String(key))) schedule(String(key), null)
   }
   function hydrate() {
     if (!window.shell || !window.shell.configStorage || typeof window.shell.configStorage.load !== 'function') return Promise.resolve()
@@ -66,7 +67,7 @@
       })
       var migration = {}
       durable.forEach(function (key) {
-        if (!Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) migration[key] = nativeStorage.getItem(key)
+        if (!nativeOwned.has(key) && !Object.prototype.hasOwnProperty.call(data, key) && nativeStorage.getItem(key) !== null) migration[key] = nativeStorage.getItem(key)
       })
       if (Object.keys(migration).length) {
         Object.keys(migration).forEach(function (key) { pending[key] = migration[key] })

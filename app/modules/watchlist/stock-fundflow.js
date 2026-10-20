@@ -97,6 +97,8 @@
     }
 
     function closeStockFundFlow() {
+        if (window.AppWorkbench) { window.AppWorkbench.closeDetail(); return; }
+        if (W.invalidateDetail) W.invalidateDetail();
         var panel = document.getElementById('stock-fund-panel');
         var overlay = document.getElementById('stock-fund-overlay');
         if (panel && window.AppDialog) {

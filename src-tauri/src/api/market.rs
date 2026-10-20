@@ -292,7 +292,7 @@ fn sina_main_fund_rows(rows: &[Value]) -> Result<Value, ApiError> {
         "label":"主力",
         "value":yi(main_net),
         "isPositive":main_net>=0.0,
-        "note":"新浪口径：主力为单笔成交额不低于100万元",
+        "note":"新浪口径：主力为单笔成交额不低于 100 万元",
         "degraded":true,
         "breakdown":{
             "superLarge":{"available":false,"label":"特大单","value":"--","isPositive":null},

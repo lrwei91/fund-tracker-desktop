@@ -159,13 +159,14 @@
     async function load() {
         var result = await window.AppDataClient.fetchData('/price-alerts', {});
         data = result.data;
+        if (window.AppWorkbench) window.AppWorkbench.renderSummary();
         return data;
     }
     async function mount(host, code) {
         if (!host) return;
         host.dataset.alertCode = code || '';
         host.innerHTML =
-            '<div class="research-toolbar"><button type="button" data-alert-new>新建提醒</button><button type="button" data-alert-refresh>刷新记录</button></div><p class="research-note">应用运行时每30秒监控，窗口隐藏后仍有效；退出或休眠时停止。过期或缺失行情不会触发。</p><p data-alert-status role="status"></p><div data-alert-editor></div><div data-alert-rules></div><details><summary>触发记录</summary><div data-alert-history></div></details>';
+            '<div class="research-toolbar"><button type="button" data-alert-new>新建提醒</button><button type="button" data-alert-refresh>刷新记录</button></div><p class="research-note">应用运行时每 30 秒监控，窗口隐藏后仍有效；退出或休眠时停止。过期或缺失行情不会触发。</p><p data-alert-status role="status"></p><div data-alert-editor></div><div data-alert-rules></div><details><summary>触发记录</summary><div data-alert-history></div></details>';
         host.querySelector('[data-alert-new]').addEventListener('click', function () {
             edit(host, code);
         });
@@ -305,6 +306,7 @@
     }
     window.AppPriceAlerts = {
         init: init,
+        refresh: function () { return refresh(document.getElementById('price-alert-workspace')); },
         mount: mount,
         renderEditor: renderEditor,
         describe: describe,
