@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    # zip 4.6.1：修复版仅在 zip 9，tauri-plugin-updater（最新 2.14.0）仍锁定 zip ^4，无法升级
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    # glib 0.18.5 unsound：修复在 glib 0.20，被 GTK 0.18 依赖栈锁定；应用未使用 VariantStrIter
+    "RUSTSEC-2024-0429",
+]
