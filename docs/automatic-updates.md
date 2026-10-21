@@ -12,13 +12,13 @@
 
 开发模式禁用网络更新与安装。macOS 支持应用包更新；Windows 自动安装仅限 NSIS 安装版，旧便携 ZIP 需要先安装一次新版安装包。当前发布目标为 macOS Apple Silicon 和 Windows x64。退出应用会丢弃尚未安装的内存下载，下次使用时重新下载，不会在普通退出时安装。
 
-更新来源固定为本仓库 GitHub Releases 的 `latest.json`。未发布清单、平台缺失、断网、GitHub 不可达、签名错误均显示失败，可重试；不会把这些状态显示为“已是最新版本”。首次启用仍需发布含更新入口的新版本，旧版本无法凭空获得该功能。
+更新来源固定为本仓库 GitHub Releases 的 `latest.json`。未发布清单、平台缺失、断网、GitHub 不可达、签名错误均显示失败，可重试；不会把这些状态显示为“已是最新版本”。首次启用需发布含更新入口的新版本；该功能不经由更新通道自行下发。
 
 ## 原生边界
 
 `src-tauri/src/updates.rs` 保存检查、下载、安装状态；只向主窗口提供 `update_status`、`update_preferences`、`update_check`、`update_download`、`update_install`，通过 `app-update-state` 传递进度。前端 `modules/updates.js` 负责展示及确认，不取得安装路径或下载内容。
 
-原生更新任务独立于行情刷新，使用 updater 专用传输与签名验证。客户端不接受 renderer 提供的地址；下载起点必须属于本项目精确 HTTPS Release 路径，跳转只允许 GitHub 资产域名，限制超时、跳转次数和 128 MiB 体积。默认比较器拒绝旧版本和预发行版本。普通退出没有安装钩子。持久偏好 `fund_tracker_update_settings` 复用配置 v2 的原子写入；重新开启自动检查会在 30 秒后检查。
+原生更新任务独立于行情刷新，使用 updater 专用传输与签名验证。客户端不接受 renderer 提供的地址；下载起点必须属于本项目精确 HTTPS Release 路径，跳转只允许 GitHub 资产域名，限制超时、跳转次数和 128 MiB 体积。默认比较器拒绝降级版本和预发行版本。普通退出没有安装钩子。持久偏好 `fund_tracker_update_settings` 复用配置 v2 的原子写入；重新开启自动检查会在 30 秒后检查。
 
 ## 签名与构建
 
@@ -47,4 +47,4 @@ GitHub Actions 使用 `TAURI_SIGNING_PRIVATE_KEY` Secret（对应以上私钥）
 UPDATER_ARTIFACT_DIR=dist/updater cargo test --manifest-path src-tauri/Cargo.toml updater_signed_artifact_smoke -- --nocapture
 ```
 
-该 smoke 验证实际更新包签名，并确认篡改内容被拒绝，不会安装或重启应用。完整从旧版发现、下载、安装、重启、配置保留的验证，需要正式发布及独立测试安装环境；本地界面样本与签名 smoke 不代表已经完成线上升级。
+该 smoke 验证实际更新包签名，并确认篡改内容被拒绝，不会安装或重启应用。覆盖发现、下载、安装、重启、配置保留的完整验证，需要正式发布及独立测试安装环境；本地界面样本与签名 smoke 不代表已经完成线上升级。

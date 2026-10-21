@@ -95,7 +95,7 @@
 | 章节 | 内容摘要 |
 | --- | --- |
 | D3，§1 设计判断（L3-5） | 【功能诉求】【综合归纳】面向个人投资者的高密度桌面行情工具，以白纸/黑墨/荧光黄建立快速扫描、数据新鲜度确认与风险识别的编辑式界面；不使用展示型 Hero 与 820px 阅读轴；降低动效强度、提高信息密度、扩展可选深色模式。 |
-| D3，§2 视觉旋钮（L7-11） | 【功能诉求】【数据提取】DESIGN_VARIANCE 5（严格数据对齐中保留轻度不对称层级）；MOTION_INTENSITY 3（仅保留 hover/active/弹层/状态切换反馈，无滚动特效或持续动画）；VISUAL_DENSITY 8（数字等宽字体，数据区细线+留白分组，不堆叠同质卡片）。 |
+| D3，§2 视觉旋钮（L7-11） | 【功能诉求】【数据提取】DESIGN_VARIANCE 5（严格按网格排布数据，同时保留轻度不对称层级）；MOTION_INTENSITY 3（仅保留 hover/active/弹层/状态切换反馈，无滚动特效或持续动画）；VISUAL_DENSITY 8（数字等宽字体，数据区细线+留白分组，不堆叠同质卡片）。 |
 | D3，§3 当前审计（L13-18） | 【现状问题】【综合归纳】现有主窗口使用已退出的冷蓝深色旧视觉体系；主窗口/持仓浮窗/桌面告警分别维护色板，主题与状态表达存在分叉；行情/自选/信号/快讯/设置/导入导出/个股详情信息结构有效，应保留；刷新协调器、真实数据与缓存/降级语义、Tauri IPC、持久配置和窗口行为不得因视觉重构改变。 |
 | D3，§4 保留与淘汰·保留（L22） | 【技术约束】【数据提取】保留：原生 HTML/CSS/JavaScript、Tauri、现有 DOM ID、主导航、红涨绿跌、响应式布局模式、用户配置、所有数据路径。 |
 | D3，§4.1 保留与淘汰·淘汰（L24） | 【现状问题】【数据提取】淘汰：冷蓝琥珀主视觉、常态渐变、常态阴影、重复卡片表面、只有"加载中"文字的空面板、跨窗口不一致颜色值。 |
@@ -139,7 +139,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | X1 | 桌面运行时 / 整体架构 | Tauri 2 + Rust：行情代理、配置存储、窗口管理由 Rust 提供；src-tauri/ 为 Rust 桌面壳、commands、数据 gateway 与 handler | D1，§1（L1-3）、§3（L14-23）；D3，§4（L22）、§3（L13-18，"Tauri IPC"） | Electron + Node.js：保持原生 HTML/CSS/JavaScript + Electron 架构；main.js/preload.js/desktop/ 负责主进程、受限 IPC、配置存储与协议路由 | D2，§1（L3-5，"Electron 桌面版"）、§3（L14-20，"+ Electron 架构"）、§5（L29-35，"Electron 主进程"） | 核心架构冲突。D1、D3 与用户项目背景（"基于 Tauri 2 的本地桌面行情工具，…由 Rust 提供"）一致；D2 仍描述 Electron+Node 主进程。二者无法同时为真，需主理人/下游裁决真实目标架构。 |
 | X2 | 统一数据网关实现位置 | Rust 进程内 gateway（src-tauri 数据 gateway 和 handler），handler 保留来源/降级/不可用元数据 | D1，§3（L14-23）、§6.2（L73） | 前端 JS 模块 app/api/_gateway.js 作为上游请求统一入口，复用其并发/限速/熔断/降级 | D2，§3.2（L18） | 与 X1 同源。gateway 落在 Rust 侧还是前端 JS 侧，直接由目标架构决定；两处描述不可同时成立。 |
-| X3 | 桌面桥接 / IPC 机制 | 前端经 window.shell 与 AppDataClient.fetch/fetchData 调用，内部传输改为 Tauri commands/events，仅开放事件能力 | D1，§6（L67-71） | 持久用户数据经异步 IPC 写入 config.json，main.js/preload.js/desktop/ 负责受限 IPC，renderer 不获 Node/文件系统权限 | D2，§3.1（L17）、§3.3（L19） | 与 X1 同源。桥接机制分别为 Tauri IPC（commands/events）与 Electron 受限 IPC，落地形态互斥。 |
+| X3 | 桌面桥接 / IPC 机制 | 前端经 window.shell 与 AppDataClient.fetch/fetchData 调用，内部传输改为 Tauri commands/events，仅开放事件能力 | D1，§6（L67-71） | 持久用户数据经异步 IPC 写入 config.json，main.js/preload.js/desktop/ 负责受限 IPC，renderer 不获 Node/文件系统权限 | D2，§3.1（L17）、§3.3（L19） | 与 X1 同源。桥接机制分别为 Tauri IPC（commands/events）与 Electron 受限 IPC，实现形态互斥。 |
 
 ---
 

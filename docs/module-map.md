@@ -17,7 +17,7 @@
 - 新版页面导航和本机组合摘要由 `workbench.js` 管理；布局在 `workbench.css`。旧 `#signals` 链接映射研究页，未知旧页面回到盯盘。
 - `/research-reports` 为原生状态接口，不进入行情 endpoint cache；普通 `config_storage_patch` 不允许覆盖 `fund_tracker_report_center`。
 - `/dragon-tiger` 是保留的公开路由，但当前主界面不直接请求；机会雷达在 Rust 内部调用龙虎榜、资金流、重点监控和严重异动数据。`stock_monitor` / `price_anomaly` 是内部上游能力，不应从前端绕过 `/market-warnings` 或 `/opportunity-radar` 直接接入。`/stock-risk` 公告与解禁数据仍由统一研究快照在 Rust 内部聚合，个股详情不再单独展示该页面。
-- AI 与提醒的接入及运行边界见 [功能说明](stock-research-and-alerts.md)。`/intraday-screening` 保留路由兼容，主页面已移除该独立入口。
+- AI 与提醒的接入及运行边界见 [功能说明](stock-research-and-alerts.md)。`/intraday-screening` 保留路由兼容，主页面不提供该独立入口。
 - 软件更新：`modules/updates.js` → 主窗口专用 `update_*` commands → `src-tauri/src/updates.rs`。发布文件、签名及运行边界见 [自动更新](automatic-updates.md)。
 
-- 基金专属页面、净值/估值/诊断接口与共享采集已移除；保留场内 ETF 行情。旧配置中的基金记录不再暴露或使用，保存股票配置时仍保留原记录；旧备份可继续导入股票部分。
+- 基金专属页面、净值/估值/诊断接口与共享采集均不提供；保留场内 ETF 行情。配置中的基金记录不暴露也不使用，保存股票配置时仍保留原记录；历史备份可继续导入股票部分。
